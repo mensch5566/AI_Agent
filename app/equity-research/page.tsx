@@ -87,7 +87,7 @@ export default function EquityResearchPage() {
       {/* SOP */}
       <div className="mb-8">
         <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--text-muted)]">
-          Resources
+          SOPs
         </div>
         <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
           <Link
@@ -98,6 +98,15 @@ export default function EquityResearchPage() {
               Research SOP
             </div>
             <div className="mt-0.5 text-xs text-[#6B5E60]">新標的研究流程</div>
+          </Link>
+          <Link
+            href="/equity-research/todo-workflow"
+            className="rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm transition-all hover:border-[var(--primary)] hover:shadow-md"
+          >
+            <div className="text-lg font-bold text-[var(--primary)]">
+              To-Do Workflow
+            </div>
+            <div className="mt-0.5 text-xs text-[#6B5E60]">待辦事項產生流程</div>
           </Link>
         </div>
       </div>

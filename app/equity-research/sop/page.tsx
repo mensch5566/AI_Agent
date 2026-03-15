@@ -127,29 +127,6 @@ export default function SOPPage() {
         note="輸出格式對齊 Equity Research JSON schema 的 content-box block type"
       />
 
-      {/* Automation */}
-      <section className="mb-10">
-        <h2 className="mb-4 border-l-[3px] border-[var(--primary)] pl-3 text-lg font-semibold uppercase tracking-wide text-[var(--primary)]">
-          自動化（規劃中）
-        </h2>
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-5 text-[0.88rem] leading-relaxed">
-          <p className="text-[var(--text)]">
-            Phase 2 的五個問題可做成 Claude Code skill：
-          </p>
-          <div className="mt-3 rounded bg-[var(--bg-subtle)] p-3 font-mono text-[0.82rem] text-[var(--text-muted)]">
-            <span className="text-[var(--primary)]">/research-primer</span> SNDK
-            <br />→ 讀取 NotebookLM notebook
-            <br />→ 依序問 5 個固定問題
-            <br />→ 從回答中提取術語清單
-            <br />→ 用 Perplexity 補充技術解釋
-            <br />→ 輸出 Company Primer（Markdown 或 JSON）
-          </div>
-          <p className="mt-3 text-xs text-[var(--text-faint)]">
-            Status: 尚未實作，待 SOP 驗證穩定後再做成 skill
-          </p>
-        </div>
-      </section>
-
       <footer className="border-t border-[var(--border)] pt-4 text-xs text-[var(--text-faint)]">
         Last updated: 2026-03-12
       </footer>
