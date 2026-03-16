@@ -231,8 +231,10 @@ function SideToc({
   const items: { id: string; label: string; isChapter: boolean }[] = [];
   for (const ch of chapters) {
     items.push({ id: ch.id, label: `${ch.numeral}. ${ch.title}`, isChapter: true });
-    for (const sec of ch.sections) {
-      items.push({ id: sec.id, label: sec.title.replace(/^\d+\s*·\s*/, ""), isChapter: false });
+    if (ch.id !== "ch-archive") {
+      for (const sec of ch.sections) {
+        items.push({ id: sec.id, label: sec.title.replace(/^\d+\s*·\s*/, ""), isChapter: false });
+      }
     }
   }
 
@@ -289,6 +291,15 @@ function renderInline(text: string): ReactNode {
           {part.slice(2, -2)}
         </strong>
       );
+    }
+    // Handle \n line breaks
+    if (part.includes("\n")) {
+      return part.split("\n").map((line, j, arr) => (
+        <span key={`${i}-${j}`}>
+          {line}
+          {j < arr.length - 1 && <br />}
+        </span>
+      ));
     }
     return part;
   });

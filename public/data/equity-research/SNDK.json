@@ -305,19 +305,22 @@
             {
               "type": "content-box",
               "title": "關鍵技術",
-              "paragraphs": [
-                "**BiCS8 NAND：**次世代 3D NAND 節點，實現業界領先的 2Tb QLC single die，具備高 I/O 效能與能源效率。FY2026 Q1 佔總出貨 bit 的 15%，預計 FY2026 年底前達到 majority of bit production。BiCS8 同時支援 QLC（Stargate）與 TLC（enterprise compute）產品線。",
-                "**Stargate（QLC Storage-Class eSSD）：**針對 hyperscaler 大規模儲存需求的 QLC eSSD 產品線。128TB 正在兩家 hyperscaler qualification 中，第三家 hyperscaler 與一家 storage OEM 預計 CY2026 加入。256TB 版本預計 mid-to-late CY2027 上市並於隔年放量。",
-                "**HBF（High-Bandwidth Flash）：**針對 AI 推論市場（非 model training / 非取代 HBM）的高頻寬 Flash 方案，應用場景涵蓋 edge 裝置與 datacenter。與 SK Hynix 合作開發，memory 預計 late 2026、controller 預計 2027。管理層表示在 NAND 設計上有數年的 design innovations，但具體技術細節尚未公開。",
-                "**KV Cache 驅動的 NAND 需求：**AI 推論的 KV Cache 預計在 2027 年創造 75–100 EB 的額外 NAND 需求，且隔年 doubling。這是 Sandisk 佈局 Stargate 與 HBF 的核心市場驅動力。"
-              ],
+              "table": {
+                "headers": ["技術", "SNDK / Kioxia", "競品對標", "進度"],
+                "alignRight": [],
+                "rows": [
+                  ["**BiCS8 NAND**", "218 層，CBA + OPS 架構\n1Tb TLC / 2Tb QLC\n3.2 Gb/s", "Samsung V9: ~280 層，1Tb\nMicron G9: 276 層，2Tb QLC\nSK Hynix 321L: 321 層，2Tb QLC", "TLC & QLC 量產中\nQ1 FY2026 佔 bit 出貨 15%\n預計 FY2026 年底達 majority"],
+                  ["**Stargate eSSD**\n（QLC Storage-Class）", "128TB / 256TB 企業級 QLC eSSD\n針對 hyperscaler 大規模儲存", "Samsung PM1743: QLC eSSD\nMicron 6550 ION: QLC eSSD", "128TB：2 家 hyperscaler qualifying\n第 3 家 + 1 家 OEM 預計 CY2026 加入\n256TB：mid-to-late CY2027"],
+                  ["**HBF**\n（High-Bandwidth Flash）", "AI 推論用高頻寬 Flash\n與 SK Hynix 合作開發\n應用：edge + datacenter", "SK Hynix AiM / PIM\nSamsung CXL-NAND", "Memory: late 2026\nController: 2027\n技術細節未公開"]
+                ]
+              },
               "sources": [
                 {
-                  "label": "Sandisk Q1 FY2026 Earnings Call Transcript — BiCS8 ramp & HBF timeline",
+                  "label": "Sandisk Q1 FY2026 Earnings Call Transcript",
                   "href": "https://investor.sandisk.com/news-releases/news-release-details/sandisk-reports-fiscal-first-quarter-2026-financial-results"
                 },
                 {
-                  "label": "Sandisk Q2 FY2026 Earnings Call Transcript — Stargate qualification & KV Cache demand",
+                  "label": "Sandisk Q2 FY2026 Earnings Call Transcript",
                   "href": "https://investor.sandisk.com/news-releases/news-release-details/sandisk-reports-fiscal-second-quarter-2026-financial-results"
                 }
               ],
@@ -851,6 +854,91 @@
                 {
                   "label": "Q4 FY2025 Earnings Call",
                   "keyword": "cloud revenue increased sequentially"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sec-liquidity-ratio",
+          "title": "速動比 / 流動比變動分析（分拆效應）",
+          "toggle": true,
+          "toggleLabel": "速動比 / 流動比變動分析（分拆效應）",
+          "blocks": [
+            {
+              "type": "content-box",
+              "title": "流動比趨勢",
+              "table": {
+                "headers": ["", "Q1 FY2025", "Q2 FY2025", "Q3 FY2025", "Q4 FY2025", "Q1 FY2026", "Q2 FY2026"],
+                "alignRight": [1, 2, 3, 4, 5, 6],
+                "rows": [
+                  ["Cash", "$322M", "$812M", "$1,560M", "$1,547M", "$1,514M", "$1,539M"],
+                  ["Total Current Assets", "$4,388M", "$4,456M", "$5,090M", "$5,086M", "$4,984M", "$5,150M"],
+                  ["Total Current Liabilities", "$1,472M", "$1,873M", "$1,375M", "$1,427M", "$1,516M", "$1,654M"],
+                  ["Long-term Debt", "$0", "—", "$1,927M", "$1,829M", "$1,331M", "$583M"],
+                  ["**流動比**", "2.98", "2.38", "**3.70**", "3.56", "3.29", "3.11"]
+                ]
+              }
+            },
+            {
+              "type": "content-box",
+              "title": "Q3 FY2025 飆升原因：分拆上市（2025/2/24）",
+              "paragraphs": [
+                "**1. Cash 暴增（$812M → $1,560M）：**分拆時 SNDK 發行 $2.0B Term Loan Facility（浮動利率，2032 到期），其中 $1.5B 支付給 WDC 作為分拆對價，剩餘用於一般營運。",
+                "**2. 流動負債大降（$1,873M → $1,375M）：**分拆前欠 WDC 的 intercompany 負債（$814M Notes due to WDC）被清算，從流動負債中消除。",
+                "**3. Long-term debt 從 0 跳到 $1,927M：**分拆前 SNDK 是 WDC 子公司、不獨立舉債；分拆後自己發債。流動比分母只算流動負債、不含長期債，因此比率飆升。",
+                "**結論：**不是經營面的問題，純粹是分拆上市的資本結構一次性調整。之後 Q4 → Q2 FY2026 持續下降，是因為積極提前還債 + 正常營運讓流動負債回升。"
+              ],
+              "sources": [
+                {
+                  "label": "10-K FY2025, Note 8 — Debt",
+                  "keyword": "Term Loan Facility $2.0 billion"
+                },
+                {
+                  "label": "10-K FY2025, Balance Sheet",
+                  "keyword": "Notes due to Western Digital Corporation"
+                }
+              ]
+            },
+            {
+              "type": "content-box",
+              "title": "還債計畫與進度",
+              "paragraphs": [
+                "Term Loan Facility 合約條件：每季還 0.25%（約 $5M/季），剩餘 2032 年到期一次還清。利率 SOFR + 3% ≈ 7%（年利息約 $133M）。但 SNDK 選擇積極提前還款，遠超合約要求。"
+              ],
+              "sources": [
+                {
+                  "label": "10-K FY2025, Note 8 — Debt",
+                  "keyword": "voluntary payments totaling $100 million"
+                }
+              ]
+            },
+            {
+              "type": "content-box",
+              "title": "提前還款進度",
+              "table": {
+                "headers": ["時間", "還款金額", "類型"],
+                "alignRight": [1],
+                "rows": [
+                  ["FY2025 年內", "$100M", "排定 + 自願提前還款"],
+                  ["2025/8/4（FY2026 Q1 後）", "$100M", "自願提前還款"],
+                  ["Q1 FY2026", "$500M", "提前還款"],
+                  ["Q2 FY2026", "$750M", "提前還款"],
+                  ["**累計已還**", "**$1,450M**", ""],
+                  ["剩餘債務", "$583M", "預計 1-2 季還完"]
+                ]
+              },
+              "paragraphs": [
+                "提前還債動機：利率 7% 偏高，趁營運現金流充裕積極降槓桿。另有 $1.5B Revolving Credit Facility（2030 到期）截至目前未動用。"
+              ],
+              "sources": [
+                {
+                  "label": "10-K FY2025, Subsequent Events",
+                  "keyword": "voluntary $100 million payment on Term Loan"
+                },
+                {
+                  "label": "10-Q Q1 & Q2 FY2026, Cash Flow Statement",
+                  "keyword": "repayments of debt"
                 }
               ]
             }
