@@ -249,44 +249,44 @@
                 "headers": [
                   "終端市場",
                   "產品類別",
-                  "說明"
+                  "代表產品"
                 ],
                 "alignRight": [],
                 "rows": [
                   [
                     "**Datacenter**",
-                    "Stargate（QLC storage-class eSSD）",
-                    "BiCS8 QLC，128TB 正在 qualifying（CY2026），256TB 預計 mid-to-late CY2027 上市"
+                    "Stargate QLC eSSD",
+                    "128TB / 256TB enterprise SSD"
                   ],
                   [
                     "",
-                    "Compute-focused TLC enterprise SSD",
-                    "PCIe Gen 5 高效能 TLC drive，已在多家 hyperscaler 完成 qualification，BiCS8 TLC 版本接續導入"
+                    "TLC Enterprise SSD",
+                    "PCIe Gen 5 compute SSD"
                   ],
                   [
                     "",
                     "HBF（High-Bandwidth Flash）",
-                    "針對 AI 推論的高頻寬 Flash 方案，與 SK Hynix 合作；memory late 2026、controller 2027"
+                    "AI 推論用高頻寬 Flash（與 SK Hynix 合作）"
                   ],
                   [
                     "**Edge**",
-                    "OEM Flash 解決方案",
-                    "PC / 筆電 / 行動裝置 / 遊戲主機 / 車用 / VR 的嵌入式 SSD 與儲存模組"
+                    "OEM 嵌入式儲存",
+                    "PC / 筆電 / 遊戲主機 / 車用 SSD"
                   ],
                   [
                     "**Consumer**",
-                    "Sandisk Optimus NVMe SSD",
-                    "CES 2026 發表，重新命名的消費級 NVMe SSD 產品線"
+                    "Optimus NVMe SSD",
+                    "消費級 NVMe SSD（CES 2026）"
                   ],
                   [
                     "",
                     "microSD / SD 記憶卡",
-                    "Nintendo Switch 2 microSD Express（Q1 出貨 90 萬+）、ROG Xbox Ally microSD 等"
+                    "Nintendo Switch 2 microSD Express、ROG Xbox Ally microSD"
                   ],
                   [
                     "",
-                    "USB 隨身碟 / 可攜式 SSD",
-                    "Extreme Fit USB-C 等零售產品，含 Crayola / FIFA 聯名款"
+                    "USB / 可攜式 SSD",
+                    "Extreme Fit USB-C、Crayola / FIFA 聯名款"
                   ]
                 ]
               },
@@ -760,7 +760,103 @@
       "id": "ch-archive",
       "title": "Archive",
       "numeral": "VI",
-      "sections": []
+      "sections": [
+        {
+          "id": "sec-dc-decline",
+          "title": "Data Center（Cloud）Q2–Q3 營收衰退分析",
+          "toggle": true,
+          "toggleLabel": "Data Center（Cloud）Q2–Q3 營收衰退分析",
+          "blocks": [
+            {
+              "type": "content-box",
+              "title": "Cloud Segment 季度營收趨勢",
+              "table": {
+                "headers": ["", "Q1 FY2025", "Q2 FY2025", "Q3 FY2025", "Q4 FY2025"],
+                "alignRight": [1, 2, 3, 4],
+                "rows": [
+                  ["Cloud 營收", "$300M", "$250M", "$197M", "~$213M"],
+                  ["QoQ 變化", "—", "−17%", "−21%", "+8%"]
+                ]
+              },
+              "paragraphs": [
+                "Cloud segment 營收從 Q1 的 $300M 高點連續下滑至 Q3 的 $197M（累計 −34%），Q4 小幅回升至約 $213M。以下分析三大衰退原因及 Q4 回升驅動力。"
+              ]
+            },
+            {
+              "type": "content-box",
+              "title": "原因一：NAND 產業中週期調整（Mid-Cycle Slowdown）",
+              "paragraphs": [
+                "2024 下半年（對應 SNDK FY2025 Q2–Q3），NAND 產業經歷典型的中週期調整。經過 2023–2024 上半年的強勁復甦後，客戶庫存已回到健康水位，補庫動能減弱，導致整體 NAND 需求放緩、ASP 承壓。",
+                "管理層在 Q2 FY2025 Earnings Call 明確表示：「bit shipments were lower sequentially」，並指出 Cloud 端的需求已從先前的強勁補庫轉為正常化。Q3 進一步確認「industry flash ASP declined in the mid-to-high single digit percent range」。"
+              ],
+              "sources": [
+                {
+                  "label": "10-Q Q2 FY2025",
+                  "keyword": "Cloud revenue decreased"
+                },
+                {
+                  "label": "Q2 FY2025 Earnings Call Transcript",
+                  "keyword": "bit shipments were lower sequentially"
+                }
+              ]
+            },
+            {
+              "type": "content-box",
+              "title": "原因二：NAND 供過於求與利用率不足（Underutilization）",
+              "paragraphs": [
+                "2024 年中產業復甦後，各廠恢復產能利用率、加速先進世代（如 BiCS8 / 232L）轉進。然而需求增速未能同步跟上，導致 NAND 供過於求再次浮現。",
+                "SNDK 在 Q2–Q3 持續認列 underutilization charges（產能閒置費用），壓縮毛利率。管理層在 Q3 Earnings Call 提及：「we incurred underutilization charges during the quarter」，反映公司主動控制產出以因應市場疲軟。",
+                "NAND 產業的結構性問題在於：產能具有剛性（fab 不能輕易開關），當需求放緩時，供過於求會迅速侵蝕利潤。"
+              ],
+              "sources": [
+                {
+                  "label": "10-Q Q3 FY2025",
+                  "keyword": "underutilization charges"
+                },
+                {
+                  "label": "Q3 FY2025 Earnings Call",
+                  "keyword": "underutilization charges during the quarter"
+                }
+              ]
+            },
+            {
+              "type": "content-box",
+              "title": "原因三：DC 市場結構性弱勢（Underrepresented in Data Center）",
+              "paragraphs": [
+                "與 Samsung、SK Hynix 相比，SNDK 在 Data Center SSD 的市佔率相對較低。核心瓶頸在於 enterprise SSD 必須通過 hyperscaler 認證流程，而這個認證週期「可能要好幾季」，造成結構性的時間差 — 即使 AI 需求爆發，SNDK 也無法立即吃到訂單。",
+                "管理層多次強調 Data Center 是「growth priority」，正積極透過 BiCS8 企業級 SSD 爭取份額。但認證時間差意味著：即使產品技術到位，實際營收貢獻仍需數季才能反映，Cloud segment 營收的波動性會比已取得認證的同業更大。",
+                "此外，CSP 資本支出在 2024 下半年出現節奏性放緩（部分客戶 digesting 先前大量採購的庫存），進一步放大了 SNDK 在 DC 的營收下滑幅度。"
+              ],
+              "sources": [
+                {
+                  "label": "10-K FY2024",
+                  "keyword": "data center growth"
+                },
+                {
+                  "label": "Q2 FY2025 Earnings Call",
+                  "keyword": "data center growth priority"
+                }
+              ]
+            },
+            {
+              "type": "content-box",
+              "title": "Q4 回升驅動力",
+              "paragraphs": [
+                "Q4 FY2025 Cloud 營收回升至約 $213M（QoQ +8%），主要受惠於：",
+                "1. CSP 新一輪採購週期啟動 — 部分客戶完成庫存消化後重新下單，尤其是 AI 訓練 / 推理工作負載帶動的儲存需求。",
+                "2. BiCS8 企業級 SSD 開始出貨 — 新世代產品提升性能密度比，有助於打入更多 CSP 供應鏈。",
+                "3. 產業 ASP 築底 — NAND ASP 在 Q3 觸底後企穩，減少價格逆風。"
+              ],
+              "sources": [
+                {
+                  "label": "Q4 FY2025 Earnings Call",
+                  "keyword": "cloud revenue increased sequentially"
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ]
 }

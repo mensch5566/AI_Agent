@@ -29,6 +29,7 @@ interface TodoItem {
   status: "open" | "done" | "archived";
   response: string | null;
   anchor: AnchorPoint[] | null;
+  anchor_locked: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -115,6 +116,18 @@ function scrollToAnchor(anchor: AnchorPoint) {
   if (!selector) return;
   const el = document.querySelector(`[data-anchor="${selector}"]`);
   if (!el) return;
+
+  // Auto-open the element itself (if <details>) and any parent <details>
+  if (el.tagName === "DETAILS" && !(el as HTMLDetailsElement).open) {
+    (el as HTMLDetailsElement).open = true;
+  }
+  let parent = el.parentElement;
+  while (parent) {
+    if (parent.tagName === "DETAILS" && !(parent as HTMLDetailsElement).open) {
+      (parent as HTMLDetailsElement).open = true;
+    }
+    parent = parent.parentElement;
+  }
 
   el.classList.add("todo-highlight");
   if (anchor.textFragment) {
@@ -225,7 +238,7 @@ export default function TodoPanel({ ticker }: { ticker: string }) {
   const [openSessions, setOpenSessions] = useState<Set<string>>(new Set());
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [pickingAnchorForId, setPickingAnchorForId] = useState<string | null>(null);
-  const [lockedItems, setLockedItems] = useState<Set<string>>(new Set());
+  const lockedItems: Set<string> = new Set(todos.filter(t => t.anchor_locked).map(t => t.id));
   // Track broken anchors: key = "todoId-anchorIdx"
   const [brokenAnchors, setBrokenAnchors] = useState<Set<string>>(new Set());
 
@@ -296,6 +309,23 @@ export default function TodoPanel({ ticker }: { ticker: string }) {
     }
     document.body.classList.add("todo-pick-mode");
 
+    // In pick mode, open all <details> so inner content is clickable,
+    // and prevent <summary> clicks from toggling them closed
+    const allDetails = document.querySelectorAll("details");
+    const previousState = new Map<HTMLDetailsElement, boolean>();
+    allDetails.forEach((d) => {
+      previousState.set(d, d.open);
+      d.open = true;
+    });
+
+    const preventToggle = (e: MouseEvent) => {
+      const summary = (e.target as HTMLElement).closest("summary");
+      if (summary) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener("click", preventToggle, true);
+
     const handler = (e: MouseEvent) => {
       // Ignore clicks inside the panel itself
       const panel = (e.target as HTMLElement).closest("[data-todo-panel]");
@@ -331,21 +361,19 @@ export default function TodoPanel({ ticker }: { ticker: string }) {
       e.preventDefault();
 
       // Determine if this is a blockId anchor or a positional anchor
-      const isBlockId = anchorId.startsWith("blk-");
       const isSubAnchor = anchorId.includes("--");
 
       let anchorData: Partial<AnchorPoint>;
-      if (isBlockId) {
-        if (isSubAnchor) {
-          const [bid, ...subParts] = anchorId.split("--");
-          anchorData = { blockId: bid, subAnchor: subParts.join("--") };
-        } else {
-          anchorData = { blockId: anchorId };
-        }
-      } else {
-        const parsed = parseAnchorId(anchorId);
-        if (!parsed) return;
+      // Try positional parse first; if it fails, treat as blockId
+      const parsed = !anchorId.startsWith("blk-") && !isSubAnchor ? parseAnchorId(anchorId) : null;
+      if (parsed) {
         anchorData = parsed;
+      } else if (isSubAnchor) {
+        const [bid, ...subParts] = anchorId.split("--");
+        anchorData = { blockId: bid, subAnchor: subParts.join("--") };
+      } else {
+        // Section-level or blk- anchor — store as blockId
+        anchorData = { blockId: anchorId };
       }
 
       // Compute textOffset: char position of the selection within the anchor element's textContent
@@ -371,6 +399,10 @@ export default function TodoPanel({ ticker }: { ticker: string }) {
         label = textFragment.length > 25
           ? textFragment.slice(0, 25) + "..."
           : textFragment;
+      }
+      if (!label) {
+        const summary = target.querySelector("summary");
+        if (summary) label = summary.textContent?.trim().replace(/^▶\s*/, "").slice(0, 30) || "";
       }
       if (!label) {
         const innerH3 = target.querySelector("h3");
@@ -441,7 +473,14 @@ export default function TodoPanel({ ticker }: { ticker: string }) {
 
     // Use mouseup so text selection completes before we read it
     document.addEventListener("mouseup", handler, true);
-    return () => document.removeEventListener("mouseup", handler, true);
+    return () => {
+      document.removeEventListener("mouseup", handler, true);
+      document.removeEventListener("click", preventToggle, true);
+      // Restore <details> to their previous state
+      previousState.forEach((wasOpen, d) => {
+        if (d.isConnected) d.open = wasOpen;
+      });
+    };
   }, [pickingAnchorForId, todos]);
 
   // Group by session_date
@@ -664,9 +703,26 @@ export default function TodoPanel({ ticker }: { ticker: string }) {
                           }
                         >
                           <div className="flex items-start gap-2">
-                            <span className="mt-0.5 shrink-0">
+                            <button
+                              className="mt-0.5 shrink-0 hover:opacity-70"
+                              title={item.status === "done" ? "標記為未完成" : "標記為完成"}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const newStatus = item.status === "done" ? "open" : "done";
+                                setTodos((prev) =>
+                                  prev.map((t) =>
+                                    t.id === item.id ? { ...t, status: newStatus } : t
+                                  )
+                                );
+                                fetch("/api/research-todos", {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ id: item.id, status: newStatus }),
+                                });
+                              }}
+                            >
                               <StatusIcon status={item.status} />
-                            </span>
+                            </button>
                             <div className="min-w-0 flex-1">
                               {/* Title with tooltip */}
                               <Tooltip text={item.content}>
@@ -722,11 +778,16 @@ export default function TodoPanel({ ticker }: { ticker: string }) {
                                         title={lockedItems.has(item.id) ? "解鎖 anchor（允許刪除）" : "鎖定 anchor（防止誤刪）"}
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          setLockedItems((prev) => {
-                                            const next = new Set(prev);
-                                            if (next.has(item.id)) next.delete(item.id);
-                                            else next.add(item.id);
-                                            return next;
+                                          const newLocked = !item.anchor_locked;
+                                          setTodos((prev) =>
+                                            prev.map((t) =>
+                                              t.id === item.id ? { ...t, anchor_locked: newLocked } : t
+                                            )
+                                          );
+                                          fetch("/api/research-todos", {
+                                            method: "PATCH",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ id: item.id, anchor_locked: newLocked }),
                                           });
                                         }}
                                       >

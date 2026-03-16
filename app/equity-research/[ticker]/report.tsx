@@ -15,7 +15,8 @@ const SegmentTable = dynamic(() => import("@/app/components/financials/SegmentTa
    ================================================================ */
 interface Source {
   label: string;
-  href: string;
+  href?: string;
+  keyword?: string;
 }
 
 interface TableData {
@@ -76,6 +77,8 @@ type Block = ContentBoxBlock | FinancialChartBlock | FinancialTableBlock | Segme
 interface Section {
   id: string;
   title: string;
+  toggle?: boolean;
+  toggleLabel?: string;
   kvCards?: { label: string; value: string; sub?: string; valueClass?: string }[];
   blocks: Block[];
 }
@@ -152,16 +155,24 @@ function Sources({ list }: { list: Source[] }) {
       <ul className="mt-1 space-y-0.5">
         {list.map((s, i) => (
           <li key={i}>
-            [
-            <a
-              href={s.href}
-              target="_blank"
-              rel="noopener"
-              className="text-[var(--text-muted)] hover:text-[var(--primary)] hover:underline"
-            >
-              {s.label}
-            </a>
-            ]
+            {s.href ? (
+              <>
+                [
+                <a
+                  href={s.href}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-[var(--text-muted)] hover:text-[var(--primary)] hover:underline"
+                >
+                  {s.label}
+                </a>
+                ]
+              </>
+            ) : (
+              <span className="text-[var(--text-muted)]">
+                [{s.label}]{s.keyword ? ` — "${s.keyword}"` : ""}
+              </span>
+            )}
           </li>
         ))}
       </ul>
@@ -928,6 +939,12 @@ export default function Report({ data }: { data: ReportData }) {
           outline: 2px solid rgba(250, 204, 21, 0.4);
           outline-offset: 0px;
         }
+        /* Toggle (details) section: yellow ring */
+        details.todo-highlight {
+          outline: 2px solid rgba(250, 204, 21, 0.6);
+          outline-offset: 4px;
+          border-radius: 8px;
+        }
         /* Text fragment highlight */
         mark.todo-text-hl {
           background: rgba(250, 204, 21, 0.35);
@@ -989,82 +1006,106 @@ export default function Report({ data }: { data: ReportData }) {
             </p>
           )}
 
-          {ch.sections.map((sec) => (
-            <section key={sec.id} id={sec.id} className="mb-10">
-              <SectionTitle>{sec.title}</SectionTitle>
+          {ch.sections.map((sec) => {
+            const sectionInner = (
+              <>
+                {!sec.toggle && <SectionTitle>{sec.title}</SectionTitle>}
 
-              {/* KV Cards */}
-              {sec.kvCards && sec.kvCards.length > 0 && (
-                <div
-                  className="mb-4 grid gap-4 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]"
-                  data-anchor={`${sec.id}-0-kvCards-0`}
-                >
-                  {sec.kvCards.map((kv, i) => (
-                    <KvCard key={i} {...kv} />
-                  ))}
-                </div>
-              )}
+                {/* KV Cards */}
+                {sec.kvCards && sec.kvCards.length > 0 && (
+                  <div
+                    className="mb-4 grid gap-4 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]"
+                    data-anchor={`${sec.id}-0-kvCards-0`}
+                  >
+                    {sec.kvCards.map((kv, i) => (
+                      <KvCard key={i} {...kv} />
+                    ))}
+                  </div>
+                )}
 
-              {/* Blocks */}
-              {sec.blocks.map((block, i) => {
-                const ap = `${sec.id}-${i}`;
-                if (block.type === "financial-chart") {
-                  return (
-                    <div key={i} className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm" data-anchor={`${ap}-chart-0`}>
-                      {block.title && (
-                        <h3 className="mb-3 border-b border-[var(--bg-subtle)] pb-1.5 text-[0.95rem] font-semibold">
-                          {block.title}
-                        </h3>
-                      )}
-                      <RatioChart
-                        ticker={ticker}
-                        metrics={block.metrics}
-                        defaultSelected={block.defaultSelected}
-                        height={block.height}
-                        defaultView={block.defaultView}
-                      />
+                {/* Blocks */}
+                {sec.blocks.map((block, i) => {
+                  const ap = `${sec.id}-${i}`;
+                  if (block.type === "financial-chart") {
+                    return (
+                      <div key={i} className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm" data-anchor={`${ap}-chart-0`}>
+                        {block.title && (
+                          <h3 className="mb-3 border-b border-[var(--bg-subtle)] pb-1.5 text-[0.95rem] font-semibold">
+                            {block.title}
+                          </h3>
+                        )}
+                        <RatioChart
+                          ticker={ticker}
+                          metrics={block.metrics}
+                          defaultSelected={block.defaultSelected}
+                          height={block.height}
+                          defaultView={block.defaultView}
+                        />
+                      </div>
+                    );
+                  }
+                  if (block.type === "financial-table") {
+                    return (
+                      <div key={i} className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm" data-anchor={`${ap}-financial-table-0`}>
+                        {block.title && (
+                          <h3 className="mb-3 border-b border-[var(--bg-subtle)] pb-1.5 text-[0.95rem] font-semibold">
+                            {block.title}
+                          </h3>
+                        )}
+                        <FinancialTable
+                          ticker={ticker}
+                          statement={block.statement}
+                          metrics={block.metrics}
+                          maxPeriods={block.maxPeriods}
+                          defaultView={block.defaultView}
+                        />
+                      </div>
+                    );
+                  }
+                  if (block.type === "segment-table") {
+                    return (
+                      <div key={i} className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm" data-anchor={`${ap}-segment-table-0`}>
+                        {block.title && (
+                          <h3 className="mb-3 border-b border-[var(--bg-subtle)] pb-1.5 text-[0.95rem] font-semibold">
+                            {block.title}
+                          </h3>
+                        )}
+                        <SegmentTable
+                          ticker={ticker}
+                          maxPeriods={block.maxPeriods}
+                          defaultView={block.defaultView}
+                          defaultCategory={block.defaultCategory}
+                        />
+                      </div>
+                    );
+                  }
+                  return <BlockRenderer key={i} block={block as ContentBoxBlock} onImageClick={openLightbox} anchorPrefix={ap} />;
+                })}
+              </>
+            );
+
+            if (sec.toggle) {
+              return (
+                <details key={sec.id} id={sec.id} data-anchor={sec.id} className="group mb-10">
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[var(--primary)] transition-transform group-open:rotate-90">▶</span>
+                      <SectionTitle>{sec.toggleLabel || sec.title}</SectionTitle>
                     </div>
-                  );
-                }
-                if (block.type === "financial-table") {
-                  return (
-                    <div key={i} className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm" data-anchor={`${ap}-financial-table-0`}>
-                      {block.title && (
-                        <h3 className="mb-3 border-b border-[var(--bg-subtle)] pb-1.5 text-[0.95rem] font-semibold">
-                          {block.title}
-                        </h3>
-                      )}
-                      <FinancialTable
-                        ticker={ticker}
-                        statement={block.statement}
-                        metrics={block.metrics}
-                        maxPeriods={block.maxPeriods}
-                        defaultView={block.defaultView}
-                      />
-                    </div>
-                  );
-                }
-                if (block.type === "segment-table") {
-                  return (
-                    <div key={i} className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm" data-anchor={`${ap}-segment-table-0`}>
-                      {block.title && (
-                        <h3 className="mb-3 border-b border-[var(--bg-subtle)] pb-1.5 text-[0.95rem] font-semibold">
-                          {block.title}
-                        </h3>
-                      )}
-                      <SegmentTable
-                        ticker={ticker}
-                        maxPeriods={block.maxPeriods}
-                        defaultView={block.defaultView}
-                        defaultCategory={block.defaultCategory}
-                      />
-                    </div>
-                  );
-                }
-                return <BlockRenderer key={i} block={block as ContentBoxBlock} onImageClick={openLightbox} anchorPrefix={ap} />;
-              })}
-            </section>
-          ))}
+                  </summary>
+                  <div className="mt-2 border-l-2 border-[var(--border)] pl-4">
+                    {sectionInner}
+                  </div>
+                </details>
+              );
+            }
+
+            return (
+              <section key={sec.id} id={sec.id} className="mb-10">
+                {sectionInner}
+              </section>
+            );
+          })}
         </div>
       ))}
 

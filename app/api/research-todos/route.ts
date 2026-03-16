@@ -66,6 +66,7 @@ export async function PATCH(req: NextRequest) {
     "status",
     "response",
     "anchor",
+    "anchor_locked",
     "category",
     "title",
     "content",
