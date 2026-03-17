@@ -231,7 +231,7 @@ function Tooltip({
 /* ----------------------------------------------------------------
    TodoPanel Component
    ---------------------------------------------------------------- */
-export default function TodoPanel({ ticker }: { ticker: string }) {
+export default function TodoPanel({ ticker, onToggle }: { ticker: string; onToggle?: (open: boolean) => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -573,7 +573,7 @@ export default function TodoPanel({ ticker }: { ticker: string }) {
 
       {/* Toggle tab */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => { const next = !isOpen; setIsOpen(next); onToggle?.(next); }}
         className="fixed left-0 top-1/2 z-[60] -translate-y-1/2 rounded-r-lg border border-l-0 border-[var(--border)] bg-[var(--bg-card)] px-1.5 py-4 shadow-md transition-all hover:bg-[var(--bg-subtle)]"
         title={isOpen ? "關閉 To-Do Panel" : "開啟 To-Do Panel"}
       >

@@ -43,6 +43,7 @@ interface ContentBoxBlock {
   image?: ImageData;
   bullets?: BulletList;
   footnote?: string;
+  footnotes?: { id: string; text: string }[];
   sources?: Source[];
 }
 
@@ -228,50 +229,82 @@ function SideToc({
   chapters: Chapter[];
   activeId: string;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+
   const items: { id: string; label: string; isChapter: boolean }[] = [];
+  // Map section IDs not in TOC back to their parent chapter
+  const sectionToChapter = new Map<string, string>();
   for (const ch of chapters) {
     items.push({ id: ch.id, label: `${ch.numeral}. ${ch.title}`, isChapter: true });
     if (ch.id !== "ch-archive") {
       for (const sec of ch.sections) {
         items.push({ id: sec.id, label: sec.title.replace(/^\d+\s*·\s*/, ""), isChapter: false });
       }
+    } else {
+      for (const sec of ch.sections) {
+        sectionToChapter.set(sec.id, ch.id);
+      }
     }
   }
+  const resolvedActiveId = sectionToChapter.get(activeId) || activeId;
 
   return (
-    <nav
-      className="fixed top-1/2 z-50 hidden w-[180px] -translate-y-1/2 text-xs leading-relaxed min-[1440px]:block"
-      style={{ right: "calc((100vw - 1200px) / 2 - 200px)" }}
-    >
-      <ul className="border-l-2 border-[var(--border)]">
-        {items.map((s) => {
-          const isActive = activeId === s.id;
-          return (
-            <li
-              key={s.id}
-              className={`${
-                s.isChapter
-                  ? "pt-2.5 pl-3 font-semibold first:pt-1"
-                  : "pl-5 font-normal"
-              } py-1 ${isActive ? "-ml-0.5 border-l-2 border-[var(--primary)]" : ""}`}
-            >
-              <a
-                href={`#${s.id}`}
-                className={`transition-colors ${
-                  isActive
-                    ? "font-semibold text-[var(--primary)]"
-                    : s.isChapter
-                      ? "text-[var(--text)] hover:text-[var(--primary)]"
-                      : "text-[var(--text-muted)] hover:text-[var(--primary)]"
-                }`}
-              >
-                {s.label}
-              </a>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
+    <>
+      {/* Toggle tab — always visible on right edge */}
+      <button
+        onClick={() => setIsOpen((v) => !v)}
+        className="fixed right-0 top-1/2 z-40 -translate-y-1/2 rounded-l-lg border border-r-0 border-[var(--border)] bg-[var(--bg-card)] px-1.5 py-4 shadow-md transition-all hover:bg-[var(--bg-subtle)]"
+        title={isOpen ? "關閉目錄" : "開啟目錄"}
+      >
+        <div className="flex flex-col items-center gap-1.5">
+          <span className="text-sm">{isOpen ? "\u25B6" : "\u25C0"}</span>
+          <span
+            className="text-[0.6rem] font-bold tracking-widest text-[var(--text-muted)]"
+            style={{ writingMode: "vertical-rl" }}
+          >
+            目錄
+          </span>
+        </div>
+      </button>
+
+      {/* Floating TOC popover */}
+      {isOpen && (
+        <nav
+          className="fixed right-10 top-1/2 z-40 -translate-y-1/2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] shadow-lg"
+        >
+          <div className="max-h-[70vh] overflow-y-auto px-4 py-3 text-xs leading-relaxed">
+            <ul className="border-l-2 border-[var(--border)]">
+              {items.map((s) => {
+                const isActive = resolvedActiveId === s.id;
+                return (
+                  <li
+                    key={s.id}
+                    className={`${
+                      s.isChapter
+                        ? "pt-2.5 pl-3 font-semibold first:pt-1"
+                        : "pl-5 font-normal"
+                    } py-1 ${isActive ? "-ml-0.5 border-l-2 border-[var(--primary)]" : ""}`}
+                  >
+                    <a
+                      href={`#${s.id}`}
+                      className={`whitespace-nowrap transition-colors ${
+                        isActive
+                          ? "font-semibold text-[var(--primary)]"
+                          : s.isChapter
+                            ? "text-[var(--text)] hover:text-[var(--primary)]"
+                            : "text-[var(--text-muted)] hover:text-[var(--primary)]"
+                      }`}
+                    >
+                      {s.label}
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </nav>
+      )}
+    </>
   );
 }
 
@@ -279,9 +312,18 @@ function SideToc({
    Inline Markdown — minimal bold / italic / bold-italic support
    ================================================================ */
 function renderInline(text: string): ReactNode {
-  // Split by **bold**, __underline-bold__, *italic*
-  const parts = text.split(/(\*\*[^*]+\*\*|__[^_]+__)/g);
+  // Split by [^N] footnote refs, **bold**, __underline-bold__
+  const parts = text.split(/(\[\^\d+\]|\*\*[^*]+\*\*|__[^_]+__)/g);
   return parts.map((part, i) => {
+    // Footnote reference: [^1] → superscript
+    if (/^\[\^\d+\]$/.test(part)) {
+      const num = part.slice(2, -1);
+      return (
+        <sup key={i} className="ml-0.5 text-[0.6rem] text-[var(--primary)]">
+          {num}
+        </sup>
+      );
+    }
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={i}>{part.slice(2, -2)}</strong>;
     }
@@ -292,11 +334,11 @@ function renderInline(text: string): ReactNode {
         </strong>
       );
     }
-    // Handle \n line breaks
+    // Handle \n line breaks — recurse for each line to parse nested markup
     if (part.includes("\n")) {
       return part.split("\n").map((line, j, arr) => (
         <span key={`${i}-${j}`}>
-          {line}
+          {renderInline(line)}
           {j < arr.length - 1 && <br />}
         </span>
       ));
@@ -401,9 +443,21 @@ function BlockRenderer({
           </p>
         ))}
 
-        {/* Footnote */}
+        {/* Footnote (legacy single) */}
         {block.footnote && (
           <div className="text-xs text-[var(--text-faint)]">{block.footnote}</div>
+        )}
+
+        {/* Footnotes (numbered) */}
+        {block.footnotes && block.footnotes.length > 0 && (
+          <div className="mt-3 border-t border-[var(--border)] pt-2 text-xs leading-relaxed text-[var(--text-muted)]">
+            {block.footnotes.map((fn) => (
+              <div key={fn.id} className="flex gap-1.5">
+                <sup className="mt-0.5 text-[0.6rem] text-[var(--primary)]">{fn.id}</sup>
+                <span>{fn.text}</span>
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Sources */}
@@ -885,6 +939,7 @@ export default function Report({ data }: { data: ReportData }) {
 
   const [activeId, setActiveId] = useState(allIds[0] || "");
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   useEffect(() => {
     const targets = allIds
@@ -892,7 +947,7 @@ export default function Report({ data }: { data: ReportData }) {
       .filter(Boolean) as HTMLElement[];
 
     function onScroll() {
-      const offset = window.scrollY + window.innerHeight * 0.25;
+      const offset = window.scrollY + 120;
       let active = targets[0];
       for (const t of targets) {
         if (t.offsetTop <= offset) active = t;
@@ -910,9 +965,15 @@ export default function Report({ data }: { data: ReportData }) {
   }, []);
 
   return (
-    <div className="mx-auto max-w-[1200px] px-8 py-8 pb-16">
+    <div
+      className="max-w-[1200px] px-8 py-8 pb-16 transition-[margin] duration-300"
+      style={{
+        marginLeft: panelOpen ? "max(340px, calc((100vw - 1200px) / 2))" : "auto",
+        marginRight: "auto",
+      }}
+    >
       {/* To-Do Panel */}
-      <TodoPanel ticker={ticker} />
+      <TodoPanel ticker={ticker} onToggle={setPanelOpen} />
 
       {/* Highlight styles for To-Do anchors */}
       <style jsx global>{`
