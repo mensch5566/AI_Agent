@@ -443,25 +443,30 @@ function BlockRenderer({
           </p>
         ))}
 
-        {/* Footnote (legacy single) */}
-        {block.footnote && (
-          <div className="text-xs text-[var(--text-faint)]">{block.footnote}</div>
-        )}
-
-        {/* Footnotes (numbered) */}
-        {block.footnotes && block.footnotes.length > 0 && (
-          <div className="mt-3 border-t border-[var(--border)] pt-2 text-xs leading-relaxed text-[var(--text-muted)]">
-            {block.footnotes.map((fn) => (
-              <div key={fn.id} className="flex gap-1.5">
-                <sup className="mt-0.5 text-[0.6rem] text-[var(--primary)]">{fn.id}</sup>
-                <span>{fn.text}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Sources */}
-        {block.sources && <Sources list={block.sources} />}
+        {/* Footnotes + Sources toggle */}
+        {(block.footnote || block.footnotes?.length || block.sources?.length) ? (
+          <details className="mt-3 border-t border-[var(--border)] pt-2">
+            <summary className="cursor-pointer text-xs text-[var(--text-muted)] hover:text-[var(--text)]">
+              註釋 & Sources
+            </summary>
+            <div className="mt-2">
+              {block.footnote && (
+                <div className="mb-2 text-xs text-[var(--text-faint)]">{block.footnote}</div>
+              )}
+              {block.footnotes && block.footnotes.length > 0 && (
+                <div className="mb-2 text-xs leading-relaxed text-[var(--text-muted)]">
+                  {block.footnotes.map((fn) => (
+                    <div key={fn.id} className="flex gap-1.5">
+                      <sup className="mt-0.5 text-[0.6rem] text-[var(--primary)]">{fn.id}</sup>
+                      <span>{fn.text}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {block.sources && <Sources list={block.sources} />}
+            </div>
+          </details>
+        ) : null}
       </ContentBox>
     </div>
   );
