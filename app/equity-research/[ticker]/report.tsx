@@ -312,9 +312,20 @@ function SideToc({
    Inline Markdown — minimal bold / italic / bold-italic support
    ================================================================ */
 function renderInline(text: string): ReactNode {
-  // Split by [^N] footnote refs, **bold**, __underline-bold__
-  const parts = text.split(/(\[\^\d+\]|\*\*[^*]+\*\*|__[^_]+__)/g);
+  // Split by [text](url) links, [^N] footnote refs, **bold**, __underline-bold__
+  const parts = text.split(/(\[[^\]^\n]+\]\([^)]+\)|\[\^\d+\]|\*\*[^*]+\*\*|__[^_]+__)/g);
   return parts.map((part, i) => {
+    // Markdown link: [text](url)
+    const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch) {
+      return (
+        <a key={i} href={linkMatch[2]} target="_blank" rel="noopener noreferrer"
+          className="text-[var(--primary)] underline decoration-[var(--primary)]/30 hover:decoration-[var(--primary)]"
+        >
+          {linkMatch[1]}
+        </a>
+      );
+    }
     // Footnote reference: [^1] → superscript
     if (/^\[\^\d+\]$/.test(part)) {
       const num = part.slice(2, -1);

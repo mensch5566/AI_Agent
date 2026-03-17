@@ -309,8 +309,8 @@
                 "headers": ["技術", "規格", "應用產品", "競品對標", "進度"],
                 "alignRight": [],
                 "rows": [
-                  ["**BiCS8 NAND**", "218 層[^1]\nCBA[^2] + OPS[^3]\n1Tb TLC / 2Tb QLC[^4]\n3.2 Gb/s[^5]", "TLC Enterprise SSD\nStargate QLC eSSD\nOEM 嵌入式\n消費級全線", "Samsung V9: ~280 層\nMicron G9: 276 層\nSK Hynix: 321 層", "量產中\nQ1 FY2026 佔 bit 出貨 15%\nFY2026 年底達 majority"],
-                  ["**HBF**", "1.6 TB/s[^6] / 512 GB[^7]\n16-die 堆疊，TSV\n相容 HBM4 封裝\n聯合規格（SK Hynix + Sandisk）", "尚無", "全新品類，尚無直接競品\nOCP 標準化後其他廠商可能跟進", "OCP 標準化中（2026-02）\n量產預估 ~2030"]
+                  ["**BiCS8 NAND**", "[218 層](https://www.sandisk.com/company/newsroom/press-releases/2025/2025-09-29-kioxia-and-sandisk-announce-beginning-of-operation-of-fab2-at-kitakami-plant-japan-to-meet-the-market-demand-driven-by-ai#:~:text=218%2Dlayer%203D%20flash%20memory)[^1]\n[CBA](https://www.sandisk.com/company/newsroom/press-releases/2025/2025-09-29-kioxia-and-sandisk-announce-beginning-of-operation-of-fab2-at-kitakami-plant-japan-to-meet-the-market-demand-driven-by-ai#:~:text=CBA%20%28CMOS%20directly%20Bonded%20to%20Array%29)[^2] + OPS[^3]\n[1Tb TLC / 2Tb QLC](https://documents.sandisk.com/content/dam/asset-library/en_us/assets/public/sandisk/product/internal-drives/sn670-nvme-ssd/data-sheet-sandisk-sn670-ssd.pdf#page=1)[^4]\n[3.6 Gb/s](https://www.kioxia.com.cn/zh-cn/about/news/2024/20240703-1.html#:~:text=3.6Gbps)[^5]", "TLC Enterprise SSD\nStargate QLC eSSD\nOEM 嵌入式\n消費級全線", "Samsung V9: ~280 層\nMicron G9: 276 層\nSK Hynix: 321 層", "量產中\nQ1 FY2026 佔 bit 出貨 15%\nFY2026 年底達 majority"],
+                  ["**HBF**[^6]", "[1.6 TB/s](/sources/SNDK/Sandisk-HBF-Fact-Sheet_ChineseTraditional.pdf#page=3)[^7] / [512 GB](/sources/SNDK/Sandisk-HBF-Fact-Sheet_ChineseTraditional.pdf#page=3)[^8]\n[16-die 堆疊，TSV](/sources/SNDK/Sandisk-HBF-Fact-Sheet_ChineseTraditional.pdf#page=3)", "尚無", "全新品類，尚無直接競品\nOCP 標準化後其他廠商可能跟進", "OCP 標準化中（2026-02）\n量產預估 ~2030"]
                 ]
               },
               "footnotes": [
@@ -319,8 +319,9 @@
                 {"id": "3", "text": "On-Pitch Staircase：階梯結構做在記憶體陣列間距內，不需額外面積，提高 bit density"},
                 {"id": "4", "text": "單 die 容量。TLC 每 cell 存 3 bit → 1Tb（128GB）；QLC 每 cell 存 4 bit → 2Tb（256GB）"},
                 {"id": "5", "text": "NAND 介面速度（Toggle DDR），die 與 controller 之間的傳輸速率"},
-                {"id": "6", "text": "讀取頻寬，比 PCIe 5.0 SSD 快約 50 倍"},
-                {"id": "7", "text": "單 stack 容量，比同面積 HBM 大 8–16 倍"}
+                {"id": "6", "text": "SK Hynix 與 Sandisk 聯合制定的規格標準（2026-02），已提交 OCP 推動產業標準化"},
+                {"id": "7", "text": "讀取頻寬，比 PCIe 5.0 SSD 快約 50 倍"},
+                {"id": "8", "text": "單 stack 容量，比同面積 HBM 大 8–16 倍"}
               ],
               "sources": [
                 {
@@ -334,6 +335,10 @@
                 {
                   "label": "SK Hynix & Sandisk HBF Joint Announcement (2026-02-25)",
                   "href": "https://www.oscoo.com/news/sk-hynix-and-sandisk-unveil-high-bandwidth-flash-for-ai-inference/"
+                },
+                {
+                  "label": "Sandisk HBF Fact Sheet（繁中）",
+                  "href": "/sources/SNDK/Sandisk-HBF-Fact-Sheet_ChineseTraditional.pdf"
                 }
               ],
               "id": "blk-key-technology"
