@@ -100,6 +100,7 @@ interface ValuationVersion {
   latestReport?: string;
   note: string;
   details?: string[];
+  detailsTable?: { headers: string[]; rows: string[][] };
   peRatios: [number, number, number, number];
   eps: { bear: number; base: number; bull: number; ttm: number };
   quarterly: QuarterEPS[];
@@ -778,7 +779,13 @@ function VersionHistory({
   );
 }
 
-function DetailsToggle({ details }: { details: string[] }) {
+function DetailsToggle({
+  details,
+  detailsTable,
+}: {
+  details: string[];
+  detailsTable?: { headers: string[]; rows: string[][] };
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className="mt-6 border-t border-[var(--border)] pt-3">
@@ -796,6 +803,38 @@ function DetailsToggle({ details }: { details: string[] }) {
               {renderInline(p)}
             </p>
           ))}
+          {detailsTable && (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-auto text-[0.85rem] border-collapse">
+                <thead>
+                  <tr>
+                    {detailsTable.headers.map((h, i) => (
+                      <th
+                        key={i}
+                        className="border-b border-[var(--border)] px-4 py-1.5 text-left font-semibold text-[var(--text-muted)]"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailsTable.rows.map((row, ri) => (
+                    <tr key={ri}>
+                      {row.map((cell, ci) => (
+                        <td
+                          key={ci}
+                          className="border-b border-[var(--border-faint)] px-4 py-1.5"
+                        >
+                          {renderInline(cell)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -845,7 +884,7 @@ function PEValuation({
           </div>
         </div>
         {latest.details && latest.details.length > 0 && (
-          <DetailsToggle details={latest.details} />
+          <DetailsToggle details={latest.details} detailsTable={latest.detailsTable} />
         )}
       </ContentBox>
 

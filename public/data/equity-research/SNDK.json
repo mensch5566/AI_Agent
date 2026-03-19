@@ -758,8 +758,72 @@
           ],
           "versions": [
             {
+              "id": "v2",
+              "date": "2026-03-19",
+              "label": "FY2026 · TTM 修正（Adjusted GAAP）",
+              "trigger": "TTM EPS 改用 Adjusted GAAP（排除分拆一次性費用），正常化稅率 14%",
+              "latestReport": "Q2 FY2026",
+              "note": "原 TTM $5.06 口徑不明，改用方法 A（排除 Goodwill impairment / separation costs / employee termination / divestiture）計算，TTM = $5.75。EPS 預估不變。",
+              "details": [
+                "TTM Adjusted GAAP EPS = $5.75（排除分拆一次性費用，正常化稅率 14%）",
+                "TTM P/E = 753.69 / 5.75 = 131x，因 Q3–Q4 FY25 處於 NAND 低谷 + 分拆過渡期，不適合當估值依據",
+                "市場定價隱含預期落在 Base–Bull 之間（~20x），偏樂觀",
+                "週期股在盈利拐點 TTM P/E 必然偏高，應以 FY2026E EPS 估值"
+              ],
+              "detailsTable": {
+                "headers": ["情境", "FY2026E EPS", "現價 $753.69 隱含 P/E", "解讀"],
+                "rows": [
+                  ["Bear", "$32.71", "23.0x", "若只賺 Bear 的錢，現價偏貴"],
+                  ["Base", "$36.85", "20.5x", "合理偏樂觀"],
+                  ["Bull", "$40.05", "18.8x", "若達成 Bull，現價划算"]
+                ]
+              },
+              "peRatios": [
+                10,
+                15,
+                18,
+                20
+              ],
+              "eps": {
+                "bear": 32.71,
+                "base": 36.85,
+                "bull": 40.05,
+                "ttm": 5.75
+              },
+              "quarterly": [
+                {
+                  "label": "Q1",
+                  "bear": 0.75,
+                  "base": 0.75,
+                  "bull": 0.75,
+                  "isActual": true
+                },
+                {
+                  "label": "Q2",
+                  "bear": 5.15,
+                  "base": 5.15,
+                  "bull": 5.15,
+                  "isActual": true
+                },
+                {
+                  "label": "Q3",
+                  "bear": 12.12,
+                  "base": 14.02,
+                  "bull": 14.91,
+                  "isActual": false
+                },
+                {
+                  "label": "Q4",
+                  "bear": 14.69,
+                  "base": 16.93,
+                  "bull": 19.24,
+                  "isActual": false
+                }
+              ]
+            },
+            {
               "id": "v1",
-              "date": "2026-03-12",
+              "date": "2026-02-13",
               "label": "FY2026 · Q2後更新",
               "trigger": "Q2 FY2026 財報公布 (2026/01/29)",
               "latestReport": "Q2 FY2026",

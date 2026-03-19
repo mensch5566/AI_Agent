@@ -28,6 +28,9 @@ Investment_Data/macro/backups/
 # ── Claude internal ───────────────────────────────────
 .claude/
 
+# ── 臨時檔案（Excel、CSV 等工作產出）─────────────────
+scratch/
+
 # ── 不進 repo 的目錄 ──────────────────────────────────
 Archive/
 Claude_Project/
