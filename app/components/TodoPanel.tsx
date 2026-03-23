@@ -653,11 +653,6 @@ export default function TodoPanel({ ticker, onToggle }: { ticker: string; onTogg
                       {isSessionOpen ? "\u25BC" : "\u25B6"}
                     </span>
                     <span className="text-xs font-semibold">{date}</span>
-                    {session.label !== date && (
-                      <span className="text-[0.65rem] text-[var(--text-muted)]">
-                        {session.label}
-                      </span>
-                    )}
                   </div>
                   <div className="flex items-center gap-1.5 text-[0.6rem]">
                     {sessionErrorCount > 0 && (

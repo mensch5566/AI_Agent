@@ -524,7 +524,7 @@ export default function Dashboard() {
 
   // News data
   useEffect(() => {
-    fetch("/data/command-center/news.json?_=" + Date.now())
+    fetch("/api/news?days=7")
       .then((r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.json();
