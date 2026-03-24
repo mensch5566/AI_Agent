@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import ThemeToggle from "@/app/components/ThemeToggle";
+import NewsTable from "@/app/components/news/NewsTable";
+import type { NewsItem } from "@/app/components/news/types";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -69,7 +71,12 @@ interface ReportData {
       institutionalOwnership: any;
     };
   };
-  news: { date: string; headline?: string; title?: string; link?: string }[];
+  news?: { date: string; headline?: string; title?: string; link?: string }[];
+  newsAnalysis?: {
+    title: string;
+    points: string[];
+    table?: { headers: string[]; rows: string[][] };
+  }[];
   debug: Record<string, { notes?: { level: string; msg: string }[]; api?: Record<string, string> }>;
 }
 
@@ -149,6 +156,39 @@ export default function Dashboard({ data }: { data: ReportData }) {
   const searchParams = useSearchParams();
   const isDebug = searchParams.has("debug");
   const td = data.technical;
+
+  // Dynamic news from Supabase, fallback to static JSON
+  const [newsItems, setNewsItems] = useState<NewsItem[]>(
+    (data.news ?? []).map((n) => ({
+      date: n.date,
+      headline: n.headline || n.title || "",
+      summary: "",
+      url: n.link,
+    })),
+  );
+  useEffect(() => {
+    if (!data.ticker || !data.reportWeek) return;
+    const match = data.reportWeek.match(/^(\d{4})-W(\d{2})$/);
+    if (!match) return;
+    const year = parseInt(match[1]);
+    const week = parseInt(match[2]);
+    const prevWeek = week > 1 ? `${year}-W${String(week - 1).padStart(2, "0")}` : data.reportWeek;
+    Promise.all([
+      fetch(`/api/news?ticker=${data.ticker}&week=${data.reportWeek}`).then((r) => r.ok ? r.json() : { items: [] }),
+      fetch(`/api/news?ticker=${data.ticker}&week=${prevWeek}`).then((r) => r.ok ? r.json() : { items: [] }),
+    ])
+      .then(([curr, prev]) => {
+        const all: NewsItem[] = [...(curr.items || []), ...(prev.items || [])];
+        const seen = new Set<string>();
+        const unique = all.filter((n) => {
+          if (!n.url || seen.has(n.url)) return false;
+          seen.add(n.url);
+          return true;
+        });
+        if (unique.length) setNewsItems(unique);
+      })
+      .catch(() => {});
+  }, [data.ticker, data.reportWeek]);
   const market = data.chips.market || data.market;
 
   const sparklineData = useMemo(
@@ -272,10 +312,76 @@ export default function Dashboard({ data }: { data: ReportData }) {
         </div>
       </header>
 
-      {/* ── 01 · 技術面 ── */}
+      {/* ── 01 · 消息面 ── */}
+      <section className="mb-12">
+        <SectionTitle debugTags={renderDebugSection("sec-news")}>
+          01 · 消息面
+        </SectionTitle>
+
+        <NewsTable items={newsItems} />
+
+        {renderDebugNotes("sec-news")}
+      </section>
+
+      {/* ── 02 · 新聞分析 ── */}
+      {data.newsAnalysis && data.newsAnalysis.length > 0 && (
+        <section className="mb-12">
+          <SectionTitle>02 · 新聞分析</SectionTitle>
+
+          <div className="space-y-6">
+            {data.newsAnalysis.map((block, bi) => (
+              <div
+                key={bi}
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm"
+              >
+                <h3 className="mb-3 text-base font-bold">{block.title}</h3>
+                <ul className="mb-4 list-disc space-y-1.5 pl-5 text-sm leading-relaxed">
+                  {block.points.map((p, pi) => (
+                    <li key={pi}>{p}</li>
+                  ))}
+                </ul>
+                {block.table && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr>
+                          {block.table.headers.map((h, hi) => (
+                            <th
+                              key={hi}
+                              className="border-b border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2 text-left text-xs font-normal uppercase text-[var(--text-muted)]"
+                            >
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {block.table.rows.map((row, ri) => (
+                          <tr key={ri}>
+                            {row.map((cell, ci) => (
+                              <td
+                                key={ci}
+                                className={`border-b border-[var(--border)] px-3 py-2 ${ci === 0 ? "font-medium whitespace-nowrap" : ""}`}
+                              >
+                                {cell}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── 03 · 技術面 ── */}
       <section className="mb-12">
         <SectionTitle debugTags={renderDebugSection("sec-technical")}>
-          01 · 技術面
+          03 · 技術面
         </SectionTitle>
 
         {/* Price Cards */}
@@ -307,43 +413,13 @@ export default function Dashboard({ data }: { data: ReportData }) {
           )}
         </div>
 
-        {/* Indicator Table */}
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <th className="border-b border-[var(--border)] px-4 py-2 text-left text-xs font-normal uppercase tracking-wide text-[var(--text-muted)]">
-                  指標
-                </th>
-                <th className="border-b border-[var(--border)] px-4 py-2 text-right text-xs font-normal uppercase tracking-wide text-[var(--text-muted)]">
-                  數值
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {indRows.map(([label, val, cls]) => (
-                <tr key={label}>
-                  <td className="border-b border-[var(--border)] px-4 py-2 text-sm">
-                    {label}
-                  </td>
-                  <td
-                    className={`border-b border-[var(--border)] px-4 py-2 text-right text-sm ${cls}`}
-                  >
-                    {val}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
         {renderDebugNotes("sec-technical")}
       </section>
 
       {/* ── 02 · 籌碼面 ── */}
       <section className="mb-12">
         <SectionTitle debugTags={renderDebugSection("sec-chips")}>
-          02 · 籌碼面
+          04 · 籌碼面
         </SectionTitle>
 
         {market === "tw" && (
@@ -463,64 +539,6 @@ export default function Dashboard({ data }: { data: ReportData }) {
         )}
 
         {renderDebugNotes("sec-chips")}
-      </section>
-
-      {/* ── 03 · 消息面 ── */}
-      <section className="mb-12">
-        <SectionTitle debugTags={renderDebugSection("sec-news")}>
-          03 · 消息面
-        </SectionTitle>
-
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <th className="border-b border-[var(--border)] px-4 py-2.5 text-left text-xs font-normal uppercase text-[var(--text-muted)]">
-                  日期
-                </th>
-                <th className="border-b border-[var(--border)] px-4 py-2.5 text-left text-xs font-normal uppercase text-[var(--text-muted)]">
-                  標題
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.news.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={2}
-                    className="py-4 text-center text-sm italic text-[var(--text-faint)]"
-                  >
-                    本週尚無新聞彙整
-                  </td>
-                </tr>
-              ) : (
-                data.news.map((n, i) => (
-                  <tr key={i}>
-                    <td className="border-b border-[var(--border)] px-4 py-2.5 text-sm whitespace-nowrap text-[var(--text-muted)]">
-                      {n.date}
-                    </td>
-                    <td className="border-b border-[var(--border)] px-4 py-2.5 text-sm align-top">
-                      {n.link ? (
-                        <a
-                          href={n.link}
-                          target="_blank"
-                          rel="noopener"
-                          className="hover:text-[var(--primary)] hover:underline"
-                        >
-                          {n.headline || n.title || ""}
-                        </a>
-                      ) : (
-                        n.headline || n.title || ""
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {renderDebugNotes("sec-news")}
       </section>
 
       {/* Footer */}

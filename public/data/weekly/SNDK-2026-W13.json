@@ -1,0 +1,95 @@
+{
+  "reportDate": "2026-03-23",
+  "reportWeek": "2026-W13",
+  "ticker": "SNDK",
+  "company": "Sandisk Corp",
+  "market": "us",
+  "technical": {
+    "close": 709.71,
+    "weekChangePct": 7.27,
+    "volume": 23508599,
+    "date": "2026-03-20",
+    "ma": {
+      "MA5": 731.86,
+      "MA20": 645.2,
+      "MA60": 523.58
+    },
+    "macd": {
+      "macd": 41.5134,
+      "signal": 31.1434,
+      "hist": 10.37
+    },
+    "bollinger": {
+      "upper": 771.88,
+      "mid": 645.2,
+      "lower": 518.51
+    },
+    "weeklyLabels": [
+      "Feb 20",
+      "Feb 27",
+      "Mar 06",
+      "Mar 13",
+      "Mar 20"
+    ],
+    "weeklyClose": [
+      649.97,
+      635.36,
+      527.33,
+      661.62,
+      709.71
+    ]
+  },
+  "chips": {
+    "market": "us",
+    "tw": {
+      "institutional": {
+        "date": "",
+        "foreign_net": null,
+        "trust_net": null,
+        "dealer_net": null,
+        "foreign_5d_net": null
+      },
+      "margin": {
+        "date": "",
+        "margin_balance": null,
+        "short_balance": null,
+        "margin_change": null,
+        "short_change": null
+      }
+    },
+    "us": {
+      "shortInterest": null,
+      "institutionalOwnership": null
+    }
+  },
+  "newsAnalysis": [
+    {
+      "title": "SNDK 估值面臨現實檢驗",
+      "points": [
+        "SNDK 自分拆以來漲幅達 721-1,600%，P/S 6.4x，forward P/E 為負，市場定價已接近完美執行",
+        "Q2 營收 $3.03B（+61% YoY），EPS $6.20（大幅超越預期 $3.54）；Q3 guidance 營收 $4.4-4.8B，EPS $12-14，毛利率 65-67%",
+        "BiCS8 3D NAND 放量中（Q1 佔出貨 15%，預計 FY26 底成為主力），推升毛利率",
+        "Goldman 認為記憶體短缺可能持續到 2028，但主要風險在估值已 price in 完美情境，容錯空間極低"
+      ]
+    },
+    {
+      "title": "HDD 售罄：AI 資料中心吃光全球產能",
+      "points": [
+        "WD CEO 確認 2026 全年 firm purchase orders（前 7 大客戶），已簽長約到 2027-2028",
+        "Seagate 同樣 fully allocated through 2026，預計開放 2027 H1 訂單",
+        "HDD 核心角色是 AI 資料中心的冷/溫儲存（訓練資料、推論 log），SSD 價格為 HDD 的 16 倍以上",
+        "消費者硬碟價格自 9 月以來漲 46%，分析師預測供給緊缺至 2028 年初"
+      ],
+      "table": {
+        "headers": ["維度", "2026 年狀態", "2027 年預期"],
+        "rows": [
+          ["訂單能見度", "100% 售罄（全年 firm PO）", "長約簽署中，能見度達 2027-28"],
+          ["需求驅動力", "AI 訓練資料、推論 log 冷儲存", "AI 推論數據生成、邊緣 AI 普及"],
+          ["主要產品", "30-40TB CMR，Seagate 44TB HAMR 出貨中", "40TB+ HAMR，路線圖 100TB by 2029"],
+          ["市場風險", "估值 price in 完美執行（P/S 4-6x）", "NAND cycle 見頂回落、對手擴產搶份額"]
+        ]
+      }
+    }
+  ],
+  "debug": {}
+}

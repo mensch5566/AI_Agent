@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import ThemeToggle from "@/app/components/ThemeToggle";
@@ -980,8 +980,172 @@ function ValuationChapter({
 /* ================================================================
    Main Report Component
    ================================================================ */
+/* ================================================================
+   Slide builder — flattens chapters/sections/blocks into snap slides
+   ================================================================ */
+interface Slide {
+  key: string;
+  isFirst: boolean; // first slide gets header
+  chapterTitle?: { id: string; numeral: string; title: string };
+  sectionTitle?: { id: string; title: string; toggle?: boolean; toggleLabel?: string };
+  // Always-present breadcrumb for every slide
+  breadcrumb?: { chapter: string; section: string };
+  kvCards?: { cards: Section["kvCards"]; anchor: string };
+  block?: { block: Block; anchorPrefix: string; index: number };
+  allBlocks?: { block: Block; anchorPrefix: string; index: number }[];
+  // Special slide types
+  placeholder?: { chapterId: string; text: string };
+  valuationChapter?: { valuations: ValuationModel[]; ticker: string; chronicle?: Chronicle; chapterId: string };
+  footer?: boolean;
+}
+
+function buildSlides(chapters: Chapter[]): Slide[] {
+  const slides: Slide[] = [];
+  let isFirst = true;
+  let currentChapterLabel = "";
+  let currentSectionLabel = "";
+
+  for (const ch of chapters) {
+    currentChapterLabel = `${ch.numeral}. ${ch.title}`;
+    // Track whether we've emitted the chapter title yet
+    let chapterTitlePending: Slide["chapterTitle"] | undefined = {
+      id: ch.id,
+      numeral: ch.numeral,
+      title: ch.title,
+    };
+
+    // Valuation chapter — gets its own slide with chapter title
+    if (ch.valuations) {
+      slides.push({
+        key: `val-${ch.id}`,
+        isFirst,
+        chapterTitle: chapterTitlePending,
+        valuationChapter: {
+          valuations: ch.valuations,
+          ticker: "", // filled at render time
+          chronicle: ch.chronicle,
+          chapterId: ch.id,
+        },
+      });
+      isFirst = false;
+      chapterTitlePending = undefined;
+    }
+
+    // Placeholder chapter (no sections, no valuations)
+    if (ch.placeholder && ch.sections.length === 0 && !ch.valuations) {
+      slides.push({
+        key: `ph-${ch.id}`,
+        isFirst,
+        chapterTitle: chapterTitlePending,
+        placeholder: { chapterId: ch.id, text: ch.placeholder },
+      });
+      isFirst = false;
+      chapterTitlePending = undefined;
+    }
+
+    // Sections
+    for (const sec of ch.sections) {
+      currentSectionLabel = sec.title;
+      let sectionTitlePending: Slide["sectionTitle"] | undefined = {
+        id: sec.id,
+        title: sec.title,
+        toggle: sec.toggle,
+        toggleLabel: sec.toggleLabel,
+      };
+
+      // If section has kvCards, they go with the first block (or alone if no blocks)
+      const hasKvCards = sec.kvCards && sec.kvCards.length > 0;
+      const kvCardsData = hasKvCards
+        ? { cards: sec.kvCards, anchor: `${sec.id}-0-kvCards-0` }
+        : undefined;
+
+      if (sec.blocks.length === 0) {
+        // Section with only kvCards or empty
+        slides.push({
+          key: `sec-${sec.id}`,
+          isFirst,
+          breadcrumb: { chapter: currentChapterLabel, section: currentSectionLabel },
+          chapterTitle: chapterTitlePending,
+          sectionTitle: sectionTitlePending,
+          kvCards: kvCardsData,
+        });
+        isFirst = false;
+        chapterTitlePending = undefined;
+        sectionTitlePending = undefined;
+        continue;
+      }
+
+      // Toggle sections (Archive): group ALL blocks into ONE slide
+      if (sec.toggle) {
+        const slide: Slide = {
+          key: `toggle-${sec.id}`,
+          isFirst,
+          breadcrumb: { chapter: currentChapterLabel, section: currentSectionLabel },
+          sectionTitle: sectionTitlePending,
+          kvCards: kvCardsData,
+          // Store all blocks — we'll use a new field
+          allBlocks: sec.blocks.map((block, i) => ({
+            block,
+            anchorPrefix: `${sec.id}-${i}`,
+            index: i,
+          })),
+        };
+        if (chapterTitlePending) {
+          slide.chapterTitle = chapterTitlePending;
+          chapterTitlePending = undefined;
+        }
+        isFirst = false;
+        sectionTitlePending = undefined;
+        slides.push(slide);
+        continue;
+      }
+
+      for (let i = 0; i < sec.blocks.length; i++) {
+        const block = sec.blocks[i];
+        const ap = `${sec.id}-${i}`;
+
+        const slide: Slide = {
+          key: `block-${ap}`,
+          isFirst,
+          breadcrumb: { chapter: currentChapterLabel, section: currentSectionLabel },
+          block: { block, anchorPrefix: ap, index: i },
+        };
+
+        // Attach chapter title to the first block of the chapter's first section
+        if (chapterTitlePending) {
+          slide.chapterTitle = chapterTitlePending;
+          chapterTitlePending = undefined;
+        }
+
+        // Attach section title to the first block of the section
+        if (sectionTitlePending) {
+          slide.sectionTitle = sectionTitlePending;
+          sectionTitlePending = undefined;
+        }
+
+        // Attach kvCards to the first block of the section
+        if (i === 0 && kvCardsData) {
+          slide.kvCards = kvCardsData;
+        }
+
+        isFirst = false;
+        slides.push(slide);
+      }
+    }
+
+    // If chapter title was never consumed (e.g. chapter with only valuations handled above,
+    // but no sections), it's already been emitted
+  }
+
+  // Footer slide
+  slides.push({ key: "footer", isFirst: false, footer: true });
+
+  return slides;
+}
+
 export default function Report({ data }: { data: ReportData }) {
   const { ticker, name, updated, chapters } = data;
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // Build flat list of section IDs for scroll tracking
   const allIds: string[] = [];
@@ -993,39 +1157,117 @@ export default function Report({ data }: { data: ReportData }) {
   }
 
   const [activeId, setActiveId] = useState(allIds[0] || "");
+  const [showStickyHeader, setShowStickyHeader] = useState(false);
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
 
+  // Derive current chapter + section from activeId for sticky headers
+  const stickyHeaders = (() => {
+    for (const ch of chapters) {
+      if (ch.id === activeId) return { chapter: `${ch.numeral}. ${ch.title}`, section: "" };
+      for (const sec of ch.sections) {
+        if (sec.id === activeId) return { chapter: `${ch.numeral}. ${ch.title}`, section: sec.title };
+      }
+    }
+    return { chapter: "", section: "" };
+  })();
+
+  // Scroll tracking — uses the snap scroll container instead of window
   useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
     const targets = allIds
       .map((id) => document.getElementById(id))
       .filter(Boolean) as HTMLElement[];
 
     function onScroll() {
-      const offset = window.scrollY + 120;
+      if (!container) return;
+      const containerRect = container.getBoundingClientRect();
+      const threshold = containerRect.top + 80; // 80px from top of scroll container
       let active = targets[0];
       for (const t of targets) {
-        if (t.offsetTop <= offset) active = t;
+        const rect = t.getBoundingClientRect();
+        if (rect.top <= threshold) active = t;
       }
       if (active) setActiveId(active.id);
+      setShowStickyHeader(container.scrollTop > container.clientHeight * 0.5);
     }
 
-    window.addEventListener("scroll", onScroll, { passive: true });
+    container.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => container.removeEventListener("scroll", onScroll);
   }, []);
 
   const openLightbox = useCallback((src: string) => {
     setLightboxImg(src);
   }, []);
 
+  // Build slides
+  const slides = buildSlides(chapters);
+
+  // Helper: render a block inside a slide
+  const renderBlock = (block: Block, ap: string, i: number) => {
+    if (block.type === "financial-chart") {
+      return (
+        <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm" data-anchor={`${ap}-chart-0`}>
+          {block.title && (
+            <h3 className="mb-3 border-b border-[var(--bg-subtle)] pb-1.5 text-[0.95rem] font-semibold">
+              {block.title}
+            </h3>
+          )}
+          <RatioChart
+            ticker={ticker}
+            metrics={block.metrics}
+            defaultSelected={block.defaultSelected}
+            height={block.height}
+            defaultView={block.defaultView}
+          />
+        </div>
+      );
+    }
+    if (block.type === "financial-table") {
+      return (
+        <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm" data-anchor={`${ap}-financial-table-0`}>
+          {block.title && (
+            <h3 className="mb-3 border-b border-[var(--bg-subtle)] pb-1.5 text-[0.95rem] font-semibold">
+              {block.title}
+            </h3>
+          )}
+          <FinancialTable
+            ticker={ticker}
+            statement={block.statement}
+            metrics={block.metrics}
+            maxPeriods={block.maxPeriods}
+            defaultView={block.defaultView}
+          />
+        </div>
+      );
+    }
+    if (block.type === "segment-table") {
+      return (
+        <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm" data-anchor={`${ap}-segment-table-0`}>
+          {block.title && (
+            <h3 className="mb-3 border-b border-[var(--bg-subtle)] pb-1.5 text-[0.95rem] font-semibold">
+              {block.title}
+            </h3>
+          )}
+          <SegmentTable
+            ticker={ticker}
+            maxPeriods={block.maxPeriods}
+            defaultView={block.defaultView}
+            defaultCategory={block.defaultCategory}
+          />
+        </div>
+      );
+    }
+    return <BlockRenderer block={block as ContentBoxBlock} onImageClick={openLightbox} anchorPrefix={ap} />;
+  };
+
   return (
     <div
-      className="max-w-[1200px] px-8 py-8 pb-16 transition-[margin] duration-300"
-      style={{
-        marginLeft: panelOpen ? "max(340px, calc((100vw - 1200px) / 2))" : "auto",
-        marginRight: "auto",
-      }}
+      ref={scrollRef}
+      className="h-svh overflow-y-auto snap-y snap-mandatory"
     >
       {/* To-Do Panel */}
       <TodoPanel ticker={ticker} onToggle={setPanelOpen} />
@@ -1092,153 +1334,215 @@ export default function Report({ data }: { data: ReportData }) {
         }
       `}</style>
 
-      <Link
-        href="/equity-research"
-        className="mb-3 inline-block text-sm font-semibold text-[var(--primary)] opacity-70 transition-opacity hover:opacity-100"
-      >
-        ← Equity Research
-      </Link>
-
-      {/* Header */}
-      <header className="mb-10 flex items-start justify-between border-b border-[var(--border)] pb-5">
-        <div>
-          <h1 className="text-3xl font-bold tracking-wide">
-            <span className="text-[var(--primary)]">{ticker}</span> 個股研究
-          </h1>
-          <div className="mt-1 text-sm text-[var(--text-muted)]">
-            {name} · 最後更新：{updated}
-          </div>
-        </div>
-        <ThemeToggle />
-      </header>
-
       {/* Side TOC */}
       <SideToc chapters={chapters} activeId={activeId} />
+
+      {/* Sticky chapter + section headers — only show after scrolling past first slide */}
+      {showStickyHeader && stickyHeaders.chapter && (
+        <div className="pointer-events-none fixed top-0 left-0 right-0 z-30" style={{
+          paddingLeft: panelOpen ? "340px" : "0",
+          transition: "padding 0.3s",
+        }}>
+          <div className="pointer-events-auto bg-[var(--bg)]/95 backdrop-blur-sm border-b border-[var(--border)]">
+            <div className="max-w-[1200px] mx-auto px-8">
+              <div className="py-2 text-sm font-bold tracking-wide text-[var(--primary)]">
+                {stickyHeaders.chapter}
+              </div>
+              {stickyHeaders.section && (
+                <div className="pb-2 text-xs text-[var(--text-muted)] -mt-0.5">
+                  {stickyHeaders.section}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox */}
       <LightboxModal src={lightboxImg} onClose={() => setLightboxImg(null)} />
 
-      {/* Chapters */}
-      {chapters.map((ch) => (
-        <div key={ch.id} className="mb-16" id={ch.id}>
-          <div className="mb-8 border-b-2 border-[var(--primary)] pb-2 text-xl font-bold tracking-wide">
-            <span className="text-[var(--primary)]">{ch.numeral}.</span> {ch.title}
-          </div>
+      {/* Slides */}
+      {slides.map((slide) => {
+        // Footer slide
+        if (slide.footer) {
+          return (
+            <div key={slide.key} className="snap-start min-h-[100svh] flex flex-col justify-end pb-8 px-8 max-w-[1200px]" style={{
+              marginLeft: panelOpen ? "max(340px, calc((100vw - 1200px) / 2))" : "auto",
+              marginRight: "auto",
+            }}>
+              <footer className="border-t border-[var(--border)] pt-4 text-xs text-[var(--text-faint)]">
+                Equity Research · K-House
+              </footer>
+            </div>
+          );
+        }
 
-          {ch.valuations && <ValuationChapter valuations={ch.valuations} ticker={ticker} chronicle={ch.chronicle} />}
+        // First slide: header + first chapter + first section + first block
+        if (slide.isFirst) {
+          return (
+            <div key={slide.key} className="snap-start min-h-[100svh] pt-12 px-8 max-w-[1200px] transition-[margin] duration-300 relative" style={{
+              marginLeft: panelOpen ? "max(340px, calc((100vw - 1200px) / 2))" : "auto",
+              marginRight: "auto",
+            }}>
+              {slide.chapterTitle && <div id={slide.chapterTitle.id} className="absolute top-0" />}
+              {slide.sectionTitle && <div id={slide.sectionTitle.id} className="absolute top-0" />}
+              <Link
+                href="/equity-research"
+                className="mb-3 inline-block text-sm font-semibold text-[var(--primary)] opacity-70 transition-opacity hover:opacity-100"
+              >
+                ← Equity Research
+              </Link>
 
-          {ch.placeholder && ch.sections.length === 0 && !ch.valuations && (
-            <p className="p-4 text-center text-sm italic text-[var(--text-faint)]">
-              {ch.placeholder}
-            </p>
-          )}
-
-          {ch.sections.map((sec) => {
-            const sectionInner = (
-              <>
-                {!sec.toggle && <SectionTitle>{sec.title}</SectionTitle>}
-
-                {/* KV Cards */}
-                {sec.kvCards && sec.kvCards.length > 0 && (
-                  <div
-                    className="mb-4 grid gap-4 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]"
-                    data-anchor={`${sec.id}-0-kvCards-0`}
-                  >
-                    {sec.kvCards.map((kv, i) => (
-                      <KvCard key={i} {...kv} />
-                    ))}
+              <header className="mb-10 flex items-start justify-between border-b border-[var(--border)] pb-5">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-wide">
+                    <span className="text-[var(--primary)]">{ticker}</span> 個股研究
+                  </h1>
+                  <div className="mt-1 text-sm text-[var(--text-muted)]">
+                    {name} · 最後更新：{updated}
                   </div>
-                )}
+                </div>
+                <ThemeToggle />
+              </header>
 
-                {/* Blocks */}
-                {sec.blocks.map((block, i) => {
-                  const ap = `${sec.id}-${i}`;
-                  if (block.type === "financial-chart") {
-                    return (
-                      <div key={i} className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm" data-anchor={`${ap}-chart-0`}>
-                        {block.title && (
-                          <h3 className="mb-3 border-b border-[var(--bg-subtle)] pb-1.5 text-[0.95rem] font-semibold">
-                            {block.title}
-                          </h3>
-                        )}
-                        <RatioChart
-                          ticker={ticker}
-                          metrics={block.metrics}
-                          defaultSelected={block.defaultSelected}
-                          height={block.height}
-                          defaultView={block.defaultView}
-                        />
-                      </div>
-                    );
-                  }
-                  if (block.type === "financial-table") {
-                    return (
-                      <div key={i} className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm" data-anchor={`${ap}-financial-table-0`}>
-                        {block.title && (
-                          <h3 className="mb-3 border-b border-[var(--bg-subtle)] pb-1.5 text-[0.95rem] font-semibold">
-                            {block.title}
-                          </h3>
-                        )}
-                        <FinancialTable
-                          ticker={ticker}
-                          statement={block.statement}
-                          metrics={block.metrics}
-                          maxPeriods={block.maxPeriods}
-                          defaultView={block.defaultView}
-                        />
-                      </div>
-                    );
-                  }
-                  if (block.type === "segment-table") {
-                    return (
-                      <div key={i} className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-6 shadow-sm" data-anchor={`${ap}-segment-table-0`}>
-                        {block.title && (
-                          <h3 className="mb-3 border-b border-[var(--bg-subtle)] pb-1.5 text-[0.95rem] font-semibold">
-                            {block.title}
-                          </h3>
-                        )}
-                        <SegmentTable
-                          ticker={ticker}
-                          maxPeriods={block.maxPeriods}
-                          defaultView={block.defaultView}
-                          defaultCategory={block.defaultCategory}
-                        />
-                      </div>
-                    );
-                  }
-                  return <BlockRenderer key={i} block={block as ContentBoxBlock} onImageClick={openLightbox} anchorPrefix={ap} />;
-                })}
-              </>
-            );
+              {slide.chapterTitle && (
+                <div className="mb-8 border-b-2 border-[var(--primary)] pb-2 text-xl font-bold tracking-wide">
+                  <span className="text-[var(--primary)]">{slide.chapterTitle.numeral}.</span> {slide.chapterTitle.title}
+                </div>
+              )}
 
-            if (sec.toggle) {
-              return (
-                <details key={sec.id} id={sec.id} data-anchor={sec.id} className="group mb-10">
-                  <summary className="cursor-pointer list-none">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[var(--primary)] transition-transform group-open:rotate-90">▶</span>
-                      <SectionTitle>{sec.toggleLabel || sec.title}</SectionTitle>
+              {slide.sectionTitle && !slide.sectionTitle.toggle && (
+                <div>
+                  <SectionTitle>{slide.sectionTitle.title}</SectionTitle>
+                </div>
+              )}
+
+              {slide.kvCards && (
+                <div
+                  className="mb-4 grid gap-4 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]"
+                  data-anchor={slide.kvCards.anchor}
+                >
+                  {slide.kvCards.cards!.map((kv, i) => (
+                    <KvCard key={i} {...kv} />
+                  ))}
+                </div>
+              )}
+
+              {slide.block && renderBlock(slide.block.block, slide.block.anchorPrefix, slide.block.index)}
+
+              {slide.placeholder && (
+                <p className="p-4 text-center text-sm italic text-[var(--text-faint)]">
+                  {slide.placeholder.text}
+                </p>
+              )}
+
+              {slide.valuationChapter && (
+                <ValuationChapter
+                  valuations={slide.valuationChapter.valuations}
+                  ticker={ticker}
+                  chronicle={slide.valuationChapter.chronicle}
+                />
+              )}
+            </div>
+          );
+        }
+
+        // Regular slides
+        // Wrap toggle sections — Archive: compact, no full-page snap
+        if (slide.sectionTitle?.toggle) {
+          return (
+            <div key={slide.key} className="snap-start py-4 px-8 max-w-[1200px] transition-[margin] duration-300 relative" style={{
+              marginLeft: panelOpen ? "max(340px, calc((100vw - 1200px) / 2))" : "auto",
+              marginRight: "auto",
+            }}>
+              {slide.chapterTitle && <div id={slide.chapterTitle.id} className="absolute top-0" />}
+              {slide.sectionTitle && <div id={slide.sectionTitle.id} className="absolute top-0" />}
+
+              {slide.chapterTitle && (
+                <div className="mb-8 border-b-2 border-[var(--primary)] pb-2 text-xl font-bold tracking-wide">
+                  <span className="text-[var(--primary)]">{slide.chapterTitle.numeral}.</span> {slide.chapterTitle.title}
+                </div>
+              )}
+
+              <details data-anchor={slide.sectionTitle!.id} className="group mb-4">
+                <summary className="cursor-pointer list-none">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[var(--primary)] transition-transform group-open:rotate-90">▶</span>
+                    <SectionTitle>{slide.sectionTitle.toggleLabel || slide.sectionTitle.title}</SectionTitle>
+                  </div>
+                </summary>
+                <div className="mt-2 border-l-2 border-[var(--border)] pl-4">
+                  {slide.kvCards && (
+                    <div
+                      className="mb-4 grid gap-4 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]"
+                      data-anchor={slide.kvCards.anchor}
+                    >
+                      {slide.kvCards.cards!.map((kv, i) => (
+                        <KvCard key={i} {...kv} />
+                      ))}
                     </div>
-                  </summary>
-                  <div className="mt-2 border-l-2 border-[var(--border)] pl-4">
-                    {sectionInner}
-                  </div>
-                </details>
-              );
-            }
+                  )}
+                  {(slide.allBlocks || (slide.block ? [slide.block] : [])).map((b) =>
+                    <div key={b.anchorPrefix}>{renderBlock(b.block, b.anchorPrefix, b.index)}</div>
+                  )}
+                </div>
+              </details>
+            </div>
+          );
+        }
 
-            return (
-              <section key={sec.id} id={sec.id} className="mb-10">
-                {sectionInner}
-              </section>
-            );
-          })}
-        </div>
-      ))}
+        return (
+          <div key={slide.key} className="snap-start min-h-[100svh] flex flex-col justify-center px-8 max-w-[1200px] transition-[margin] duration-300 relative" style={{
+            marginLeft: panelOpen ? "max(340px, calc((100vw - 1200px) / 2))" : "auto",
+            marginRight: "auto",
+          }}>
+            {/* Invisible anchor at very top of slide for scroll tracking */}
+            {slide.chapterTitle && <div id={slide.chapterTitle.id} className="absolute top-0" />}
+            {slide.sectionTitle && <div id={slide.sectionTitle.id} className="absolute top-0" />}
 
-      <footer className="border-t border-[var(--border)] pt-4 text-xs text-[var(--text-faint)]">
-        Equity Research · K-House
-      </footer>
+            <div>
+              {slide.chapterTitle && (
+                <div className="mb-8 border-b-2 border-[var(--primary)] pb-2 text-xl font-bold tracking-wide">
+                  <span className="text-[var(--primary)]">{slide.chapterTitle.numeral}.</span> {slide.chapterTitle.title}
+                </div>
+              )}
+
+              {slide.sectionTitle && (
+                <div>
+                  <SectionTitle>{slide.sectionTitle.title}</SectionTitle>
+                </div>
+              )}
+
+              {slide.kvCards && (
+                <div
+                  className="mb-4 grid gap-4 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]"
+                  data-anchor={slide.kvCards.anchor}
+                >
+                  {slide.kvCards.cards!.map((kv, i) => (
+                    <KvCard key={i} {...kv} />
+                  ))}
+                </div>
+              )}
+
+              {slide.block && renderBlock(slide.block.block, slide.block.anchorPrefix, slide.block.index)}
+
+              {slide.placeholder && (
+                <p className="p-4 text-center text-sm italic text-[var(--text-faint)]">
+                  {slide.placeholder.text}
+                </p>
+              )}
+
+              {slide.valuationChapter && (
+                <ValuationChapter
+                  valuations={slide.valuationChapter.valuations}
+                  ticker={ticker}
+                  chronicle={slide.valuationChapter.chronicle}
+                />
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -1,5 +1,13 @@
 [
   {
+    "id": "SNDK-2026-W13",
+    "ticker": "SNDK",
+    "company": "Sandisk Corp",
+    "week": "2026-W13",
+    "date": "2026-03-23",
+    "market": "us"
+  },
+  {
     "id": "SNDK-2026-W10",
     "ticker": "SNDK",
     "company": "Sandisk Corp",
