@@ -2,7 +2,7 @@
   "ticker": "SNDK",
   "name": "Sandisk Corporation",
   "market": "US",
-  "updated": "2026-03-08",
+  "updated": "2026-03-25",
   "chapters": [
     {
       "id": "ch-fundamental",
@@ -306,22 +306,64 @@
               "type": "content-box",
               "title": "關鍵技術",
               "table": {
-                "headers": ["技術", "規格", "應用產品", "競品對標", "進度"],
+                "headers": [
+                  "技術",
+                  "規格",
+                  "應用產品",
+                  "競品對標",
+                  "進度"
+                ],
                 "alignRight": [],
                 "rows": [
-                  ["**BiCS8 NAND**", "[218 層](https://www.sandisk.com/company/newsroom/press-releases/2025/2025-09-29-kioxia-and-sandisk-announce-beginning-of-operation-of-fab2-at-kitakami-plant-japan-to-meet-the-market-demand-driven-by-ai#:~:text=218%2Dlayer%203D%20flash%20memory)[^1]\n[CBA](https://www.sandisk.com/company/newsroom/press-releases/2025/2025-09-29-kioxia-and-sandisk-announce-beginning-of-operation-of-fab2-at-kitakami-plant-japan-to-meet-the-market-demand-driven-by-ai#:~:text=CBA%20%28CMOS%20directly%20Bonded%20to%20Array%29)[^2] + OPS[^3]\n[1Tb TLC / 2Tb QLC](https://documents.sandisk.com/content/dam/asset-library/en_us/assets/public/sandisk/product/internal-drives/sn670-nvme-ssd/data-sheet-sandisk-sn670-ssd.pdf#page=1)[^4]\n[3.6 Gb/s](https://www.kioxia.com.cn/zh-cn/about/news/2024/20240703-1.html#:~:text=3.6Gbps)[^5]", "TLC Enterprise SSD\nStargate QLC eSSD\nOEM 嵌入式\n消費級全線", "Samsung V9: ~280 層\nMicron G9: 276 層\nSK Hynix: 321 層", "量產中\nQ1 FY2026 佔 bit 出貨 15%\nFY2026 年底達 majority"],
-                  ["**HBF**[^6]", "[1.6 TB/s](/sources/SNDK/Sandisk-HBF-Fact-Sheet_ChineseTraditional.pdf#page=3)[^7] / [512 GB](/sources/SNDK/Sandisk-HBF-Fact-Sheet_ChineseTraditional.pdf#page=3)[^8]\n[16-die 堆疊，TSV](/sources/SNDK/Sandisk-HBF-Fact-Sheet_ChineseTraditional.pdf#page=3)", "尚無", "全新品類，尚無直接競品\nOCP 標準化後其他廠商可能跟進", "OCP 標準化中（2026-02）\n量產預估 ~2030"]
+                  [
+                    "**BiCS8 NAND**",
+                    "[218 層](https://www.sandisk.com/company/newsroom/press-releases/2025/2025-09-29-kioxia-and-sandisk-announce-beginning-of-operation-of-fab2-at-kitakami-plant-japan-to-meet-the-market-demand-driven-by-ai#:~:text=218%2Dlayer%203D%20flash%20memory)[^1]\n[CBA](https://www.sandisk.com/company/newsroom/press-releases/2025/2025-09-29-kioxia-and-sandisk-announce-beginning-of-operation-of-fab2-at-kitakami-plant-japan-to-meet-the-market-demand-driven-by-ai#:~:text=CBA%20%28CMOS%20directly%20Bonded%20to%20Array%29)[^2] + OPS[^3]\n[1Tb TLC / 2Tb QLC](https://documents.sandisk.com/content/dam/asset-library/en_us/assets/public/sandisk/product/internal-drives/sn670-nvme-ssd/data-sheet-sandisk-sn670-ssd.pdf#page=1)[^4]\n[3.6 Gb/s](https://www.kioxia.com.cn/zh-cn/about/news/2024/20240703-1.html#:~:text=3.6Gbps)[^5]",
+                    "TLC Enterprise SSD\nStargate QLC eSSD\nOEM 嵌入式\n消費級全線",
+                    "Samsung V9: ~280 層\nMicron G9: 276 層\nSK Hynix: 321 層",
+                    "量產中\nQ1 FY2026 佔 bit 出貨 15%\nFY2026 年底達 majority"
+                  ],
+                  [
+                    "**HBF**[^6]",
+                    "[1.6 TB/s](/sources/SNDK/Sandisk-HBF-Fact-Sheet_ChineseTraditional.pdf#page=3)[^7] / [512 GB](/sources/SNDK/Sandisk-HBF-Fact-Sheet_ChineseTraditional.pdf#page=3)[^8]\n[16-die 堆疊，TSV](/sources/SNDK/Sandisk-HBF-Fact-Sheet_ChineseTraditional.pdf#page=3)",
+                    "尚無",
+                    "全新品類，尚無直接競品\nOCP 標準化後其他廠商可能跟進",
+                    "OCP 標準化中（2026-02）\n量產預估 ~2030"
+                  ]
                 ]
               },
               "footnotes": [
-                {"id": "1", "text": "3D NAND 堆疊層數，層數越多 = 同面積容量越大"},
-                {"id": "2", "text": "CMOS Bonded Array：邏輯電路與記憶體陣列分開做在兩片晶圓上再鍵合，各自製程優化"},
-                {"id": "3", "text": "On-Pitch Staircase：階梯結構做在記憶體陣列間距內，不需額外面積，提高 bit density"},
-                {"id": "4", "text": "單 die 容量。TLC 每 cell 存 3 bit → 1Tb（128GB）；QLC 每 cell 存 4 bit → 2Tb（256GB）"},
-                {"id": "5", "text": "NAND 介面速度（Toggle DDR），die 與 controller 之間的傳輸速率"},
-                {"id": "6", "text": "SK Hynix 與 Sandisk 聯合制定的規格標準（2026-02），已提交 OCP 推動產業標準化"},
-                {"id": "7", "text": "讀取頻寬，比 PCIe 5.0 SSD 快約 50 倍"},
-                {"id": "8", "text": "單 stack 容量，比同面積 HBM 大 8–16 倍"}
+                {
+                  "id": "1",
+                  "text": "3D NAND 堆疊層數，層數越多 = 同面積容量越大"
+                },
+                {
+                  "id": "2",
+                  "text": "CMOS Bonded Array：邏輯電路與記憶體陣列分開做在兩片晶圓上再鍵合，各自製程優化"
+                },
+                {
+                  "id": "3",
+                  "text": "On-Pitch Staircase：階梯結構做在記憶體陣列間距內，不需額外面積，提高 bit density"
+                },
+                {
+                  "id": "4",
+                  "text": "單 die 容量。TLC 每 cell 存 3 bit → 1Tb（128GB）；QLC 每 cell 存 4 bit → 2Tb（256GB）"
+                },
+                {
+                  "id": "5",
+                  "text": "NAND 介面速度（Toggle DDR），die 與 controller 之間的傳輸速率"
+                },
+                {
+                  "id": "6",
+                  "text": "SK Hynix 與 Sandisk 聯合制定的規格標準（2026-02），已提交 OCP 推動產業標準化"
+                },
+                {
+                  "id": "7",
+                  "text": "讀取頻寬，比 PCIe 5.0 SSD 快約 50 倍"
+                },
+                {
+                  "id": "8",
+                  "text": "單 stack 容量，比同面積 HBM 大 8–16 倍"
+                }
               ],
               "sources": [
                 {
@@ -356,14 +398,50 @@
                 "DRAM 和 NAND 是兩種底層儲存技術，分別搭配不同的介面標準決定傳輸方式與連接位置。"
               ],
               "table": {
-                "headers": ["儲存技術", "", "介面標準", "連接方式", "頻寬"],
+                "headers": [
+                  "儲存技術",
+                  "",
+                  "介面標準",
+                  "連接方式",
+                  "頻寬"
+                ],
                 "alignRight": [],
                 "rows": [
-                  ["DRAM", "→", "**HBM3e**", "封裝在 GPU 旁，1024-bit 超寬匯流排", "~3.35 TB/s"],
-                  ["DRAM", "→", "**DDR5**", "插在主機板記憶體插槽，64-bit 匯流排", "~400 GB/s"],
-                  ["DRAM", "→", "**CXL**", "跑在 PCIe 線路上，支援跨機共享記憶體池", "~64 GB/s"],
-                  ["NAND", "→", "**NVMe（PCIe Gen5）**", "插在主機板 SSD 插槽，GPU 可直讀（GPUDirect）", "~7 GB/s / drive"],
-                  ["NAND", "→", "**SATA**", "舊式介面，消費級 / 傳統企業用", "~0.6 GB/s"]
+                  [
+                    "DRAM",
+                    "→",
+                    "**HBM3e**",
+                    "封裝在 GPU 旁，1024-bit 超寬匯流排",
+                    "~3.35 TB/s"
+                  ],
+                  [
+                    "DRAM",
+                    "→",
+                    "**DDR5**",
+                    "插在主機板記憶體插槽，64-bit 匯流排",
+                    "~400 GB/s"
+                  ],
+                  [
+                    "DRAM",
+                    "→",
+                    "**CXL**",
+                    "跑在 PCIe 線路上，支援跨機共享記憶體池",
+                    "~64 GB/s"
+                  ],
+                  [
+                    "NAND",
+                    "→",
+                    "**NVMe（PCIe Gen5）**",
+                    "插在主機板 SSD 插槽，GPU 可直讀（GPUDirect）",
+                    "~7 GB/s / drive"
+                  ],
+                  [
+                    "NAND",
+                    "→",
+                    "**SATA**",
+                    "舊式介面，消費級 / 傳統企業用",
+                    "~0.6 GB/s"
+                  ]
                 ]
               },
               "id": "blk-storage-interface"
@@ -394,11 +472,65 @@
           "blocks": [
             {
               "type": "content-box",
-              "title": "4.1 總體產業成長趨勢",
+              "title": "全球 NAND Flash 市場規模",
+              "id": "blk-nand-market-size",
+              "chart": {
+                "type": "bar",
+                "labels": ["2024", "2025", "2026E", "2028E", "2030E", "2032E", "2034E"],
+                "datasets": [
+                  {
+                    "label": "全球 NAND Flash 市場規模（USD B）",
+                    "data": [70, 76, 78, 88, 100, 110, 118]
+                  }
+                ],
+                "yLabel": "USD Billion"
+              },
+              "bullets": {
+                "items": [
+                  "3D NAND 佔比 86.85%（2025），TLC 佔 63.58%，QLC 加速成長中",
+                  "亞太地區佔全球 55.4%（韓國、中國為製造重鎮）",
+                  "Enterprise SSD 以 7.4% CAGR 成長至 2031，為最快增長的下游應用"
+                ]
+              },
               "paragraphs": [
-                "（待補充）"
+                "驅動力：AI 資料中心儲存需求（訓練 + 推論）、PC/Console 從 HDD 轉 SSD、5G/IoT 終端擴張。Western Digital 估計到 2029 年，僅 5G 終端的累計 NAND 需求就達 19,000 PB。",
+                "供給側：產能擴張需 2–4 年建廠週期，2025–2026 供不應求推升價格。Goldman Sachs 預估記憶體短缺可能持續至 2028。"
               ],
-              "id": "blk-industry-growth-trend"
+              "paragraphsToggle": true,
+              "paragraphsToggleLabel": "趨勢觀察",
+              "sources": [
+                {"label": "GM Insights — NAND Flash Market", "href": "https://www.gminsights.com/industry-analysis/nand-flash-market"},
+                {"label": "Coherent Market Insights — NAND Flash 2026-2033", "href": "https://www.coherentmarketinsights.com/market-insight/nand-flash-memory-market-5061"},
+                {"label": "Research and Markets — NAND Flash Memory Market to 2032", "href": "https://www.researchandmarkets.com/report/nand-flash-memory"},
+                {"label": "Market Research Future — NAND Flash 2025-2035", "href": "https://www.marketresearchfuture.com/reports/nand-flash-memory-market-42853"}
+              ]
+            },
+            {
+              "type": "content-box",
+              "title": "SNDK 營收佔 NAND 市場比重",
+              "id": "blk-sndk-market-share-in-tam",
+              "table": {
+                "headers": ["指標", "數值", "來源"],
+                "rows": [
+                  ["SNDK FY2026 Q2 營收", "$3.03B（季）", "Earnings Release"],
+                  ["SNDK FY2026 Q2 YoY", "+61%", "Earnings Release"],
+                  ["SNDK Q3 Guidance 營收", "$4.4–4.8B", "Management Guidance"],
+                  ["SNDK 年化營收（Q3 run rate）", "~$17–19B", "推估"],
+                  ["全球 NAND 市場 2026E", "~$78B", "Coherent MI"],
+                  ["SNDK 佔全球 NAND", "~22–24%", "推估"]
+                ]
+              },
+              "bullets": {
+                "items": [
+                  "SNDK 在過去 12 個月取得 2pp 的 NAND 市場份額增長（截至 2025 年 6 月）",
+                  "主要競爭者：Samsung（龍頭）、SK Hynix/Solidigm、Kioxia、Micron",
+                  "SNDK 優勢在 BiCS8 技術轉換帶來的毛利率提升（Q2 gross margin 改善中，Q3 guidance 65–67%）"
+                ]
+              },
+              "sources": [
+                {"label": "ainvest — SanDisk 2026 AI Storage Supercycle", "href": "https://www.ainvest.com/news/sandisk-2026-assessing-ai-storage-supercycle-durability-2601/"},
+                {"label": "Zacks — Sandisk Surges on AI Storage Demand", "href": "https://www.zacks.com/stock/news/2883324/sandisk-surges-on-ai-storage-demand-is-the-rally-already-priced-in"}
+              ]
             }
           ]
         },
@@ -494,7 +626,128 @@
             },
             {
               "type": "content-box",
-              "title": "5.2 次世代 NAND Roadmap",
+              "title": "5.2 NAND / DRAM 季度營收排名（TrendForce）",
+              "footnote": "資料 Vintage：2026-03-25。NAND = 4Q25（2026/03/03 發布），DRAM = 3Q25（2025/11/26 發布）。YMTC 不在 Top 5 內。",
+              "table": {
+                "headers": [
+                  "#",
+                  "廠商",
+                  "NAND 4Q25",
+                  "Share",
+                  "DRAM 3Q25",
+                  "Share"
+                ],
+                "alignRight": [
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "rows": [
+                  [
+                    "1",
+                    "**Samsung**",
+                    "$6.60B",
+                    "~28%",
+                    "$13.50B",
+                    "~33%"
+                  ],
+                  [
+                    "2",
+                    "**SK Group** (Hynix+Solidigm)",
+                    "$5.21B",
+                    "~22%",
+                    "$13.75B ①",
+                    "~33%"
+                  ],
+                  [
+                    "3",
+                    "**Kioxia**",
+                    "$3.31B",
+                    "~16%",
+                    "—",
+                    "—"
+                  ],
+                  [
+                    "4",
+                    "**Micron**",
+                    "$3.03B",
+                    "~14%",
+                    "$10.65B",
+                    "~26%"
+                  ],
+                  [
+                    "5",
+                    "**Sandisk**",
+                    "$3.03B",
+                    "~14%",
+                    "—",
+                    "—"
+                  ],
+                  [
+                    "",
+                    "**Top 5 合計**",
+                    "**$21.17B**",
+                    "",
+                    "",
+                    ""
+                  ]
+                ]
+              },
+              "paragraphs": [
+                "① SK Hynix 自 1Q25 起超越 Samsung 成為 DRAM 營收第一，主要靠 HBM 驅動",
+                "• **Kioxia + Sandisk JV 合計 ~30%**，若視為一體是最大 NAND 陣營",
+                "• **Micron NAND 與 Sandisk 幾乎一樣大**（都是 ~$3.03B/季），Micron 正在搶 Sandisk 的 NAND 份額",
+                "• **Micron DRAM 成長最快**（3Q25 QoQ +53.2%），市佔從 22% 爬到 25.7%"
+              ],
+              "sources": [
+                {
+                  "label": "TrendForce — NAND 4Q25 Revenue Ranking（2026/03/03）",
+                  "href": "https://www.trendforce.com/presscenter/news/20260303-12943.html"
+                },
+                {
+                  "label": "TrendForce — DRAM 3Q25 Revenue Ranking（2025/11/26）",
+                  "href": "https://www.trendforce.com/presscenter/news/20251126-12802.html"
+                }
+              ],
+              "id": "blk-trendforce-ranking",
+              "paragraphsToggle": true,
+              "image": {
+                "src": "/images/equity-research/SNDK/trendforce-ranking-4q25.png",
+                "alt": "TrendForce Memory Revenue Ranking — NAND 4Q25 / DRAM 3Q25"
+              }
+            },
+            {
+              "type": "content-box",
+              "title": "5.2b Market Share Trend（TrendForce）",
+              "image": {
+                "src": "/images/equity-research/SNDK/trendforce-share-trend.png",
+                "alt": "TrendForce Market Share Trend — NAND & DRAM"
+              },
+              "footnote": "NAND: 1Q25–4Q25。DRAM: 1Q25–3Q25（4Q25 尚未發布）。SK Group = SK Hynix + Solidigm。",
+              "sources": [
+                {
+                  "label": "TrendForce — NAND 4Q25（2026/03/03）",
+                  "href": "https://www.trendforce.com/presscenter/news/20260303-12943.html"
+                },
+                {
+                  "label": "TrendForce — NAND 1Q25（2025/05/29）",
+                  "href": "https://www.trendforce.com/presscenter/news/20250529-12600.html"
+                },
+                {
+                  "label": "TrendForce — DRAM 3Q25（2025/11/26）",
+                  "href": "https://www.trendforce.com/presscenter/news/20251126-12802.html"
+                },
+                {
+                  "label": "TrendForce — DRAM 1Q25（2025/06/03）",
+                  "href": "https://www.trendforce.com/presscenter/news/20250603-12603.html"
+                }
+              ],
+              "id": "blk-trendforce-share-trend"
+            },
+            {
+              "type": "content-box",
+              "title": "5.3 次世代 NAND Roadmap",
               "table": {
                 "headers": [
                   "廠商",
@@ -570,11 +823,81 @@
                   "href": "https://www.notebookcheck.net/YMTC-builds-homegrown-NAND-production-line-to-sidestep-U-S-sanctions.1064510.0.html"
                 }
               ],
-              "id": "blk-nand-roadmap"
+              "id": "blk-nand-roadmap",
+              "paragraphsToggle": true
             },
             {
               "type": "content-box",
-              "title": "5.3 Sandisk 競爭定位",
+              "title": "5.4 NAND / DRAM Revenue 比較（FY2025）",
+              "image": {
+                "src": "/images/equity-research/SNDK/nand-dram-revenue-fy2025.png",
+                "alt": "DRAM / NAND Revenue — FY2025（SK Hynix · Micron · Sandisk）"
+              },
+              "footnote": "資料 Vintage：2026-03-25。SK Hynix 以 ₩1,380/USD 換算。Sandisk = 100% NAND（無 DRAM）。HBM 包含在 DRAM，三家均不單獨揭露。不含 Samsung（僅揭露 Memory 總數）。",
+              "table": {
+                "headers": [
+                  "公司",
+                  "DRAM",
+                  "NAND",
+                  "Total",
+                  "NAND YoY"
+                ],
+                "alignRight": [
+                  1,
+                  2,
+                  3
+                ],
+                "rows": [
+                  [
+                    "**SK Hynix**（含 Solidigm）",
+                    "$54.3B",
+                    "$15.0B",
+                    "$70.4B",
+                    "+7%"
+                  ],
+                  [
+                    "**Micron**",
+                    "$28.6B",
+                    "$8.5B",
+                    "$37.4B",
+                    "+18%"
+                  ],
+                  [
+                    "**Sandisk**",
+                    "—",
+                    "$7.4B",
+                    "$7.4B",
+                    "+10%"
+                  ]
+                ]
+              },
+              "paragraphs": [
+                "**關鍵觀察：**",
+                "• **Micron NAND 正在追上 Sandisk：**FY2023 時 Micron NAND 只有 Sandisk 的 0.69x，FY2025 已達 1.16x，差距持續擴大中",
+                "• **SK Hynix NAND 體量最大**（含 Solidigm），但成長最慢（+7% vs Micron +18%）",
+                "• **DRAM 是利潤引擎：**SK Hynix 和 Micron 的 DRAM 均 YoY +60%+，遠超 NAND 成長，主要受 HBM / DDR5 AI 需求驅動",
+                "• **Sandisk 的純 NAND 定位**意味著完全暴露在 NAND 週期中，沒有 DRAM 的利潤緩衝"
+              ],
+              "sources": [
+                {
+                  "label": "Micron 10-K FY2025 — Revenue by Technology",
+                  "href": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000723125&type=10-K"
+                },
+                {
+                  "label": "SK Hynix DART Annual Report FY2025 — Segment Information",
+                  "href": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260317000794"
+                },
+                {
+                  "label": "Sandisk 10-K FY2025",
+                  "href": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0002023554&type=10-K"
+                }
+              ],
+              "id": "blk-nand-revenue-comparison",
+              "paragraphsToggle": true
+            },
+            {
+              "type": "content-box",
+              "title": "5.5 Sandisk 競爭定位",
               "paragraphs": [
                 "**Sandisk 差異化優勢：**",
                 "• **BiCS8 CBA 架構：**CMOS 與 cell array 分離製造，最佳化各自製程條件，實現 18.3 Gb/mm² 密度（218 層級最高），2Tb QLC single die",
@@ -771,11 +1094,31 @@
                 "週期股在盈利拐點 TTM P/E 必然偏高，應以 FY2026E EPS 估值"
               ],
               "detailsTable": {
-                "headers": ["情境", "FY2026E EPS", "現價 $753.69 隱含 P/E", "解讀"],
+                "headers": [
+                  "情境",
+                  "FY2026E EPS",
+                  "現價 $753.69 隱含 P/E",
+                  "解讀"
+                ],
                 "rows": [
-                  ["Bear", "$32.71", "23.0x", "若只賺 Bear 的錢，現價偏貴"],
-                  ["Base", "$36.85", "20.5x", "合理偏樂觀"],
-                  ["Bull", "$40.05", "18.8x", "若達成 Bull，現價划算"]
+                  [
+                    "Bear",
+                    "$32.71",
+                    "23.0x",
+                    "若只賺 Bear 的錢，現價偏貴"
+                  ],
+                  [
+                    "Base",
+                    "$36.85",
+                    "20.5x",
+                    "合理偏樂觀"
+                  ],
+                  [
+                    "Bull",
+                    "$40.05",
+                    "18.8x",
+                    "若達成 Bull，現價划算"
+                  ]
                 ]
               },
               "peRatios": [
@@ -898,11 +1241,34 @@
               "type": "content-box",
               "title": "Cloud Segment 季度營收趨勢",
               "table": {
-                "headers": ["", "Q1 FY2025", "Q2 FY2025", "Q3 FY2025", "Q4 FY2025"],
-                "alignRight": [1, 2, 3, 4],
+                "headers": [
+                  "",
+                  "Q1 FY2025",
+                  "Q2 FY2025",
+                  "Q3 FY2025",
+                  "Q4 FY2025"
+                ],
+                "alignRight": [
+                  1,
+                  2,
+                  3,
+                  4
+                ],
                 "rows": [
-                  ["Cloud 營收", "$300M", "$250M", "$197M", "~$213M"],
-                  ["QoQ 變化", "—", "−17%", "−21%", "+8%"]
+                  [
+                    "Cloud 營收",
+                    "$300M",
+                    "$250M",
+                    "$197M",
+                    "~$213M"
+                  ],
+                  [
+                    "QoQ 變化",
+                    "—",
+                    "−17%",
+                    "−21%",
+                    "+8%"
+                  ]
                 ]
               },
               "paragraphs": [
@@ -993,14 +1359,69 @@
               "type": "content-box",
               "title": "流動比趨勢",
               "table": {
-                "headers": ["", "Q1 FY2025", "Q2 FY2025", "Q3 FY2025", "Q4 FY2025", "Q1 FY2026", "Q2 FY2026"],
-                "alignRight": [1, 2, 3, 4, 5, 6],
+                "headers": [
+                  "",
+                  "Q1 FY2025",
+                  "Q2 FY2025",
+                  "Q3 FY2025",
+                  "Q4 FY2025",
+                  "Q1 FY2026",
+                  "Q2 FY2026"
+                ],
+                "alignRight": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6
+                ],
                 "rows": [
-                  ["Cash", "$322M", "$812M", "$1,560M", "$1,547M", "$1,514M", "$1,539M"],
-                  ["Total Current Assets", "$4,388M", "$4,456M", "$5,090M", "$5,086M", "$4,984M", "$5,150M"],
-                  ["Total Current Liabilities", "$1,472M", "$1,873M", "$1,375M", "$1,427M", "$1,516M", "$1,654M"],
-                  ["Long-term Debt", "$0", "—", "$1,927M", "$1,829M", "$1,331M", "$583M"],
-                  ["**流動比**", "2.98", "2.38", "**3.70**", "3.56", "3.29", "3.11"]
+                  [
+                    "Cash",
+                    "$322M",
+                    "$812M",
+                    "$1,560M",
+                    "$1,547M",
+                    "$1,514M",
+                    "$1,539M"
+                  ],
+                  [
+                    "Total Current Assets",
+                    "$4,388M",
+                    "$4,456M",
+                    "$5,090M",
+                    "$5,086M",
+                    "$4,984M",
+                    "$5,150M"
+                  ],
+                  [
+                    "Total Current Liabilities",
+                    "$1,472M",
+                    "$1,873M",
+                    "$1,375M",
+                    "$1,427M",
+                    "$1,516M",
+                    "$1,654M"
+                  ],
+                  [
+                    "Long-term Debt",
+                    "$0",
+                    "—",
+                    "$1,927M",
+                    "$1,829M",
+                    "$1,331M",
+                    "$583M"
+                  ],
+                  [
+                    "**流動比**",
+                    "2.98",
+                    "2.38",
+                    "**3.70**",
+                    "3.56",
+                    "3.29",
+                    "3.11"
+                  ]
                 ]
               }
             },
@@ -1041,15 +1462,45 @@
               "type": "content-box",
               "title": "提前還款進度",
               "table": {
-                "headers": ["時間", "還款金額", "類型"],
-                "alignRight": [1],
+                "headers": [
+                  "時間",
+                  "還款金額",
+                  "類型"
+                ],
+                "alignRight": [
+                  1
+                ],
                 "rows": [
-                  ["FY2025 年內", "$100M", "排定 + 自願提前還款"],
-                  ["2025/8/4（FY2026 Q1 後）", "$100M", "自願提前還款"],
-                  ["Q1 FY2026", "$500M", "提前還款"],
-                  ["Q2 FY2026", "$750M", "提前還款"],
-                  ["**累計已還**", "**$1,450M**", ""],
-                  ["剩餘債務", "$583M", "預計 1-2 季還完"]
+                  [
+                    "FY2025 年內",
+                    "$100M",
+                    "排定 + 自願提前還款"
+                  ],
+                  [
+                    "2025/8/4（FY2026 Q1 後）",
+                    "$100M",
+                    "自願提前還款"
+                  ],
+                  [
+                    "Q1 FY2026",
+                    "$500M",
+                    "提前還款"
+                  ],
+                  [
+                    "Q2 FY2026",
+                    "$750M",
+                    "提前還款"
+                  ],
+                  [
+                    "**累計已還**",
+                    "**$1,450M**",
+                    ""
+                  ],
+                  [
+                    "剩餘債務",
+                    "$583M",
+                    "預計 1-2 季還完"
+                  ]
                 ]
               },
               "paragraphs": [
@@ -1063,6 +1514,229 @@
                 {
                   "label": "10-Q Q1 & Q2 FY2026, Cash Flow Statement",
                   "keyword": "repayments of debt"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sec-hbf-vs-hbm",
+          "title": "HBF vs HBM：Interposer 面積競爭與市場影響分析",
+          "toggle": true,
+          "toggleLabel": "HBF vs HBM：Interposer 面積競爭與市場影響分析",
+          "blocks": [
+            {
+              "id": "blk-hbf-interposer-utilization",
+              "type": "content-box",
+              "title": "GPU Interposer 面積利用率現狀",
+              "table": {
+                "headers": [
+                  "GPU",
+                  "Interposer 技術",
+                  "面積",
+                  "HBM 堆疊數",
+                  "Die+HBM 佔比",
+                  "剩餘面積"
+                ],
+                "alignRight": [
+                  2,
+                  4,
+                  5
+                ],
+                "rows": [
+                  [
+                    "H100",
+                    "CoWoS-S (3.3x reticle)",
+                    "~2,831 mm²",
+                    "5x HBM3",
+                    "~55-60%",
+                    "~1,100-1,300 mm²"
+                  ],
+                  [
+                    "B200",
+                    "CoWoS-L (5.5x reticle)",
+                    "~4,719 mm²",
+                    "8x HBM3E (雙die各4)",
+                    "~50-55%",
+                    "~2,000-2,400 mm²"
+                  ]
+                ]
+              },
+              "paragraphs": [
+                "**Interposer 面積目前沒有被 HBM 覆蓋滿**，但剩餘的 40-45% 面積並非真正空閒——被訊號布線、供電網路（1,200W 級電流分配）、散熱通孔（TSV 密度 1-5 萬/cm²）、機械支撐等基礎設施佔用。",
+                "**關鍵瓶頸是 Shoreline（GPU die 周長），不是面積。** HBM 必須緊貼 GPU die 邊緣才能維持低延遲高頻寬，能放多少顆 HBM 取決於 die 的周長。B200 採用雙 die 設計等於周長翻倍，才從 H100 的 5 顆 HBM 擴展到 8 顆。",
+                "TSMC CoWoS-L 路線圖持續擴展：2027 年可達 8-9x reticle size（~6,000-7,700 mm²），可容納 12 顆 HBM4 堆疊。"
+              ],
+              "sources": [
+                {
+                  "label": "SemiAnalysis — GB200 Hardware Architecture",
+                  "href": "https://newsletter.semianalysis.com/p/gb200-hardware-architecture-and-component",
+                  "keyword": "GB200 interposer CoWoS-L"
+                },
+                {
+                  "label": "Tom's Hardware — CoWoS 9x Reticle Roadmap",
+                  "href": "https://www.tomshardware.com/tech-industry/tsmc-super-carrier-cowos-interposer-gets-bigger-enabling-massive-ai-chips-to-reach-9-reticle-sizes-with-12-hbm4-stacks",
+                  "keyword": "CoWoS 9x reticle 12 HBM4"
+                },
+                {
+                  "label": "SemiAnalysis — Scaling the Memory Wall",
+                  "href": "https://newsletter.semianalysis.com/p/scaling-the-memory-wall-the-rise-and-roadmap-of-hbm",
+                  "keyword": "HBM shoreline constraint"
+                }
+              ]
+            },
+            {
+              "id": "blk-hbf-not-replace-hbm",
+              "type": "content-box",
+              "title": "HBF 不會取代 HBM：技術差異與互補關係",
+              "table": {
+                "headers": [
+                  "",
+                  "HBM",
+                  "HBF"
+                ],
+                "alignRight": [],
+                "rows": [
+                  [
+                    "底層技術",
+                    "DRAM（揮發性）",
+                    "NAND Flash（非揮發性）"
+                  ],
+                  [
+                    "頻寬",
+                    "~1.2-3.3 TB/s",
+                    "~1.6 TB/s"
+                  ],
+                  [
+                    "延遲",
+                    "~10-100 ns",
+                    "~10 μs（差 100-1000 倍）"
+                  ],
+                  [
+                    "單堆容量",
+                    "24-36 GB",
+                    "512 GB（8-21 倍）"
+                  ],
+                  [
+                    "寫入耐久",
+                    "無限",
+                    "10K-100K P/E cycles"
+                  ],
+                  [
+                    "適用場景",
+                    "訓練 + 推論",
+                    "僅推論（讀多寫少）"
+                  ]
+                ]
+              },
+              "paragraphs": [
+                "**HBF 無法取代 HBM 的三個硬性限制：**",
+                "1. **寫入壽命**：NAND Flash 有 P/E cycle 限制，訓練（反覆更新參數）會快速耗盡，僅適用推論。",
+                "2. **延遲差距**：HBF 延遲是 HBM 的 100-1000 倍。LLM 推論是 bandwidth-bound 可靠 prefetch 隱藏延遲，但非所有工作負載適用（如強化學習等不規則存取模式）。",
+                "3. **功能本質不同**：HBM 是即時運算的「工作記憶體」，HBF 是大容量的「模型權重/KV cache 倉庫」。"
+              ],
+              "sources": [
+                {
+                  "label": "SK Hynix H³ Architecture — Blocks & Files",
+                  "href": "https://www.blocksandfiles.com/flash/2026/02/16/sk-hynix-proposes-hbm-and-hbf-hybrid-for-llm-inference/4091326",
+                  "keyword": "H³ hybrid HBM HBF inference"
+                },
+                {
+                  "label": "Sandisk Blog — Scaling Beyond the Wall",
+                  "href": "https://www.sandisk.com/company/newsroom/blogs/2025/scaling-beyond-the-wall-inside-sandisks-high-bandwidth-flash-for-ai",
+                  "keyword": "HBF complement not replace HBM"
+                }
+              ]
+            },
+            {
+              "id": "blk-h3-simulation",
+              "type": "content-box",
+              "title": "SK Hynix H³ 混合架構模擬結果",
+              "paragraphs": [
+                "SK Hynix 提出 H³（Hybrid HBM-HBF）架構：在同一 interposer 上同時放 HBM 和 HBF，透過 HBM base die 內的 address router + latency-hiding buffer 實現統一記憶體定址。",
+                "**模擬配置：** B200 + 8x HBM3E + 8x HBF",
+                "**結果：**"
+              ],
+              "table": {
+                "headers": [
+                  "指標",
+                  "HBM-only",
+                  "HBM + HBF",
+                  "倍數"
+                ],
+                "alignRight": [
+                  3
+                ],
+                "rows": [
+                  [
+                    "Throughput (1M token KV cache)",
+                    "baseline",
+                    "提升",
+                    "1.25x"
+                  ],
+                  [
+                    "Throughput (10M token KV cache)",
+                    "baseline",
+                    "提升",
+                    "6.14x"
+                  ],
+                  [
+                    "同時處理用戶數",
+                    "baseline",
+                    "提升",
+                    "18.8x"
+                  ],
+                  [
+                    "能效 (throughput/watt)",
+                    "baseline",
+                    "提升",
+                    "2.69x"
+                  ],
+                  [
+                    "所需 GPU 數量 (等效負載)",
+                    "32 GPUs",
+                    "2 GPUs",
+                    "16x 節省"
+                  ]
+                ]
+              },
+              "sources": [
+                {
+                  "label": "SK Hynix H³ Architecture — Blocks & Files",
+                  "href": "https://www.blocksandfiles.com/flash/2026/02/16/sk-hynix-proposes-hbm-and-hbf-hybrid-for-llm-inference/4091326",
+                  "keyword": "H³ simulation 18.8x queries"
+                },
+                {
+                  "label": "SemiWiki — SK Hynix H³ Discussion",
+                  "href": "https://semiwiki.com/forum/threads/sk-hynix-proposes-hbm-and-hbf-hybrid-for-llm-inference.24754/",
+                  "keyword": "H³ latency-hiding buffer prefetch"
+                }
+              ]
+            },
+            {
+              "id": "blk-hbf-market-outlook",
+              "type": "content-box",
+              "title": "市場展望：擴大 TAM 而非蠶食 HBM",
+              "paragraphs": [
+                "**短中期（2027-2032）：** HBF 不壓縮 HBM 需求。HBM 市場 2026 年預估 $54.6B（YoY +58%），需求仍遠超供給。HBF 填補的是 HBM 做不到的大容量推論場景——這些需求目前根本沒有被滿足。",
+                "**長期（2030+）：** HBM 之父金鍾浩教授預測 HBF 市場在 ~2038 年超過 HBM。但這是「推論為主時代容量需求 > 頻寬需求」的結構轉移，不是 HBM 被取代。類比：SSD 沒有殺死 DRAM，兩者在不同層級共存。",
+                "**對 SNDK 的意義：** HBF 是全新營收支柱。第一代樣品 2026 H2 送客戶，2027 初首批裝置樣品，可能搭載於 NVIDIA Rubin 平台（2027-2028）。Samsung 已簽 MOU 加入標準化。"
+              ],
+              "sources": [
+                {
+                  "label": "TrendForce — HBF in NVIDIA GPUs 2027-28",
+                  "href": "https://www.trendforce.com/news/2026/01/16/news-expert-says-hbf-may-be-deployed-in-nvidia-gpus-by-2027-28-market-could-surpass-hbm-by-2038/",
+                  "keyword": "HBF surpass HBM 2038"
+                },
+                {
+                  "label": "SK Hynix — 2026 HBM Market Outlook",
+                  "href": "https://news.skhynix.com/2026-market-outlook-focus-on-the-hbm-led-memory-supercycle/",
+                  "keyword": "HBM $54.6B 2026 supercycle"
+                },
+                {
+                  "label": "SK Hynix & Sandisk — OCP Standardization",
+                  "href": "https://www.sandisk.com/company/newsroom/press-releases/2026/2026-02-25-sandisk-and-sk-hynix-begin-global-standardization-of-next-generation-memory-solution-high-bandwidth-flash-hbf",
+                  "keyword": "HBF OCP standardization"
                 }
               ]
             }

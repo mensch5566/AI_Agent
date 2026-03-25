@@ -9,6 +9,7 @@ import TodoPanel from "@/app/components/TodoPanel";
 const RatioChart = dynamic(() => import("@/app/components/financials/RatioChart"), { ssr: false });
 const FinancialTable = dynamic(() => import("@/app/components/financials/FinancialTable"), { ssr: false });
 const SegmentTable = dynamic(() => import("@/app/components/financials/SegmentTable"), { ssr: false });
+const StaticChart = dynamic(() => import("./static-chart"), { ssr: false });
 
 /* ================================================================
    Types — matches the JSON schema
@@ -34,12 +35,22 @@ interface BulletList {
   items: string[];
 }
 
+interface ChartData {
+  type: "bar" | "area";
+  labels: string[];
+  datasets: { label: string; data: (number | null)[]; color?: string }[];
+  yLabel?: string;
+}
+
 interface ContentBoxBlock {
   type: "content-box";
   id?: string;
   title?: string;
   paragraphs?: string[];
+  paragraphsToggle?: boolean;
+  paragraphsToggleLabel?: string;
   table?: TableData;
+  chart?: ChartData;
   image?: ImageData;
   bullets?: BulletList;
   footnote?: string;
@@ -439,6 +450,16 @@ function BlockRenderer({
           </div>
         )}
 
+        {/* Chart */}
+        {block.chart && (
+          <StaticChart
+            type={block.chart.type}
+            labels={block.chart.labels}
+            datasets={block.chart.datasets}
+            yLabel={block.chart.yLabel}
+          />
+        )}
+
         {/* Bullets */}
         {block.bullets && (
           <ul className="mb-3 list-disc space-y-1 pl-5 text-[0.95rem]" data-anchor={a("bullets", 0)}>
@@ -449,11 +470,28 @@ function BlockRenderer({
         )}
 
         {/* Paragraphs */}
-        {block.paragraphs?.map((p, i) => (
-          <p key={i} className="mb-3 text-[0.95rem] leading-relaxed" data-anchor={a("paragraph", i)}>
-            {renderInline(p)}
-          </p>
-        ))}
+        {block.paragraphs && block.paragraphs.length > 0 && (
+          block.paragraphsToggle ? (
+            <details className="mt-3 border-t border-[var(--border)] pt-2">
+              <summary className="cursor-pointer text-xs text-[var(--text-muted)] hover:text-[var(--text)]">
+                {block.paragraphsToggleLabel || "關鍵觀察"}
+              </summary>
+              <div className="mt-2">
+                {block.paragraphs.map((p, i) => (
+                  <p key={i} className="mb-3 text-[0.95rem] leading-relaxed" data-anchor={a("paragraph", i)}>
+                    {renderInline(p)}
+                  </p>
+                ))}
+              </div>
+            </details>
+          ) : (
+            block.paragraphs.map((p, i) => (
+              <p key={i} className="mb-3 text-[0.95rem] leading-relaxed" data-anchor={a("paragraph", i)}>
+                {renderInline(p)}
+              </p>
+            ))
+          )
+        )}
 
         {/* Footnotes + Sources toggle */}
         {(block.footnote || block.footnotes?.length || block.sources?.length) ? (

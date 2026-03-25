@@ -1,0 +1,57 @@
+{
+  "metadata": {
+    "company": "Micron Technology, Inc.",
+    "ticker": "MU",
+    "last_updated": "2026-03-25",
+    "notes": "Segment data from NotebookLM (SEC filings: 10-K FY2025, 10-Q FY26Q1, 10-Q FY26Q2). Micron reorganized to 4 market-segment BUs in Q4 FY2025; all prior periods retrospectively adjusted. revenue_by_product = Revenue by Technology (DRAM/NAND/Other); 10-Qs only show YoY comparison so Q4_FY2025 technology breakdown not directly available. All values in millions USD."
+  },
+  "segments": {
+    "revenue_by_business": {
+      "Q4_FY2025": {
+        "CMBU": { "value": 4543, "source": "Micron_FY26Q1_10Q_MU.pdf — Revenue by Business Unit" },
+        "CDBU": { "value": 1577, "source": "Micron_FY26Q1_10Q_MU.pdf — Revenue by Business Unit" },
+        "MCBU": { "value": 3760, "source": "Micron_FY26Q1_10Q_MU.pdf — Revenue by Business Unit" },
+        "AEBU": { "value": 1434, "source": "Micron_FY26Q1_10Q_MU.pdf — Revenue by Business Unit" },
+        "All Other": { "value": 1, "source": "Micron_FY26Q1_10Q_MU.pdf — Revenue by Business Unit" }
+      },
+      "Q1_FY2026": {
+        "CMBU": { "value": 5284, "source": "Micron_FY26Q1_10Q_MU.pdf — Revenue by Business Unit" },
+        "CDBU": { "value": 2379, "source": "Micron_FY26Q1_10Q_MU.pdf — Revenue by Business Unit" },
+        "MCBU": { "value": 4255, "source": "Micron_FY26Q1_10Q_MU.pdf — Revenue by Business Unit" },
+        "AEBU": { "value": 1720, "source": "Micron_FY26Q1_10Q_MU.pdf — Revenue by Business Unit" },
+        "All Other": { "value": 5, "source": "Micron_FY26Q1_10Q_MU.pdf — Revenue by Business Unit" }
+      },
+      "Q2_FY2026": {
+        "CMBU": { "value": 7749, "source": "Micron_FY26Q2_10Q_MU.pdf — Revenue by Business Unit" },
+        "CDBU": { "value": 5687, "source": "Micron_FY26Q2_10Q_MU.pdf — Revenue by Business Unit" },
+        "MCBU": { "value": 7711, "source": "Micron_FY26Q2_10Q_MU.pdf — Revenue by Business Unit" },
+        "AEBU": { "value": 2708, "source": "Micron_FY26Q2_10Q_MU.pdf — Revenue by Business Unit" },
+        "All Other": { "value": 5, "source": "Micron_FY26Q2_10Q_MU.pdf — Revenue by Business Unit" }
+      },
+      "FY2025": {
+        "CMBU": { "value": 13524, "source": "Micron_FY25_10K_MU.pdf — Segment Information" },
+        "CDBU": { "value": 7229, "source": "Micron_FY25_10K_MU.pdf — Segment Information" },
+        "MCBU": { "value": 11859, "source": "Micron_FY25_10K_MU.pdf — Segment Information" },
+        "AEBU": { "value": 4753, "source": "Micron_FY25_10K_MU.pdf — Segment Information" },
+        "All Other": { "value": 13, "source": "Micron_FY25_10K_MU.pdf — Segment Information" }
+      }
+    },
+    "revenue_by_product": {
+      "Q1_FY2026": {
+        "DRAM": { "value": 10812, "source": "Micron_FY26Q1_10Q_MU.pdf — Revenue by Technology" },
+        "NAND": { "value": 2743, "source": "Micron_FY26Q1_10Q_MU.pdf — Revenue by Technology" },
+        "Other (NOR)": { "value": 88, "source": "Micron_FY26Q1_10Q_MU.pdf — Revenue by Technology" }
+      },
+      "Q2_FY2026": {
+        "DRAM": { "value": 18768, "source": "Micron_FY26Q2_10Q_MU.pdf — Revenue by Technology" },
+        "NAND": { "value": 4997, "source": "Micron_FY26Q2_10Q_MU.pdf — Revenue by Technology" },
+        "Other (NOR)": { "value": 95, "source": "Micron_FY26Q2_10Q_MU.pdf — Revenue by Technology" }
+      },
+      "FY2025": {
+        "DRAM": { "value": 28578, "source": "Micron_FY25_10K_MU.pdf — Revenue by Technology" },
+        "NAND": { "value": 8503, "source": "Micron_FY25_10K_MU.pdf — Revenue by Technology" },
+        "Other (NOR)": { "value": 297, "source": "Micron_FY25_10K_MU.pdf — Revenue by Technology" }
+      }
+    }
+  }
+}
