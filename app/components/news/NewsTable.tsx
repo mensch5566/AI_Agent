@@ -14,29 +14,57 @@ export default function NewsTable({ items }: NewsTableProps) {
 
   const sortedItems = [...items].sort((a, b) => b.date.localeCompare(a.date));
 
+  const cleanSummary = (text?: string) => {
+    if (!text) return "";
+    // Strip HTML tags, decode &nbsp; entities, collapse whitespace
+    return text
+      .replace(/<[^>]*>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  };
+
   const sentimentBadge = (s?: string) => {
     const label = s === "bullish" ? "利多" : s === "bearish" ? "利空" : "中立";
     const color = s === "bullish" ? "text-green-700 bg-green-50" : s === "bearish" ? "text-red-700 bg-red-50" : "text-[#7A5860] bg-[#F8F4F4]";
     return <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${color}`}>{label}</span>;
   };
 
+  const colGroup = (
+    <colgroup>
+      <col className="w-[90px]" />
+      <col className="w-[60px]" />
+      <col className="w-[160px]" />
+      <col />
+      <col className="w-[56px]" />
+      <col className="w-[40px]" />
+    </colgroup>
+  );
+
   return (
     <>
       <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-lg p-5 shadow-[0_1px_3px_rgba(44,21,23,0.06)] relative">
-        <table className="w-full border-collapse text-[0.88rem]">
+        <table className="w-full border-collapse text-[0.88rem] table-fixed">
+          {colGroup}
           <thead className="sticky top-0 z-10">
             <tr>
-              <th className="px-3 py-2 bg-[var(--bg-subtle)] text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border)] text-left w-[90px]">日期</th>
-              <th className="px-3 py-2 bg-[var(--bg-subtle)] text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border)] text-left w-[70px]">標的</th>
+              <th className="px-3 py-2 bg-[var(--bg-subtle)] text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border)] text-left">日期</th>
+              <th className="px-3 py-2 bg-[var(--bg-subtle)] text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border)] text-left">標的</th>
               <th className="px-3 py-2 bg-[var(--bg-subtle)] text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border)] text-left">標題</th>
               <th className="px-3 py-2 bg-[var(--bg-subtle)] text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border)] text-left">彙整</th>
-              <th className="px-3 py-2 bg-[var(--bg-subtle)] text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border)] text-center w-[60px]">情緒</th>
-              <th className="px-3 py-2 bg-[var(--bg-subtle)] text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border)] text-center w-[44px]"></th>
+              <th className="px-3 py-2 bg-[var(--bg-subtle)] text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border)] text-center">情緒</th>
+              <th className="px-3 py-2 bg-[var(--bg-subtle)] text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border)] text-center"></th>
             </tr>
           </thead>
         </table>
         <div className="max-h-[480px] overflow-y-auto pr-2">
-        <table className="w-full border-collapse text-[0.88rem]">
+        <table className="w-full border-collapse text-[0.88rem] table-fixed">
+          {colGroup}
           <tbody>
             {sortedItems.length > 0 ? (
               sortedItems.filter((_, i) => !dismissedNews.has(i)).map((item, i) => (
@@ -46,7 +74,7 @@ export default function NewsTable({ items }: NewsTableProps) {
                   <td className="px-3 py-2.5 border-b border-[var(--border)] align-top">
                     {item.url ? <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-[#C02734] hover:underline">{item.headline}</a> : item.headline}
                   </td>
-                  <td className="px-3 py-2.5 border-b border-[var(--border)] align-top">{item.summary}</td>
+                  <td className="px-3 py-2.5 border-b border-[var(--border)] align-top break-words text-[0.82rem] leading-relaxed">{cleanSummary(item.summary)}</td>
                   <td className="px-3 py-2.5 border-b border-[var(--border)] align-top text-center">
                     {sentimentBadge(item.sentiment)}
                   </td>
