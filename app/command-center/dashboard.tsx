@@ -485,8 +485,18 @@ export default function Dashboard() {
 
   /* ── Data fetching ──────────────────────────────────────────── */
   useEffect(() => {
-    fetch("/data/command-center/data.json")
-      .then((r) => r.json())
+    fetch("/api/economic-data")
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
+      .then((d: ReportData) => {
+        if (d?.REPORT_DATE) return d;
+        throw new Error("empty");
+      })
+      .catch(() =>
+        fetch("/data/command-center/data.json").then((r) => r.json()),
+      )
       .then((d: ReportData) => {
         setData(d);
         setLoading(false);
@@ -496,11 +506,20 @@ export default function Dashboard() {
 
   // Market data with 30-minute auto-refresh
   const loadMarket = useCallback(() => {
-    fetch("/data/command-center/market.json?_=" + Date.now())
+    fetch("/api/market")
       .then((r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.json();
       })
+      .then((d: MarketData) => {
+        if (d.indices?.length) return d;
+        throw new Error("empty");
+      })
+      .catch(() =>
+        fetch("/data/command-center/market.json?_=" + Date.now()).then((r) =>
+          r.json(),
+        ),
+      )
       .then((d: MarketData) => setMarketData(d))
       .catch(() => {});
   }, []);
@@ -513,11 +532,20 @@ export default function Dashboard() {
 
   // Dollar Volume data
   useEffect(() => {
-    fetch("/data/command-center/dollar_volume.json?_=" + Date.now())
+    fetch("/api/dollar-volume")
       .then((r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.json();
       })
+      .then((d: DvData) => {
+        if (Object.keys(d.timeframes || {}).length) return d;
+        throw new Error("empty");
+      })
+      .catch(() =>
+        fetch("/data/command-center/dollar_volume.json?_=" + Date.now()).then(
+          (r) => r.json(),
+        ),
+      )
       .then((d: DvData) => setDvData(d))
       .catch(() => {});
   }, []);
