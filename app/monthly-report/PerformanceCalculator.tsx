@@ -142,49 +142,49 @@ export function PerformanceCalculator() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* 日期選擇 */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-xl font-semibold mb-4">選擇時間範圍</h2>
+      <div className="bg-[var(--bg-card)] rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-[0_1px_3px_rgba(44,21,23,0.06)]">
+        <h2 className="text-lg font-semibold mb-4 text-[var(--text)]">選擇時間範圍</h2>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-[var(--text)] mb-2">
               開始日期
             </label>
             <input
               type="date"
               value={startDate}
               onChange={e => setStartDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-[var(--bg-page)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-[var(--text)] mb-2">
               結束日期
             </label>
             <input
               type="date"
               value={endDate}
               onChange={e => setEndDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-[var(--border)] rounded-md bg-[var(--bg-page)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
             />
           </div>
         </div>
       </div>
 
       {/* 標的選擇 */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-xl font-semibold mb-4">選擇標的</h2>
+      <div className="bg-[var(--bg-card)] rounded-[var(--radius)] border border-[var(--border)] p-6 shadow-[0_1px_3px_rgba(44,21,23,0.06)]">
+        <h2 className="text-lg font-semibold mb-4 text-[var(--text)]">選擇標的</h2>
         <div className="space-y-3">
           {AVAILABLE_TICKERS.map(ticker => (
-            <label key={ticker} className="flex items-center space-x-3">
+            <label key={ticker} className="flex items-center space-x-3 cursor-pointer hover:opacity-80">
               <input
                 type="checkbox"
                 checked={selectedTickers.includes(ticker)}
                 onChange={() => handleTickerToggle(ticker)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="w-4 h-4 rounded border-[var(--border)] accent-[var(--primary)]"
               />
-              <span className="text-gray-700 font-medium">{ticker}</span>
+              <span className="text-[var(--text)] font-medium">{ticker}</span>
             </label>
           ))}
         </div>
@@ -192,8 +192,8 @@ export function PerformanceCalculator() {
 
       {/* 錯誤訊息 */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-800 text-sm">{error}</p>
+        <div className="bg-[var(--bg-highlight)] border border-[var(--primary-lt)] rounded-[var(--radius)] p-4">
+          <p className="text-[var(--primary-dk)] text-sm">{error}</p>
         </div>
       )}
 
@@ -201,58 +201,58 @@ export function PerformanceCalculator() {
       <button
         onClick={handleCalculate}
         disabled={loading}
-        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 rounded-lg transition"
+        className="w-full bg-[var(--primary)] hover:bg-[var(--primary-dk)] disabled:bg-[var(--text-faint)] text-white font-semibold py-3 rounded-[var(--radius)] transition shadow-[0_2px_4px_rgba(44,21,23,0.1)]"
       >
         {loading ? "計算中..." : "計算漲跌幅"}
       </button>
 
       {/* 結果表格 */}
       {results.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-[var(--bg-card)] rounded-[var(--radius)] border border-[var(--border)] overflow-hidden shadow-[0_1px_3px_rgba(44,21,23,0.06)]">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-[var(--bg-subtle)] border-b border-[var(--border)]">
                 <tr>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text)]">
                     標的
                   </th>
-                  <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-[var(--text)]">
                     開始價
                   </th>
-                  <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-[var(--text)]">
                     結束價
                   </th>
-                  <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-[var(--text)]">
                     漲跌幅
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-muted)]">
                     期間
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-[var(--border)]">
                 {results.map(result => (
-                  <tr key={result.ticker} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                  <tr key={result.ticker} className="hover:bg-[var(--bg-subtle)] transition">
+                    <td className="px-6 py-4 text-sm font-semibold text-[var(--text)]">
                       {result.ticker}
                     </td>
-                    <td className="px-6 py-4 text-right text-sm text-gray-700">
+                    <td className="px-6 py-4 text-right text-sm text-[var(--text-muted)]">
                       ${result.startPrice.toFixed(2)}
                     </td>
-                    <td className="px-6 py-4 text-right text-sm text-gray-700">
+                    <td className="px-6 py-4 text-right text-sm text-[var(--text-muted)]">
                       ${result.endPrice.toFixed(2)}
                     </td>
                     <td
                       className={`px-6 py-4 text-right text-sm font-semibold ${
                         result.changePercent >= 0
-                          ? "text-green-600"
-                          : "text-red-600"
+                          ? "text-[var(--primary-lt)]"
+                          : "text-[var(--primary)]"
                       }`}
                     >
                       {result.changePercent >= 0 ? "+" : ""}
                       {result.changePercent.toFixed(2)}%
                     </td>
-                    <td className="px-6 py-4 text-xs text-gray-500">
+                    <td className="px-6 py-4 text-xs text-[var(--text-faint)]">
                       {result.startDate} ~ {result.endDate}
                     </td>
                   </tr>
@@ -264,7 +264,7 @@ export function PerformanceCalculator() {
       )}
 
       {results.length === 0 && !loading && (
-        <div className="text-center py-12 text-gray-500">
+        <div className="text-center py-12 text-[var(--text-muted)]">
           <p>選擇日期和標的，點擊「計算漲跌幅」查看結果</p>
         </div>
       )}
