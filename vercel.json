@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/update-stock-prices?market=us",
+      "schedule": "0 22 * * 1-5"
+    },
+    {
+      "path": "/api/cron/update-stock-prices?market=tw",
+      "schedule": "0 6 * * 1-5"
+    }
+  ]
+}
