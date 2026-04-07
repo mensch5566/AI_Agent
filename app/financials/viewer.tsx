@@ -20,7 +20,7 @@ import {
   getIncompleteFYs,
   type ValMap, type FinData,
 } from "@/app/components/financials/constants";
-import { toAnnualData } from "@/app/components/financials/useFinancialData";
+import { useFinancialData, toAnnualData } from "@/app/components/financials/useFinancialData";
 
 ChartJS.register(
   CategoryScale,
@@ -1066,9 +1066,6 @@ export default function Viewer() {
   const [ticker, setTicker] = useState("");
   const [tab, setTab] = useState("is");
   const [viewMode, setViewMode] = useState<"quarterly" | "annual">("quarterly");
-  const [rawData, setRawData] = useState<FinData | null>(null);
-  const [suppData, setSuppData] = useState<any | null>(null);
-  const [loading, setLoading] = useState(false);
 
   // Load ticker list
   useEffect(() => {
@@ -1078,37 +1075,8 @@ export default function Viewer() {
       .catch(() => setTickers(["SNDK", "MU", "LEU"]));
   }, []);
 
-  // Load financials + supplemental on ticker change
-  useEffect(() => {
-    if (!ticker) {
-      setRawData(null);
-      setSuppData(null);
-      return;
-    }
-    setLoading(true);
-    setSuppData(null);
-
-    fetch(`/data/financials/${ticker}/${ticker}_financials.json`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((d) => {
-        setRawData(d);
-        setLoading(false);
-      })
-      .catch((e) => {
-        setRawData(null);
-        setLoading(false);
-        alert(`Failed to load ${ticker}: ${e.message}`);
-      });
-
-    // Supplemental is optional — silently ignore if missing
-    fetch(`/data/financials/${ticker}/${ticker}_supplemental.json`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setSuppData(d))
-      .catch(() => setSuppData(null));
-  }, [ticker]);
+  // Fetch from Supabase via API
+  const { data: rawData, loading, error: loadError } = useFinancialData(ticker);
 
   const displayData = useMemo(() => {
     if (!rawData) return null;
@@ -1116,6 +1084,15 @@ export default function Viewer() {
   }, [rawData, viewMode]);
 
   const meta = rawData?.metadata;
+
+  // Derive supplemental-compatible objects from unified data
+  const suppData = useMemo(() => {
+    if (!rawData) return null;
+    const segments = rawData._segments;
+    const non_gaap = rawData._non_gaap;
+    if (!segments && !non_gaap) return null;
+    return { segments, non_gaap };
+  }, [rawData]);
 
   return (
     <div className="min-h-screen bg-[var(--bg-page)]">

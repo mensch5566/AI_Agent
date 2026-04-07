@@ -17,6 +17,7 @@ import {
   type GrowthMode, prevQoQ, prevYoY, growthPct, fmtGrowth,
   getIncompleteFYs,
 } from "./constants";
+import { useFinancialData } from "./useFinancialData";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -30,54 +31,6 @@ interface SegmentEntry {
 
 type SegmentPeriodData = Record<string, SegmentEntry>;
 type SegmentCategory = Record<string, SegmentPeriodData>;
-
-interface SupplementalData {
-  metadata?: { company?: string; ticker?: string };
-  segments?: Record<string, SegmentCategory>;
-}
-
-/* ================================================================
-   Data hook with cache
-   ================================================================ */
-const cache = new Map<string, SupplementalData>();
-
-function useSupplementalData(ticker: string) {
-  const [data, setData] = useState<SupplementalData | null>(cache.get(ticker) ?? null);
-  const [loading, setLoading] = useState(!cache.has(ticker));
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (cache.has(ticker)) {
-      setData(cache.get(ticker)!);
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    fetch(`/data/financials/${ticker}/${ticker}_supplemental.json`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((d) => {
-        if (cancelled) return;
-        cache.set(ticker, d);
-        setData(d);
-        setLoading(false);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e.message);
-        setLoading(false);
-      });
-
-    return () => { cancelled = true; };
-  }, [ticker]);
-
-  return { data, loading, error };
-}
 
 /* ================================================================
    Helpers
@@ -179,7 +132,11 @@ export default function SegmentTable({
   defaultView = "quarterly",
   defaultCategory,
 }: SegmentTableProps) {
-  const { data, loading, error } = useSupplementalData(ticker);
+  const { data: finData, loading, error } = useFinancialData(ticker);
+  const data = useMemo(() => {
+    if (!finData?._segments) return null;
+    return { segments: finData._segments } as { segments: Record<string, SegmentCategory> };
+  }, [finData]);
   const [viewMode, setViewMode] = useState<"quarterly" | "annual">(defaultView);
   const [growthMode, setGrowthMode] = useState<GrowthMode>("value");
   const [activeCategory, setActiveCategory] = useState<string>("");

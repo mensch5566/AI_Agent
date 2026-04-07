@@ -3,7 +3,147 @@ import { useState, useEffect } from "react";
 import { getIncompleteFYs, type FinData, type ValMap } from "./constants";
 
 /* ================================================================
-   Annual aggregation (extracted from financials/viewer.tsx)
+   Long-format fact row from API
+   ================================================================ */
+export interface FactRow {
+  period: string;
+  period_end: string | null;
+  statement: string;
+  metric: string;
+  dimension: string;
+  value: number | null;
+  unit: string | null;
+  source: string | null;
+}
+
+interface CompanyInfo {
+  ticker: string;
+  company: string;
+  cik: string;
+  exchange: string;
+  currency: string;
+  fiscal_year_end_month: number;
+  last_updated: string;
+  notes: string | null;
+}
+
+export interface ApiResponse {
+  ticker: string;
+  company: CompanyInfo | null;
+  facts: FactRow[];
+}
+
+/* ================================================================
+   Pivot: long-format facts → nested FinData
+   ================================================================ */
+
+const BS_STATEMENTS: Record<string, string> = {
+  balance_sheet_assets: "assets",
+  balance_sheet_liabilities: "liabilities",
+  balance_sheet_equity: "equity",
+};
+const CF_SECTIONS: Record<string, string> = {
+  cash_flow_operating: "operating_activities",
+  cash_flow_investing: "investing_activities",
+  cash_flow_financing: "financing_activities",
+};
+
+export function pivotToFinData(api: ApiResponse): FinData {
+  const { company, facts } = api;
+
+  const isPeriods = new Set<string>();
+  const bsPeriods = new Set<string>();
+
+  const incomeStatement: Record<string, ValMap> = {};
+  const balanceSheet: Record<string, Record<string, ValMap>> = {
+    assets: {}, liabilities: {}, equity: {},
+  };
+  const cashFlow: Record<string, any> = {
+    operating_activities: {},
+    investing_activities: {},
+    financing_activities: {},
+  };
+  const ratios: Record<string, Record<string, number>> = {};
+  const filings: Record<string, { period_end: string }> = {};
+
+  // Segment: metric (subsection) → period → dimension → { value, source }
+  const segments: Record<string, Record<string, Record<string, { value: number; source?: string }>>> = {};
+  // Non-GAAP: metric → period → { value, source }
+  const nonGaap: Record<string, Record<string, { value: number; source?: string }>> = {};
+
+  for (const row of facts) {
+    const { period, period_end, statement, metric, dimension, value, source } = row;
+    if (value === null) continue;
+
+    if (period_end && !filings[period]) {
+      filings[period] = { period_end };
+    }
+
+    if (statement === "income_statement") {
+      isPeriods.add(period);
+      if (!incomeStatement[metric]) incomeStatement[metric] = {};
+      incomeStatement[metric][period] = value;
+    }
+    else if (statement in BS_STATEMENTS) {
+      bsPeriods.add(period);
+      const section = BS_STATEMENTS[statement];
+      if (!balanceSheet[section][metric]) balanceSheet[section][metric] = {};
+      balanceSheet[section][metric][period] = value;
+    }
+    else if (statement in CF_SECTIONS) {
+      isPeriods.add(period);
+      const section = CF_SECTIONS[statement];
+      if (!cashFlow[section][metric]) cashFlow[section][metric] = {};
+      cashFlow[section][metric][period] = value;
+    }
+    else if (statement === "cash_flow_summary") {
+      isPeriods.add(period);
+      if (!cashFlow[metric]) cashFlow[metric] = {};
+      cashFlow[metric][period] = value;
+    }
+    else if (statement === "financial_ratios") {
+      if (!ratios[period]) ratios[period] = {};
+      ratios[period][metric] = value;
+    }
+    else if (statement === "segments") {
+      if (!segments[metric]) segments[metric] = {};
+      if (!segments[metric][period]) segments[metric][period] = {};
+      segments[metric][period][dimension] = { value, source: source || undefined };
+    }
+    else if (statement === "non_gaap") {
+      if (!nonGaap[metric]) nonGaap[metric] = {};
+      nonGaap[metric][period] = { value, source: source || undefined };
+    }
+  }
+
+  const sortedISPeriods = [...isPeriods].sort();
+  const sortedBSPeriods = [...bsPeriods].sort();
+
+  return {
+    metadata: {
+      company: company?.company,
+      ticker: company?.ticker || api.ticker,
+      exchange: company?.exchange,
+      cik: company?.cik,
+      fiscal_year_end_month: company?.fiscal_year_end_month,
+      currency: company?.currency,
+      unit: "millions_except_per_share",
+      last_updated: company?.last_updated,
+      periods_income_statement: sortedISPeriods,
+      periods_balance_sheet: sortedBSPeriods,
+    },
+    filings,
+    income_statement: incomeStatement,
+    balance_sheet: balanceSheet,
+    cash_flow_statement: cashFlow,
+    financial_ratios: ratios,
+    _segments: segments,
+    _non_gaap: nonGaap,
+  };
+}
+
+/* ================================================================
+   Annual aggregation
    ================================================================ */
 
 const SUM_EXCLUDE = new Set(["eps_basic", "eps_diluted", "shares_basic", "shares_diluted", "shares_basic_millions", "shares_diluted_millions"]);
@@ -143,7 +283,6 @@ export function toAnnualData(data: FinData): FinData {
     if (q4 && data.filings?.[q4]) annFilings[fy] = data.filings[q4];
   }
 
-  // Detect incomplete FYs (< 4 quarters)
   const allQuarterly = [...(data.metadata.periods_income_statement || []), ...(data.metadata.periods_balance_sheet || [])];
   const incompleteFYs = Object.fromEntries(getIncompleteFYs(allQuarterly));
 
@@ -154,7 +293,8 @@ export function toAnnualData(data: FinData): FinData {
     balance_sheet: annBS,
     cash_flow_statement: annCF,
     financial_ratios: annRatios,
-    classification_audit: data.classification_audit,
+    _segments: data._segments,
+    _non_gaap: data._non_gaap,
   };
 }
 
@@ -170,6 +310,11 @@ export function useFinancialData(ticker: string) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!ticker) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
     if (cache.has(ticker)) {
       setData(cache.get(ticker)!);
       setLoading(false);
@@ -179,15 +324,16 @@ export function useFinancialData(ticker: string) {
     setLoading(true);
     setError(null);
 
-    fetch(`/data/financials/${ticker}/${ticker}_financials.json`)
+    fetch(`/api/financials/${ticker}`)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
+        return r.json() as Promise<ApiResponse>;
       })
-      .then((d) => {
+      .then((apiData) => {
         if (cancelled) return;
-        cache.set(ticker, d);
-        setData(d);
+        const finData = pivotToFinData(apiData);
+        cache.set(ticker, finData);
+        setData(finData);
         setLoading(false);
       })
       .catch((e) => {
