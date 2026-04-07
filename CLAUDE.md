@@ -4,10 +4,12 @@
 
 ### 財務數據精準度
 - 財報數字必須 **100% 精準**，不能瞎掰、不能隨便從網路找到就貼上
-- 財務數據（現金、營收、EPS 等）必須從本地資料庫拉取：
-  - GAAP 三表：`public/data/financials/{TICKER}/{TICKER}_financials.json`
-  - 補充數據（Non-GAAP、Segment）：`{TICKER}_supplemental.json`
-- **取最新一期**，不要假設哪一期是最新的，讀檔確認
+- 財務數據（現金、營收、EPS 等）來源：
+  - **Supabase `financial_facts` 表**（前端透過 `/api/financials/[ticker]` 拉取）
+  - 涵蓋：GAAP 三表、Cash Flow、Financial Ratios、Segments、Non-GAAP
+  - 新增/更新數據：編輯 `public/data/financials/{TICKER}/` JSON → 跑 `scripts/migrate_financials.py`
+  - JSON 保留做 version control + audit trail
+- **取最新一期**，不要假設哪一期是最新的，查 Supabase 確認
 - 引用時標明數據來源期別（如「Q2 FY2026, SEC filing」）
 - 需要核實數字時，用 NotebookLM query 核對
 

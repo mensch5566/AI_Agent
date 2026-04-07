@@ -151,16 +151,16 @@
       "Q3_FY2024": 15.94,
       "Q4_FY2024": 14.95,
       "Q1_FY2025": 18.43,
-      "Q2_FY2025": 17.50,
+      "Q2_FY2025": 17.5,
       "Q3_FY2025": 15.84,
       "Q4_FY2025": 14.39
     },
     "eps_diluted": {
-      "Q1_FY2024": 19.80,
+      "Q1_FY2024": 19.8,
       "Q2_FY2024": 16.15,
       "Q3_FY2024": 15.91,
       "Q4_FY2024": 14.92,
-      "Q1_FY2025": 18.40,
+      "Q1_FY2025": 18.4,
       "Q2_FY2025": 17.47,
       "Q3_FY2025": 15.82,
       "Q4_FY2025": 14.36
@@ -178,16 +178,16 @@
     "operating_margin_pct": {
       "Q1_FY2024": 0.2411,
       "Q2_FY2024": 0.1961,
-      "Q3_FY2024": 0.1810,
+      "Q3_FY2024": 0.181,
       "Q4_FY2024": 0.1551,
-      "Q1_FY2025": 0.1960,
+      "Q1_FY2025": 0.196,
       "Q2_FY2025": 0.1953,
       "Q3_FY2025": 0.1562,
       "Q4_FY2025": 0.1455
     },
     "net_margin_pct": {
       "Q1_FY2024": 0.2363,
-      "Q2_FY2024": 0.2020,
+      "Q2_FY2024": 0.202,
       "Q3_FY2024": 0.1923,
       "Q4_FY2024": 0.1723,
       "Q1_FY2025": 0.1912,
@@ -365,8 +365,8 @@
     },
     "Q3_FY2024": {
       "current_ratio": 1.43,
-      "debt_to_equity": 0.60,
-      "equity_ratio": 0.6260
+      "debt_to_equity": 0.6,
+      "equity_ratio": 0.626
     },
     "Q4_FY2024": {
       "current_ratio": 1.32,
@@ -376,7 +376,7 @@
     "Q1_FY2025": {
       "current_ratio": 1.28,
       "debt_to_equity": 0.81,
-      "equity_ratio": 0.5510
+      "equity_ratio": 0.551
     },
     "Q2_FY2025": {
       "current_ratio": 1.35,
@@ -385,7 +385,7 @@
     },
     "Q3_FY2025": {
       "current_ratio": 1.55,
-      "debt_to_equity": 0.60,
+      "debt_to_equity": 0.6,
       "equity_ratio": 0.6231
     },
     "Q4_FY2025": {
@@ -401,11 +401,1293 @@
       "roa": 0.1524
     },
     "FY2025": {
-      "gross_margin_pct": 0.4750,
+      "gross_margin_pct": 0.475,
       "operating_margin_pct": 0.1736,
       "net_margin_pct": 0.1767,
       "roe": 0.2574,
       "roa": 0.1416
     }
-  }
+  },
+  "long_format": [
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "income_statement",
+      "metric": "revenue",
+      "value": 133458.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "income_statement",
+      "metric": "revenue",
+      "value": 127271.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "income_statement",
+      "metric": "revenue",
+      "value": 131813.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "income_statement",
+      "metric": "revenue",
+      "value": 138043.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "income_statement",
+      "metric": "revenue",
+      "value": 153312.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "income_statement",
+      "metric": "revenue",
+      "value": 150369.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "income_statement",
+      "metric": "revenue",
+      "value": 142097.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "income_statement",
+      "metric": "revenue",
+      "value": 150188.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "income_statement",
+      "metric": "cost_of_goods_sold",
+      "value": 63558.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "income_statement",
+      "metric": "cost_of_goods_sold",
+      "value": 65135.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "income_statement",
+      "metric": "cost_of_goods_sold",
+      "value": 67466.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "income_statement",
+      "metric": "cost_of_goods_sold",
+      "value": 71042.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "income_statement",
+      "metric": "cost_of_goods_sold",
+      "value": 79503.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "income_statement",
+      "metric": "cost_of_goods_sold",
+      "value": 76491.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "income_statement",
+      "metric": "cost_of_goods_sold",
+      "value": 75985.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "income_statement",
+      "metric": "cost_of_goods_sold",
+      "value": 80907.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "income_statement",
+      "metric": "gross_profit",
+      "value": 69901.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "income_statement",
+      "metric": "gross_profit",
+      "value": 62136.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "income_statement",
+      "metric": "gross_profit",
+      "value": 64348.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "income_statement",
+      "metric": "gross_profit",
+      "value": 67001.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "income_statement",
+      "metric": "gross_profit",
+      "value": 73809.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "income_statement",
+      "metric": "gross_profit",
+      "value": 73878.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "income_statement",
+      "metric": "gross_profit",
+      "value": 66112.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "income_statement",
+      "metric": "gross_profit",
+      "value": 69281.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "income_statement",
+      "metric": "operating_expenses",
+      "value": 37721.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "income_statement",
+      "metric": "operating_expenses",
+      "value": 37180.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "income_statement",
+      "metric": "operating_expenses",
+      "value": 40483.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "income_statement",
+      "metric": "operating_expenses",
+      "value": 45589.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "income_statement",
+      "metric": "operating_expenses",
+      "value": 43756.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "income_statement",
+      "metric": "operating_expenses",
+      "value": 44499.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "income_statement",
+      "metric": "operating_expenses",
+      "value": 43924.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "income_statement",
+      "metric": "operating_expenses",
+      "value": 47431.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "income_statement",
+      "metric": "operating_income",
+      "value": 32180.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "income_statement",
+      "metric": "operating_income",
+      "value": 24956.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "income_statement",
+      "metric": "operating_income",
+      "value": 23864.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "income_statement",
+      "metric": "operating_income",
+      "value": 21412.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "income_statement",
+      "metric": "operating_income",
+      "value": 30053.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "income_statement",
+      "metric": "operating_income",
+      "value": 29379.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "income_statement",
+      "metric": "operating_income",
+      "value": 22188.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "income_statement",
+      "metric": "operating_income",
+      "value": 21850.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "income_statement",
+      "metric": "income_before_taxes",
+      "value": 35670.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "income_statement",
+      "metric": "income_before_taxes",
+      "value": 29197.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "income_statement",
+      "metric": "income_before_taxes",
+      "value": 28441.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "income_statement",
+      "metric": "income_before_taxes",
+      "value": 26211.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "income_statement",
+      "metric": "income_before_taxes",
+      "value": 34553.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "income_statement",
+      "metric": "income_before_taxes",
+      "value": 33228.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "income_statement",
+      "metric": "income_before_taxes",
+      "value": 29960.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "income_statement",
+      "metric": "income_before_taxes",
+      "value": 27147.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "income_statement",
+      "metric": "net_income",
+      "value": 31536.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "income_statement",
+      "metric": "net_income",
+      "value": 25716.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "income_statement",
+      "metric": "net_income",
+      "value": 25346.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "income_statement",
+      "metric": "net_income",
+      "value": 23789.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "income_statement",
+      "metric": "net_income",
+      "value": 29325.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "income_statement",
+      "metric": "net_income",
+      "value": 27848.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "income_statement",
+      "metric": "net_income",
+      "value": 25221.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "income_statement",
+      "metric": "net_income",
+      "value": 22925.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "income_statement",
+      "metric": "eps_basic",
+      "value": 19.85,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "income_statement",
+      "metric": "eps_basic",
+      "value": 16.19,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "income_statement",
+      "metric": "eps_basic",
+      "value": 15.94,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "income_statement",
+      "metric": "eps_basic",
+      "value": 14.95,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "income_statement",
+      "metric": "eps_basic",
+      "value": 18.43,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "income_statement",
+      "metric": "eps_basic",
+      "value": 17.5,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "income_statement",
+      "metric": "eps_basic",
+      "value": 15.84,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "income_statement",
+      "metric": "eps_basic",
+      "value": 14.39,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "income_statement",
+      "metric": "eps_diluted",
+      "value": 19.8,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "income_statement",
+      "metric": "eps_diluted",
+      "value": 16.15,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "income_statement",
+      "metric": "eps_diluted",
+      "value": 15.91,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "income_statement",
+      "metric": "eps_diluted",
+      "value": 14.92,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "income_statement",
+      "metric": "eps_diluted",
+      "value": 18.4,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "income_statement",
+      "metric": "eps_diluted",
+      "value": 17.47,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "income_statement",
+      "metric": "eps_diluted",
+      "value": 15.82,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "income_statement",
+      "metric": "eps_diluted",
+      "value": 14.36,
+      "unit": "TWD"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "income_statement",
+      "metric": "gross_margin_pct",
+      "value": 0.5239,
+      "unit": null
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "income_statement",
+      "metric": "gross_margin_pct",
+      "value": 0.4882,
+      "unit": null
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "income_statement",
+      "metric": "gross_margin_pct",
+      "value": 0.4882,
+      "unit": null
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "income_statement",
+      "metric": "gross_margin_pct",
+      "value": 0.4854,
+      "unit": null
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "income_statement",
+      "metric": "gross_margin_pct",
+      "value": 0.4814,
+      "unit": null
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "income_statement",
+      "metric": "gross_margin_pct",
+      "value": 0.4913,
+      "unit": null
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "income_statement",
+      "metric": "gross_margin_pct",
+      "value": 0.4653,
+      "unit": null
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "income_statement",
+      "metric": "gross_margin_pct",
+      "value": 0.4613,
+      "unit": null
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "income_statement",
+      "metric": "operating_margin_pct",
+      "value": 0.2411,
+      "unit": null
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "income_statement",
+      "metric": "operating_margin_pct",
+      "value": 0.1961,
+      "unit": null
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "income_statement",
+      "metric": "operating_margin_pct",
+      "value": 0.181,
+      "unit": null
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "income_statement",
+      "metric": "operating_margin_pct",
+      "value": 0.1551,
+      "unit": null
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "income_statement",
+      "metric": "operating_margin_pct",
+      "value": 0.196,
+      "unit": null
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "income_statement",
+      "metric": "operating_margin_pct",
+      "value": 0.1953,
+      "unit": null
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "income_statement",
+      "metric": "operating_margin_pct",
+      "value": 0.1562,
+      "unit": null
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "income_statement",
+      "metric": "operating_margin_pct",
+      "value": 0.1455,
+      "unit": null
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "income_statement",
+      "metric": "net_margin_pct",
+      "value": 0.2363,
+      "unit": null
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "income_statement",
+      "metric": "net_margin_pct",
+      "value": 0.202,
+      "unit": null
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "income_statement",
+      "metric": "net_margin_pct",
+      "value": 0.1923,
+      "unit": null
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "income_statement",
+      "metric": "net_margin_pct",
+      "value": 0.1723,
+      "unit": null
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "income_statement",
+      "metric": "net_margin_pct",
+      "value": 0.1912,
+      "unit": null
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "income_statement",
+      "metric": "net_margin_pct",
+      "value": 0.1852,
+      "unit": null
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "income_statement",
+      "metric": "net_margin_pct",
+      "value": 0.1775,
+      "unit": null
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "income_statement",
+      "metric": "net_margin_pct",
+      "value": 0.1527,
+      "unit": null
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "balance_sheet_assets",
+      "metric": "cash_and_cash_equivalents",
+      "value": 143345.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "balance_sheet_assets",
+      "metric": "cash_and_cash_equivalents",
+      "value": 189852.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "balance_sheet_assets",
+      "metric": "cash_and_cash_equivalents",
+      "value": 179830.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "balance_sheet_assets",
+      "metric": "cash_and_cash_equivalents",
+      "value": 203696.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "balance_sheet_assets",
+      "metric": "cash_and_cash_equivalents",
+      "value": 195689.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "balance_sheet_assets",
+      "metric": "cash_and_cash_equivalents",
+      "value": 185349.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "balance_sheet_assets",
+      "metric": "cash_and_cash_equivalents",
+      "value": 197770.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "balance_sheet_assets",
+      "metric": "cash_and_cash_equivalents",
+      "value": 235290.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "balance_sheet_assets",
+      "metric": "total_current_assets",
+      "value": 284701.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "balance_sheet_assets",
+      "metric": "total_current_assets",
+      "value": 331993.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "balance_sheet_assets",
+      "metric": "total_current_assets",
+      "value": 327088.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "balance_sheet_assets",
+      "metric": "total_current_assets",
+      "value": 351025.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "balance_sheet_assets",
+      "metric": "total_current_assets",
+      "value": 378496.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "balance_sheet_assets",
+      "metric": "total_current_assets",
+      "value": 349132.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "balance_sheet_assets",
+      "metric": "total_current_assets",
+      "value": 358951.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "balance_sheet_assets",
+      "metric": "total_current_assets",
+      "value": 397456.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "balance_sheet_assets",
+      "metric": "total_assets",
+      "value": 647325.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "balance_sheet_assets",
+      "metric": "total_assets",
+      "value": 681374.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "balance_sheet_assets",
+      "metric": "total_assets",
+      "value": 676528.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "balance_sheet_assets",
+      "metric": "total_assets",
+      "value": 697868.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "balance_sheet_assets",
+      "metric": "total_assets",
+      "value": 718284.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "balance_sheet_assets",
+      "metric": "total_assets",
+      "value": 669214.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "balance_sheet_assets",
+      "metric": "total_assets",
+      "value": 687852.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "balance_sheet_assets",
+      "metric": "total_assets",
+      "value": 743785.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_current_liabilities",
+      "value": 247664.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_current_liabilities",
+      "value": 266282.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_current_liabilities",
+      "value": 228948.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_current_liabilities",
+      "value": 266902.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_current_liabilities",
+      "value": 296541.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_current_liabilities",
+      "value": 258215.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_current_liabilities",
+      "value": 231505.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_current_liabilities",
+      "value": 303350.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "balance_sheet_liabilities",
+      "metric": "long_term_debt",
+      "value": 0.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "balance_sheet_liabilities",
+      "metric": "long_term_debt",
+      "value": 0.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "balance_sheet_liabilities",
+      "metric": "long_term_debt",
+      "value": 0.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "balance_sheet_liabilities",
+      "metric": "long_term_debt",
+      "value": 0.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "balance_sheet_liabilities",
+      "metric": "long_term_debt",
+      "value": 0.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "balance_sheet_liabilities",
+      "metric": "long_term_debt",
+      "value": 0.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "balance_sheet_liabilities",
+      "metric": "long_term_debt",
+      "value": 0.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "balance_sheet_liabilities",
+      "metric": "long_term_debt",
+      "value": 0.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_liabilities",
+      "value": 272452.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_liabilities",
+      "value": 290751.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_liabilities",
+      "value": 253070.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_liabilities",
+      "value": 292812.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_liabilities",
+      "value": 322492.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_liabilities",
+      "value": 284687.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_liabilities",
+      "value": 259308.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "balance_sheet_liabilities",
+      "metric": "total_liabilities",
+      "value": 334590.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity_parent",
+      "value": 368929.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity_parent",
+      "value": 384605.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity_parent",
+      "value": 415152.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity_parent",
+      "value": 396627.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity_parent",
+      "value": 387770.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity_parent",
+      "value": 376391.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity_parent",
+      "value": 420133.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity_parent",
+      "value": 400601.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2024",
+      "period_end": "2024-03-31",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity",
+      "value": 374874.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2024",
+      "period_end": "2024-06-30",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity",
+      "value": 390624.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2024",
+      "period_end": "2024-09-30",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity",
+      "value": 423458.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2024",
+      "period_end": "2024-12-31",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity",
+      "value": 405055.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q1_FY2025",
+      "period_end": "2025-03-31",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity",
+      "value": 395792.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q2_FY2025",
+      "period_end": "2025-06-30",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity",
+      "value": 384528.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q3_FY2025",
+      "period_end": "2025-09-30",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity",
+      "value": 428544.0,
+      "unit": "TWD_millions"
+    },
+    {
+      "period": "Q4_FY2025",
+      "period_end": "2025-12-31",
+      "statement": "balance_sheet_equity",
+      "metric": "total_equity",
+      "value": 409195.0,
+      "unit": "TWD_millions"
+    }
+  ]
 }

@@ -34,3 +34,4 @@ scratch/
 tsconfig.tsbuildinfo
 AI_Agent.code-workspace
 UI_Templates/
+.vercel
