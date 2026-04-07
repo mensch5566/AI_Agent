@@ -46,6 +46,14 @@ const research = [
     desc: "美股與台股個股深度研究報告，含質性分析與量化估值。",
     tags: ["US", "TW"],
   },
+  {
+    href: "/monthly-report",
+    icon: "📊",
+    nameEn: "Performance Calculator",
+    name: "月報漲跌幅計算器",
+    desc: "選擇時間範圍，快速對比多個市場標的的漲跌幅表現。",
+    tags: ["SPY", "QQQ", "DIA"],
+  },
 ];
 
 function ToolCard({
