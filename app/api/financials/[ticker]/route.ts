@@ -8,15 +8,16 @@ export async function GET(
   const { ticker } = await params;
   const supabase = createServerClient();
 
-  const [factsRes, supRes] = await Promise.all([
+  const [factsRes, companyRes] = await Promise.all([
     supabase
       .from("financial_facts")
-      .select("period, period_end, statement, metric, value, unit")
+      .select("period, period_end, statement, metric, dimension, value, unit, source")
       .eq("ticker", ticker.toUpperCase()),
     supabase
-      .from("financial_supplemental")
-      .select("period, section, subsection, dimension, value, unit, source")
-      .eq("ticker", ticker.toUpperCase()),
+      .from("financial_companies")
+      .select("*")
+      .eq("ticker", ticker.toUpperCase())
+      .single(),
   ]);
 
   if (factsRes.error) {
@@ -25,7 +26,7 @@ export async function GET(
 
   return NextResponse.json({
     ticker: ticker.toUpperCase(),
+    company: companyRes.data ?? null,
     facts: factsRes.data ?? [],
-    supplemental: supRes.data ?? [],
   });
 }

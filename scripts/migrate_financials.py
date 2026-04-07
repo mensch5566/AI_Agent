@@ -1,13 +1,14 @@
 """
 Migrate financials JSON → Supabase
 Tables:
-  financial_companies  (ticker, company, exchange, cik, fiscal_year_end_month, currency, unit, last_updated, data_source)
-  financial_facts      (ticker, period, period_end, statement, metric, value, unit)
-  financial_supplemental (ticker, period, section, subsection, dimension, value, unit, source)
+  financial_companies  (ticker, company, cik, exchange, currency, fiscal_year_end_month, last_updated, notes)
+  financial_facts      (ticker, period, period_end, statement, metric, dimension, value, unit, source)
+    - GAAP 三表: dimension = '' (default)
+    - segments:   statement = 'segments', metric = subsection (e.g. 'revenue_by_product'), dimension = 'Datacenter'
+    - non_gaap:   statement = 'non_gaap', metric = e.g. 'adjusted_eps_diluted', dimension = ''
 """
 
 import json
-import os
 from pathlib import Path
 
 # ── read .env ────────────────────────────────────────────────────────────────
@@ -62,25 +63,97 @@ def migrate_financials(ticker: str, path: Path):
     client.table("financial_companies").upsert(company_row).execute()
     print(f"  [{ticker}] companies: 1 row")
 
-    # financial_facts from long_format
+    # ── IS + BS from long_format ──
     long_format = data.get("long_format", [])
+    facts_rows = []
     if long_format:
-        facts_rows = [
-            {
+        for row in long_format:
+            facts_rows.append({
                 "ticker": ticker,
                 "period": row["period"],
                 "period_end": row.get("period_end") or None,
                 "statement": row["statement"],
                 "metric": row["metric"],
+                "dimension": "",
                 "value": row["value"],
                 "unit": row.get("unit"),
-            }
-            for row in long_format
-        ]
+            })
+
+    # ── Cash Flow (nested → long format) ──
+    cf = data.get("cash_flow_statement", {})
+    filings = data.get("filings", {})
+    unit = meta.get("unit")
+
+    cf_section_map = {
+        "operating_activities": "cash_flow_operating",
+        "investing_activities": "cash_flow_investing",
+        "financing_activities": "cash_flow_financing",
+    }
+    cf_summary_keys = [
+        "fx_effect_on_cash", "fx_effect", "net_change_in_cash",
+        "beginning_cash", "ending_cash", "free_cash_flow",
+    ]
+
+    for nested_key, stmt_name in cf_section_map.items():
+        section = cf.get(nested_key, {})
+        for metric, vals in section.items():
+            if not isinstance(vals, dict):
+                continue
+            for period, value in vals.items():
+                if value is None:
+                    continue
+                facts_rows.append({
+                    "ticker": ticker,
+                    "period": period,
+                    "period_end": filings.get(period, {}).get("period_end"),
+                    "statement": stmt_name,
+                    "metric": metric,
+                    "dimension": "",
+                    "value": value,
+                    "unit": unit,
+                })
+
+    for key in cf_summary_keys:
+        vals = cf.get(key)
+        if not isinstance(vals, dict):
+            continue
+        for period, value in vals.items():
+            if value is None:
+                continue
+            facts_rows.append({
+                "ticker": ticker,
+                "period": period,
+                "period_end": filings.get(period, {}).get("period_end"),
+                "statement": "cash_flow_summary",
+                "metric": key,
+                "dimension": "",
+                "value": value,
+                "unit": unit,
+            })
+
+    # ── Financial Ratios (nested: period → {metric: value}) ──
+    ratios = data.get("financial_ratios", {})
+    for period, metrics in ratios.items():
+        if not isinstance(metrics, dict):
+            continue
+        for metric, value in metrics.items():
+            if value is None:
+                continue
+            facts_rows.append({
+                "ticker": ticker,
+                "period": period,
+                "period_end": filings.get(period, {}).get("period_end"),
+                "statement": "financial_ratios",
+                "metric": metric,
+                "dimension": "",
+                "value": value,
+            })
+
+    if facts_rows:
         n = upsert_batch("financial_facts", facts_rows)
-        print(f"  [{ticker}] financial_facts: {n} rows")
+        print(f"  [{ticker}] facts: {n} rows")
     else:
-        print(f"  [{ticker}] financial_facts: no long_format data")
+        print(f"  [{ticker}] facts: no data")
 
 
 # ── migrate supplemental.json ────────────────────────────────────────────────
@@ -91,7 +164,7 @@ def migrate_supplemental(ticker: str, path: Path):
 
     rows = []
 
-    # segments: {section_name: {period: {dimension: {value, source}}}}
+    # segments: {subsection: {period: {dimension: {value, source}}}}
     segments = data.get("segments", {})
     for subsection, periods in segments.items():
         for period, dimensions in periods.items():
@@ -103,8 +176,8 @@ def migrate_supplemental(ticker: str, path: Path):
                 rows.append({
                     "ticker": ticker,
                     "period": period,
-                    "section": "segments",
-                    "subsection": subsection,
+                    "statement": "segments",
+                    "metric": subsection,
                     "dimension": dimension,
                     "value": vobj.get("value"),
                     "unit": vobj.get("unit"),
@@ -122,8 +195,8 @@ def migrate_supplemental(ticker: str, path: Path):
             rows.append({
                 "ticker": ticker,
                 "period": period,
-                "section": "non_gaap",
-                "subsection": metric,
+                "statement": "non_gaap",
+                "metric": metric,
                 "dimension": "",
                 "value": vobj.get("value"),
                 "unit": vobj.get("unit"),
@@ -131,10 +204,10 @@ def migrate_supplemental(ticker: str, path: Path):
             })
 
     if rows:
-        n = upsert_batch("financial_supplemental", rows)
-        print(f"  [{ticker}] financial_supplemental: {n} rows")
+        n = upsert_batch("financial_facts", rows)
+        print(f"  [{ticker}] facts (supplemental): {n} rows")
     else:
-        print(f"  [{ticker}] financial_supplemental: no data")
+        print(f"  [{ticker}] supplemental: no data")
 
 
 # ── main ─────────────────────────────────────────────────────────────────────
