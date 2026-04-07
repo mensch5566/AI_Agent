@@ -1,0 +1,21 @@
+{
+  "description": "新聞 pipeline 必須先掃描的來源清單。official = 各標的官方新聞頁，industry = 產業媒體。",
+  "official": [
+    { "ticker": "LEU", "url": "https://www.centrusenergy.com/news/" },
+    { "ticker": "TSM", "url": "https://pr.tsmc.com/english/latest-news" },
+    { "ticker": "MU", "url": "https://investors.micron.com/latest-news" },
+    { "ticker": "NVDA", "url": "https://nvidianews.nvidia.com/news" },
+    { "ticker": "GOOGL", "url": "https://abc.xyz/investor/" },
+    { "ticker": "AMZN", "url": "https://ir.aboutamazon.com/overview/default.aspx" },
+    { "ticker": "ORCL", "url": "https://www.oracle.com/news/" },
+    { "ticker": "OKLO", "url": "https://oklo.com/investors/news/default.aspx" },
+    { "ticker": "UUUU", "url": "https://investors.energyfuels.com/news-releases" },
+    { "ticker": "GLW", "url": "https://investor.corning.com/news-and-events/news/default.aspx" },
+    { "ticker": "AMD", "url": "https://ir.amd.com/news-events/press-releases" },
+    { "ticker": "AVGO", "url": "https://www.broadcom.com/company/news" },
+    { "ticker": "QCOM", "url": "https://www.qualcomm.com/news" },
+    { "ticker": "RXRX", "url": "https://ir.recursion.com/news-events/press-releases" },
+    { "ticker": "SNDK", "url": "https://www.sandisk.com/company/newsroom" }
+  ],
+  "industry": []
+}

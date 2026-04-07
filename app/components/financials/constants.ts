@@ -3,6 +3,10 @@
 export type ValMap = Record<string, number | null>;
 export type FinData = any;
 
+export const TICKER_LABELS: Record<string, string> = {
+  "2454": "聯發科",
+};
+
 export const LABEL_MAP: Record<string, string> = {
   revenue: "Revenue",
   cost_of_goods_sold: "Cost of Goods Sold",
@@ -190,10 +194,13 @@ export const isPct = (key: string) =>
 
 export const isEps = (key: string) => key.startsWith("eps");
 
-export function fmtVal(val: number | null | undefined, key: string) {
+export function fmtVal(val: number | null | undefined, key: string, currency?: string) {
   if (val === null || val === undefined) return { text: "—", cls: "null-val" };
   if (isPct(key)) return { text: (val * 100).toFixed(1) + "%", cls: val < 0 ? "negative" : "" };
-  if (isEps(key)) return { text: "$" + val.toFixed(2), cls: val < 0 ? "negative" : "" };
+  if (isEps(key)) {
+    const sym = currency === "TWD" ? "NT$" : "$";
+    return { text: sym + val.toFixed(2), cls: val < 0 ? "negative" : "" };
+  }
   if (key.includes("ratio") || key === "debt_to_equity" || key === "net_debt_to_equity")
     return { text: val.toFixed(2), cls: "" };
   const neg = val < 0;

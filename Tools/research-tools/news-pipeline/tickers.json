@@ -1,0 +1,19 @@
+[
+  { "ticker": "TSM",    "name": "TSMC",          "pool": "in_pool", "market": "US", "rss_query": "TSMC" },
+  { "ticker": "NVDA",   "name": "NVIDIA",        "pool": "in_pool", "market": "US", "rss_query": "NVIDIA" },
+  { "ticker": "SMR",    "name": "NuScale Power", "pool": "in_pool", "market": "US", "rss_query": "NuScale" },
+  { "ticker": "LEU",    "name": "Centrus Energy", "pool": "in_pool", "market": "US", "rss_query": "Centrus" },
+  { "ticker": "MU",     "name": "Micron",        "pool": "in_pool", "market": "US", "rss_query": "Micron" },
+  { "ticker": "GOOGL",  "name": "Alphabet",      "pool": "in_pool", "market": "US", "rss_query": "Google OR Alphabet" },
+  { "ticker": "META",   "name": "Meta Platforms", "pool": "in_pool", "market": "US", "rss_query": "\"Meta Platforms\"" },
+  { "ticker": "MSFT",   "name": "Microsoft",     "pool": "in_pool", "market": "US", "rss_query": "Microsoft" },
+  { "ticker": "AMZN",   "name": "Amazon",        "pool": "in_pool", "market": "US", "rss_query": "Amazon" },
+  { "ticker": "ORCL",   "name": "Oracle",        "pool": "in_pool", "market": "US", "rss_query": "Oracle" },
+  { "ticker": "AVGO",   "name": "Broadcom",      "pool": "observe", "market": "US", "rss_query": "Broadcom" },
+  { "ticker": "SNDK",   "name": "SanDisk",        "pool": "in_pool", "market": "US", "rss_query": "SanDisk" },
+  { "ticker": "GLW",    "name": "Corning",       "pool": "observe", "market": "US", "rss_query": "Corning" },
+  { "ticker": "QCOM",   "name": "Qualcomm",      "pool": "observe", "market": "US", "rss_query": "Qualcomm" },
+  { "ticker": "AMD",    "name": "AMD",           "pool": "observe", "market": "US", "rss_query": "AMD" },
+  { "ticker": "聯發科",  "name": "MediaTek",      "pool": "observe", "market": "TW", "rss_query": "聯發科" },
+  { "ticker": "鴻勁",   "name": "鴻勁精密",       "pool": "observe", "market": "TW", "rss_query": "鴻勁" }
+]

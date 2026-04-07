@@ -15,7 +15,7 @@ import {
 import { Line } from "react-chartjs-2";
 import SegmentPieChart from "@/app/components/financials/SegmentPieChart";
 import {
-  LABEL_MAP, TOTAL_KEYS, RATIO_ORDER, RATIO_DEFINITIONS, CHART_COLORS,
+  TICKER_LABELS, LABEL_MAP, TOTAL_KEYS, RATIO_ORDER, RATIO_DEFINITIONS, CHART_COLORS,
   PERIOD_ORDER_WEIGHT, sortPeriods, isPct, isEps, fmtVal, labelFor,
   getIncompleteFYs,
   type ValMap, type FinData,
@@ -219,7 +219,7 @@ function DataTable({
                       );
                     }
                     const v = row.vals?.[p];
-                    const f = fmtVal(v, row.key);
+                    const f = fmtVal(v, row.key, data.metadata?.currency);
                     return (
                       <td
                         key={p}
@@ -506,7 +506,7 @@ function RatiosPanel({ data }: { data: FinData }) {
                   </td>
                   {periods.map((p) => {
                     const v = (data.financial_ratios[p] as any)?.[key] ?? null;
-                    const f = fmtVal(v, key);
+                    const f = fmtVal(v, key, data.metadata?.currency);
                     return (
                       <td
                         key={p}
@@ -1135,7 +1135,7 @@ export default function Viewer() {
         >
           <option value="">-- Select Ticker --</option>
           {tickers.map((t) => (
-            <option key={t} value={t}>{t}</option>
+            <option key={t} value={t}>{TICKER_LABELS[t] ? `${t} ${TICKER_LABELS[t]}` : t}</option>
           ))}
         </select>
 
@@ -1158,7 +1158,7 @@ export default function Viewer() {
 
         {meta && (
           <div className="ml-auto text-xs text-white/70">
-            {meta.company} | {meta.exchange} | FY End: {meta.fiscal_year_end} | Updated: {meta.last_updated}
+            {meta.company}{meta.exchange ? ` | ${meta.exchange}` : ""} | {meta.currency || "USD"} {meta.unit === "millions_except_per_share" ? "millions" : meta.unit || ""} | Updated: {meta.last_updated}
           </div>
         )}
       </div>

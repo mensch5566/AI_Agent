@@ -3,6 +3,7 @@ export interface NewsItem {
   date: string;
   headline: string;
   summary: string;
+  analysis?: string;
   url?: string;
   ticker?: string;
   sentiment?: "bullish" | "bearish" | "neutral";

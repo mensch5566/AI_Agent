@@ -74,7 +74,14 @@ export default function NewsTable({ items }: NewsTableProps) {
                   <td className="px-3 py-2.5 border-b border-[var(--border)] align-top">
                     {item.url ? <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-[#C02734] hover:underline">{item.headline}</a> : item.headline}
                   </td>
-                  <td className="px-3 py-2.5 border-b border-[var(--border)] align-top break-words text-[0.82rem] leading-relaxed">{cleanSummary(item.summary)}</td>
+                  <td className="px-3 py-2.5 border-b border-[var(--border)] align-top break-words text-[0.82rem] leading-relaxed">
+                    <span>{cleanSummary(item.summary)}</span>
+                    {item.analysis && (
+                      <span className="block mt-1.5 text-[0.78rem] text-[#7A5860] leading-snug border-l-2 border-[#C02734]/30 pl-2">
+                        {item.analysis}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 border-b border-[var(--border)] align-top text-center">
                     {sentimentBadge(item.sentiment)}
                   </td>

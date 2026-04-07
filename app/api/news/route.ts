@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   try {
     let query = supabase
       .from("news_archive")
-      .select("id, date, ticker, headline, summary, url, source, sentiment, parent_id")
+      .select("id, date, ticker, headline, summary, analysis, url, source, sentiment, parent_id")
       .order("date", { ascending: false });
 
     if (ticker && week) {
@@ -81,6 +81,7 @@ export async function GET(req: NextRequest) {
       date: row.date,
       headline: row.headline,
       summary: row.summary ?? "",
+      analysis: row.analysis ?? undefined,
       url: row.url,
       ticker: row.ticker,
       sentiment: row.sentiment,

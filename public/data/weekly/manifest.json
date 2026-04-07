@@ -1,5 +1,21 @@
 [
   {
+    "id": "2454-2026-W15",
+    "ticker": "2454",
+    "company": "聯發科技",
+    "week": "2026-W15",
+    "date": "2026-04-07",
+    "market": "tw"
+  },
+  {
+    "id": "SNDK-2026-W15",
+    "ticker": "SNDK",
+    "company": "Sandisk Corp",
+    "week": "2026-W15",
+    "date": "2026-04-07",
+    "market": "us"
+  },
+  {
     "id": "SNDK-2026-W14",
     "ticker": "SNDK",
     "company": "Sandisk Corp",

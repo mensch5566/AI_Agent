@@ -1,0 +1,64 @@
+{
+  "reportDate": "2026-04-07",
+  "reportWeek": "2026-W15",
+  "ticker": "2454",
+  "company": "聯發科技",
+  "market": "tw",
+  "technical": {
+    "close": null,
+    "weekChangePct": null,
+    "volume": null,
+    "date": "2026-04-04",
+    "ma": {},
+    "macd": {},
+    "bollinger": {},
+    "weeklyLabels": [],
+    "weeklyClose": []
+  },
+  "chips": {
+    "market": "tw",
+    "tw": {
+      "institutional": {
+        "date": "",
+        "foreign_net": null,
+        "trust_net": null,
+        "dealer_net": null,
+        "foreign_5d_net": null
+      },
+      "margin": {
+        "date": "",
+        "margin_balance": null,
+        "short_balance": null,
+        "margin_change": null,
+        "short_change": null
+      }
+    },
+    "us": {
+      "shortInterest": null,
+      "institutionalOwnership": null,
+      "images": []
+    }
+  },
+  "news": [
+    {
+      "date": "2026-04-07",
+      "headline": "Google TPU 工程變更再起，聯發科 ASIC 業務面臨潛在隱憂",
+      "summary": "DIGITIMES 報導，Google 再度對其 TPU 進行工程變更，可能影響聯發科承接的 ASIC 客製設計業務。若工程變更頻繁，聯發科的 ASIC 開發週期與訂單穩定性恐受衝擊。",
+      "link": "https://news.google.com/articles/CBMijgFBVV95cUxOeTBhcThoM1Z6TmZFbnpmSGh4UE9PdXl2T09ESzY0MkZHc1laVzNudzRxNGRMeDVzQXdFTHQ1ZXNLbWVIZUVDa21GaHJxVzJZNHNQdzF5X0JkREtCcHA2QzlFQ01kazA0QjRDMHJkY1pJRjY4ckNMb3dBdGZmOEdlTWpLZUpOcTFKUDhrOEV3",
+      "ticker": "2454",
+      "sentiment": "bearish",
+      "analysis": "若 Google 進一步深化自研 TPU、減少外部 ASIC 委外，聯發科 ASIC 代工機會可能收窄，為業務結構性風險，需追蹤 Google 年度 TPU 投片量。"
+    },
+    {
+      "date": "2026-04-06",
+      "headline": "聯發科、高通對台積電削減手機晶片訂單，AI 大客戶補位填補產能缺口",
+      "summary": "DIGITIMES 報導，聯發科與高通因手機市場需求疲軟，已削減對台積電的晶片生產訂單；台積電表示 AI 相關大客戶訂單補充空缺，整體產能利用率仍維持高位。此消息對聯發科短期需求前景構成壓力。",
+      "link": "https://news.google.com/articles/CBMijgFBVV95cUxPOGNFM21mRmxrd2NHbkFReHNLV21Ra3pzY2lDVEtSZmVFSjJjR1E2RFl5emhLVFJJUExUOHhDUEowdkJvLU5tTFhZUVY0R1dLeVRWNS1IOGRoV0tXUVlacHR6VVp3NzRtMFRsODgxckNIRHZCSFhZTHVZdkEzWWVHZGV4dkVDX0kxekVaUkdB",
+      "ticker": "2454",
+      "sentiment": "bearish",
+      "analysis": "手機市場需求走弱導致聯發科削減訂單，AI 大客戶雖補位台積電，但不直接惠及聯發科，手機 SoC 業務承壓訊號明確。"
+    }
+  ],
+  "newsAnalysis": [],
+  "debug": {}
+}

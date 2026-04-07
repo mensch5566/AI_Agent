@@ -26,15 +26,11 @@ Investment_Data/macro/timeseries.json
 Investment_Data/macro/backups/
 
 # ── Claude internal ───────────────────────────────────
-.claude/
+.claude/settings.local.json
+.claude/worktrees/
 
-# ── 臨時檔案（Excel、CSV 等工作產出）─────────────────
+# ── 臨時檔案 ──────────────────────────────────────────
 scratch/
-
-# ── 不進 repo 的目錄 ──────────────────────────────────
-Archive/
-Claude_Project/
-Tools/
-UI_Templates/
-AI_Agent.code-workspace
 tsconfig.tsbuildinfo
+AI_Agent.code-workspace
+UI_Templates/

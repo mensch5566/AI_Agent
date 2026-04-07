@@ -12,8 +12,60 @@
     "ma": {},
     "macd": {},
     "bollinger": {},
-    "weeklyLabels": ["2025-09-29","2025-10-06","2025-10-13","2025-10-20","2025-10-27","2025-11-03","2025-11-10","2025-11-17","2025-11-24","2025-12-02","2025-12-09","2025-12-16","2025-12-23","2025-12-31","2026-01-08","2026-01-15","2026-01-23","2026-01-30","2026-02-06","2026-02-13","2026-02-23","2026-03-02","2026-03-09","2026-03-16","2026-03-23"],
-    "weeklyClose": [113.5,121.17,134.61,148.04,176.49,207.01,267.95,265.88,226.96,205.35,219.46,209.31,244.9,237.38,334.54,409.24,473.83,576.25,597.95,626.56,666.49,619.08,588.73,703.63,702.49]
+    "weeklyLabels": [
+      "2025-09-29",
+      "2025-10-06",
+      "2025-10-13",
+      "2025-10-20",
+      "2025-10-27",
+      "2025-11-03",
+      "2025-11-10",
+      "2025-11-17",
+      "2025-11-24",
+      "2025-12-02",
+      "2025-12-09",
+      "2025-12-16",
+      "2025-12-23",
+      "2025-12-31",
+      "2026-01-08",
+      "2026-01-15",
+      "2026-01-23",
+      "2026-01-30",
+      "2026-02-06",
+      "2026-02-13",
+      "2026-02-23",
+      "2026-03-02",
+      "2026-03-09",
+      "2026-03-16",
+      "2026-03-23"
+    ],
+    "weeklyClose": [
+      113.5,
+      121.17,
+      134.61,
+      148.04,
+      176.49,
+      207.01,
+      267.95,
+      265.88,
+      226.96,
+      205.35,
+      219.46,
+      209.31,
+      244.9,
+      237.38,
+      334.54,
+      409.24,
+      473.83,
+      576.25,
+      597.95,
+      626.56,
+      666.49,
+      619.08,
+      588.73,
+      703.63,
+      702.49
+    ]
   },
   "chips": {
     "market": "us",
@@ -37,9 +89,18 @@
       "shortInterest": null,
       "institutionalOwnership": null,
       "images": [
-        { "src": "/images/weekly/SNDK-2026-W14/13dg-filings.png", "label": "13D/G Filings（機構持股申報）" },
-        { "src": "/images/weekly/SNDK-2026-W14/13f-filings.png", "label": "13F Filings（機構買賣明細）" },
-        { "src": "/images/weekly/SNDK-2026-W14/put-call-ratio.png", "label": "Put/Call Ratio by Expiry" }
+        {
+          "src": "/images/weekly/SNDK-2026-W14/13dg-filings.png",
+          "label": "13D/G Filings（機構持股申報）"
+        },
+        {
+          "src": "/images/weekly/SNDK-2026-W14/13f-filings.png",
+          "label": "13F Filings（機構買賣明細）"
+        },
+        {
+          "src": "/images/weekly/SNDK-2026-W14/put-call-ratio.png",
+          "label": "Put/Call Ratio by Expiry"
+        }
       ]
     }
   },
@@ -50,7 +111,8 @@
       "summary": "SanDisk 宣布向南亞科技（Nanya Technology）投資 10 億美元，透過私募取得約 3.9% 持股（139M 股，30 日均價打 85 折），並簽訂多年期 DRAM 供貨協議。投資金額佔現金部位約 67%，短期現金壓力大。",
       "link": "https://247wallst.com/investing/2026/03/25/sandisk-slips-6-as-a-1-billion-investment-in-nanya-technology-divides-investors/",
       "ticker": "SNDK",
-      "sentiment": "neutral"
+      "sentiment": "neutral",
+      "analysis": "南亞科技入股擴大記憶體供應鏈，有助於減少對鎧俠的依賴，部分緩解供應自主性風險。"
     },
     {
       "date": "2026-03-27",
@@ -58,7 +120,8 @@
       "summary": "Sony 宣布暫停 CFexpress Type A/B 及 SD 記憶卡的訂單接收，原因是全球半導體（記憶體）短缺。Sony 是首家因短缺而直接停售記憶卡的大廠，驗證 NAND 供不應求的核心投資敘事。",
       "link": "https://petapixel.com/2026/03/27/sony-shuts-down-nearly-its-entire-memory-card-business-due-to-ssd-shortage/",
       "ticker": "SNDK",
-      "sentiment": "bullish"
+      "sentiment": "bullish",
+      "analysis": "全球記憶卡短缺印證 NAND 供需失衡不只限於企業端，消費端也出現缺貨，正向強化 thesis。"
     },
     {
       "date": "2026-03-26",
@@ -66,7 +129,8 @@
       "summary": "Google 發表 TurboQuant 壓縮技術，可將 LLM 記憶體需求降低 6 倍。記憶體股全面下跌：SNDK -8.35%、MU -4.82%、WDC -4.7%。Morgan Stanley 維持 MU 和 SNDK Overweight。",
       "link": "https://www.cnbc.com/2026/03/26/google-ai-turboquant-memory-chip-stocks-samsung-micron.html",
       "ticker": "SNDK",
-      "sentiment": "bearish"
+      "sentiment": "bearish",
+      "analysis": "TurboQuant 引發的 8.35% 暴跌是最大事件風險，但後續 Bernstein 確認 NAND 影響有限，此為 thesis 中的重要負面測試。"
     }
   ],
   "newsAnalysis": [
@@ -74,29 +138,71 @@
       "title": "SanDisk 投資 $10 億入股南亞科技，確保 DRAM 供應",
       "points": [],
       "table": {
-        "headers": ["項目", "金額", "備註"],
+        "headers": [
+          "項目",
+          "金額",
+          "備註"
+        ],
         "rows": [
-          ["投資金額", "$1.0B", "私募認購 139M 股（3.9% 持股），85 折，三年鎖定"],
-          ["FY26 Q2 現金部位", "$1.539B", "截至 2026/1/2"],
-          ["FY26 Q2 淨現金", "$0.936B", "現金 $1.539B − 債務 $0.603B"],
-          ["FY26 Q2 Adj. FCF", "$0.843B/季", "約 1.2 季即可回補"],
-          ["同輪認購方", "$2.5B（總額）", "SanDisk、Kioxia、Solidigm、Cisco"]
+          [
+            "投資金額",
+            "$1.0B",
+            "私募認購 139M 股（3.9% 持股），85 折，三年鎖定"
+          ],
+          [
+            "FY26 Q2 現金部位",
+            "$1.539B",
+            "截至 2026/1/2"
+          ],
+          [
+            "FY26 Q2 淨現金",
+            "$0.936B",
+            "現金 $1.539B − 債務 $0.603B"
+          ],
+          [
+            "FY26 Q2 Adj. FCF",
+            "$0.843B/季",
+            "約 1.2 季即可回補"
+          ],
+          [
+            "同輪認購方",
+            "$2.5B（總額）",
+            "SanDisk、Kioxia、Solidigm、Cisco"
+          ]
         ]
       },
       "charts": [
         {
           "type": "doughnut",
           "title": "投資佔現金比（65%）",
-          "labels": ["投資金額 $1.0B", "剩餘現金 $0.539B"],
-          "values": [1.0, 0.539],
-          "colors": ["#C02734", "#E8D5D5"]
+          "labels": [
+            "投資金額 $1.0B",
+            "剩餘現金 $0.539B"
+          ],
+          "values": [
+            1.0,
+            0.539
+          ],
+          "colors": [
+            "#C02734",
+            "#E8D5D5"
+          ]
         },
         {
           "type": "doughnut",
           "title": "投資佔淨現金比（107%）",
-          "labels": ["投資金額 $1.0B", "淨現金缺口 −$0.064B"],
-          "values": [1.0, 0.064],
-          "colors": ["#C02734", "#F5E6E6"]
+          "labels": [
+            "投資金額 $1.0B",
+            "淨現金缺口 −$0.064B"
+          ],
+          "values": [
+            1.0,
+            0.064
+          ],
+          "colors": [
+            "#C02734",
+            "#F5E6E6"
+          ]
         }
       ]
     },
@@ -106,7 +212,10 @@
         "TurboQuant 只會影響 GPU 顯存（VRAM），不會影響系統 DRAM 或 NAND。"
       ],
       "sources": [
-        { "label": "TurboQuant 官方技術文件", "url": "https://turboquant.net/zh#core" }
+        {
+          "label": "TurboQuant 官方技術文件",
+          "url": "https://turboquant.net/zh#core"
+        }
       ]
     }
   ],

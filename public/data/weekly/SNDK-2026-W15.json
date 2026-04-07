@@ -1,0 +1,82 @@
+{
+  "reportDate": "2026-04-07",
+  "reportWeek": "2026-W15",
+  "ticker": "SNDK",
+  "company": "Sandisk Corp",
+  "market": "us",
+  "technical": {
+    "close": null,
+    "weekChangePct": null,
+    "volume": null,
+    "date": "2026-04-04",
+    "ma": {},
+    "macd": {},
+    "bollinger": {},
+    "weeklyLabels": [],
+    "weeklyClose": []
+  },
+  "chips": {
+    "market": "us",
+    "tw": {
+      "institutional": {
+        "date": "",
+        "foreign_net": null,
+        "trust_net": null,
+        "dealer_net": null,
+        "foreign_5d_net": null
+      },
+      "margin": {
+        "date": "",
+        "margin_balance": null,
+        "short_balance": null,
+        "margin_change": null,
+        "short_change": null
+      }
+    },
+    "us": {
+      "shortInterest": null,
+      "institutionalOwnership": null,
+      "images": [
+        {
+          "src": "/images/weekly/SNDK-2026-W15/13dg-filings.png",
+          "label": "13D/G Filings（機構持股申報）"
+        },
+        {
+          "src": "/images/weekly/SNDK-2026-W15/13f-filings.png",
+          "label": "13F Filings（機構買賣明細）"
+        }
+      ]
+    }
+  },
+  "news": [
+    {
+      "date": "2026-04-06",
+      "headline": "Bernstein：TurboQuant 引發 NAND 股崩跌後，SanDisk 出現進場良機",
+      "summary": "Bernstein 發表報告指出，Google TurboQuant 壓縮演算法消息引發的記憶體股暴跌（主要影響 HBM/DRAM）對 NAND 的實質衝擊有限，認為 SanDisk、Seagate、WDC 的股價修正為優質進場機會。",
+      "link": "https://news.google.com/search?q=Seagate+SanDisk+WDC+entry+points+TurboQuant+plunge+Bernstein&hl=en-US&gl=US&ceid=US:en",
+      "ticker": "SNDK",
+      "sentiment": "bullish",
+      "analysis": "再度確認 TurboQuant 壓縮技術對 NAND 衝擊有限，股價修正反而是進場機會，最大市場疑慮獲機構解除。"
+    },
+    {
+      "date": "2026-04-01",
+      "headline": "Morgan Stanley 上調 SanDisk 目標價，維持加碼評級",
+      "summary": "Morgan Stanley 上調 SanDisk 目標價，維持 Overweight 評級，看好記憶體超級週期延續，SNDK 受惠 NAND 價格上漲。",
+      "link": "https://news.google.com/articles/CBMiiwNBVV95cUxNNHAxSU5Fam8xcERaUHFYT1NudVpQY1RhM1kwREN3Z2dhRVZTcGMxVERRVGdRUm1iR0lzX0ViWmhrLTBNVTFHOWhGbGUwVFUwMV8zYjRqYUNDOTBEQTJPZHRDOWl3b2FORG16eDNzb0xya1o4a29qaDA4NGJiWmdhUmtuZ3o0dl92cjhENGMtaTZyWFNqc3BfenRmWjR0MEJOdTBpWHRXSkhPaXQ0R2ZSeHJIUlB1ellpVHduQVdjVHR3T2ZpNXk3bERnTFdxbzd2UXREeWhMdkxSdFNDMTZDUWNMN3NvTUtvbU9HaGx6TTlNWmpjakd2LTZuTklETE9yR3g0OXI5MTlEREZMSTBTUTVINlB4N3JWaU1mMUZKWE16ZEdzLWZmZTh5ZlVBVFU0Z2JPTUZva0d2RnhLUS03ZldQZkRtX3lVOG9fWm5YUnRiQ2daelpxc2g4V3BUcEtlNGdnV3NPWDhicVRyWmtmVzJnVFVrVDlqQXdjQU55Y1k3RVFnRHZobEZUYw",
+      "ticker": "SNDK",
+      "sentiment": "bullish",
+      "analysis": "大行維持 Overweight 並上調目標價，機構投資者對 NAND 超級週期延續信心確立，支撐多頭格局。"
+    },
+    {
+      "date": "2026-04-01",
+      "headline": "SanDisk 策略轉型：創紀錄獲利伴隨大股東退出",
+      "summary": "SanDisk 在創紀錄獲利的同時，面臨主要股東大幅減持。策略上正從純 NAND 轉向企業級儲存與 HBF 技術佈局。",
+      "link": "https://www.fool.com/investing/2026/04/06/stan-druckenmiller-sell-sandisk-stock-buy-ai-stock/",
+      "ticker": "SNDK",
+      "sentiment": "neutral",
+      "analysis": "大股東退出雖需留意持股結構變化，但轉型方向（企業級 eSSD + HBF）符合 thesis 延伸，中性偏觀察。"
+    }
+  ],
+  "newsAnalysis": [],
+  "debug": {}
+}

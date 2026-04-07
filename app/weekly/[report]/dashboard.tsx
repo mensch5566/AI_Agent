@@ -331,6 +331,7 @@ export default function Dashboard({ data }: { data: ReportData }) {
     date: n.date,
     headline: n.headline || n.title || "",
     summary: n.summary || "",
+    analysis: (n as { analysis?: string }).analysis,
     url: n.link,
     ticker: n.ticker,
     sentiment: n.sentiment as NewsItem["sentiment"],
@@ -654,7 +655,7 @@ export default function Dashboard({ data }: { data: ReportData }) {
             />
           </div>
 
-          <TradingViewChart symbol={`NASDAQ:${data.ticker}`} />
+          <TradingViewChart symbol={data.market === "tw" ? `TWSE:${data.ticker}` : `NASDAQ:${data.ticker}`} />
 
           {renderDebugNotes("sec-technical")}
         </div>

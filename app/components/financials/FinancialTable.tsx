@@ -367,7 +367,7 @@ export default function FinancialTable({
                       );
                     }
                     const v = row.vals?.[p];
-                    const f = fmtVal(v, row.key);
+                    const f = fmtVal(v, row.key, rawData?.metadata?.currency);
                     return (
                       <td
                         key={p}
