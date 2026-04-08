@@ -120,7 +120,7 @@ function DataTable({
             const bgBase = isEpsRow  ? "bg-[#1f4e79]"
               : isTotal              ? "bg-[var(--bg-highlight)]"
               : isSubtotal           ? "bg-amber-50 dark:bg-amber-950/30"
-              : isRatioRow           ? "bg-[var(--bg-subtle)]"
+              : isRatioRow           ? "bg-[var(--bg-card)]"
               : "bg-[var(--bg-card)]";
             const textCls = isEpsRow ? "font-bold text-white"
               : isTotal              ? "font-bold text-[#7b3f00]"
