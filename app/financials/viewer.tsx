@@ -115,8 +115,18 @@ function DataTable({
             }
             const isTotal = TOTAL_KEYS.has(row.key);
             const isSubtotal = SUBTOTAL_KEYS.has(row.key);
-            const bgBase = isTotal ? "bg-[var(--bg-highlight)]" : isSubtotal ? "bg-amber-50 dark:bg-amber-950/30" : i % 2 === 0 ? "bg-[var(--bg-subtle)]" : "bg-[var(--bg-card)]";
-            const textCls = isTotal ? "font-bold text-[#7b3f00]" : isSubtotal ? "font-semibold text-amber-800 dark:text-amber-300" : "";
+            const isRatioRow = isPct(row.key) && !isTotal;
+            const isEpsRow = isEps(row.key);
+            const bgBase = isEpsRow  ? "bg-[#1f4e79]"
+              : isTotal              ? "bg-[var(--bg-highlight)]"
+              : isSubtotal           ? "bg-amber-50 dark:bg-amber-950/30"
+              : isRatioRow           ? "bg-[#f0f0f0] dark:bg-[#2a2a2a]"
+              : "bg-[var(--bg-card)]";
+            const textCls = isEpsRow ? "font-bold text-white"
+              : isTotal              ? "font-bold text-[#7b3f00]"
+              : isSubtotal           ? "font-semibold text-amber-800 dark:text-amber-300"
+              : isRatioRow           ? "text-[#aaa] dark:text-[#666]"
+              : "";
             const skipGrowth = isGrowth && skipGrowthForKey(row.key);
             return (
               <tr key={row.key + i}>
