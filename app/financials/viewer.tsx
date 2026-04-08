@@ -59,7 +59,7 @@ function GrowthToggle({ mode, setMode, showQoQ = true }: { mode: GrowthMode; set
 /* ── Row types for table rendering ── */
 type TableRow =
   | { type: "section"; label: string }
-  | { type: "data"; key: string; label: string; vals: ValMap };
+  | { type: "data"; key: string; label: React.ReactNode; vals: ValMap; indent?: boolean };
 
 /* ── Generic data table ── */
 function DataTable({
@@ -120,7 +120,7 @@ function DataTable({
             const skipGrowth = isGrowth && skipGrowthForKey(row.key);
             return (
               <tr key={row.key + i}>
-                <td className={`sticky left-0 z-[5] border border-[var(--border)] px-3 py-1.5 text-left font-medium ${bgBase} ${textCls}`}>
+                <td className={`sticky left-0 z-[5] border border-[var(--border)] py-1.5 text-left font-medium ${bgBase} ${textCls} ${row.indent ? "pl-8 pr-3 italic text-[#555]" : "px-3"}`}>
                   {row.label}
                 </td>
                 {periods.map((p) => {
@@ -180,9 +180,20 @@ const IS_CHART_METRICS = [
   { key: "net_income", label: "Net Income" },
 ];
 
+// Sub-items: metrics that are sub-components of another line, shown as indented toggles
+const IS_SUB_ITEMS: Record<string, string[]> = {
+  other_nonoperating_income_expense: ["equity_method_investments", "equity_in_net_income_of_investees"],
+};
+
 function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "quarterly" | "annual" }) {
   const [growthMode, setGrowthMode] = useState<GrowthMode>("value");
   useEffect(() => { if (viewMode === "annual" && growthMode === "qoq") setGrowthMode("value"); }, [viewMode]);
+  const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
+  const toggleSub = (key: string) => setExpandedSubs((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
 
   const periods = store.periodsIS();
   const isMetrics = store.metrics("income_statement");
@@ -190,12 +201,32 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
     isMetrics.filter((m) => !IS_PCT_EXCLUDE.has(m) && !IS_HIDDEN.has(m)),
     IS_METRIC_ORDER,
   );
-  const rows: TableRow[] = metrics.map((key) => ({
-    type: "data" as const,
-    key,
-    label: labelFor(key),
-    vals: store.valMap("income_statement", key),
-  }));
+  const rows: TableRow[] = metrics.map((key) => {
+    const subKeys = (IS_SUB_ITEMS[key] ?? []).filter((m) => isMetrics.includes(m));
+    const hasSubItems = subKeys.length > 0;
+    const isExpanded = expandedSubs.has(key);
+    const label = hasSubItems ? (
+      <button
+        onClick={() => toggleSub(key)}
+        className="flex items-center gap-1 text-left hover:text-[#1f4e79]"
+      >
+        <span className="text-[10px] text-[#7f8c8d]">{isExpanded ? "▼" : "▶"}</span>
+        {labelFor(key)}
+      </button>
+    ) : labelFor(key);
+    return { type: "data" as const, key, label, vals: store.valMap("income_statement", key) };
+  });
+
+  // Inject sub-item rows after parent rows (only when expanded)
+  for (const [parentKey, subKeys] of Object.entries(IS_SUB_ITEMS)) {
+    if (!expandedSubs.has(parentKey)) continue;
+    const parentIdx = rows.findIndex((r) => r.type === "data" && r.key === parentKey);
+    if (parentIdx < 0) continue;
+    const toInsert: TableRow[] = subKeys
+      .filter((m) => isMetrics.includes(m))
+      .map((m) => ({ type: "data" as const, key: m, label: labelFor(m), vals: store.valMap("income_statement", m), indent: true }));
+    rows.splice(parentIdx + 1, 0, ...toInsert);
+  }
 
   // Synthetic total: sources are [metric, sign] pairs — sign handles stored-positive expenses
   const syntheticSum = (sources: [string, number][]): Record<string, number | null> => {
