@@ -197,8 +197,9 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
 
   const periods = store.periodsIS();
   const isMetrics = store.metrics("income_statement");
+  const IS_SUB_SET = new Set(Object.values(IS_SUB_ITEMS).flat());
   const metrics = sortMetrics(
-    isMetrics.filter((m) => !IS_PCT_EXCLUDE.has(m) && !IS_HIDDEN.has(m)),
+    isMetrics.filter((m) => !IS_PCT_EXCLUDE.has(m) && !IS_HIDDEN.has(m) && !IS_SUB_SET.has(m)),
     IS_METRIC_ORDER,
   );
   const rows: TableRow[] = metrics.map((key) => {
