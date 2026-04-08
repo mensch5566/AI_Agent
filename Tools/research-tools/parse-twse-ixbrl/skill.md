@@ -1,99 +1,81 @@
 # parse-twse-ixbrl — 台股 XBRL 財務數據解析
 
-用於解析台灣股票交易所 (TWSE) 的 Inline XBRL (iXBRL) 財務報表，自動提取關鍵指標並驗證數據。
+從本地 TWSE XBRL HTML 解析財務數據，寫入 Supabase。完整管道的第一步。
 
 ## 使用方式
 
 ```
-/parse-twse-ixbrl <ticker> [file_path]
+/parse-twse-ixbrl <ticker> [--skip-verify] [--notebook <name>] [periods...]
 ```
 
 ## 參數
 
-- **ticker** (必須)：股票代碼，如 `2454` (聯發科)
-- **file_path** (可選)：XBRL 文件路徑。若不提供，會提示用戶指定或自動查找下載目錄
+- **ticker**（必須）：股票代號，如 `2454`（聯發科）
+- **--notebook**（建議）：NotebookLM 筆記本名稱，用於驗證 XBRL 數據正確性
+- **--skip-verify**（可選）：跳過 NotebookLM 驗證，直接寫入
+- **periods**（可選）：指定期別如 `Q4_FY2025`，預設解析所有本地找到的檔案
 
-## 工作流程
+## 數據管道流程
 
-### Step 1: 驗證輸入
-- 檢查 ticker 格式（4 位數）
-- 確認 XBRL 文件存在
-- 若文件不存在，提示用戶從 TWSE 下載：
-  ```
-  https://mopsov.twse.com.tw/server-java/t164sb01?step=1&CO_ID=<ticker>&SYEAR=2025&SSEASON=4
-  ```
-
-### Step 2: 解析 iXBRL
-- 用 lxml 解析 HTML 中的表格
-- 從資產負債表、損益表、現金流量表提取指標：
-  - **資產負債表**：流動資產、總資產、流動負債、總負債、權益
-  - **損益表**：營業收入、營業毛利、營業利益、稅前利潤、淨利
-  - **現金流量**：營業現金流、投資現金流、融資現金流
-
-### Step 3: 與 Supabase 比對
-- 查詢 financial_facts 表中該 ticker 的最新期別數據
-- 自動處理單位差異（XBRL 用基本單位，Supabase 用千位）
-- 輸出匹配/不匹配的統計
-
-### Step 4: 輸出驗證報告
 ```
-✅ 驗證成功：5 項匹配
-❌ 需調查：2 項不匹配
-ⓘ 未找到：1 項指標
+TWSE HTML 檔案（手動下載）
+    ↓ batch_parse.py
+解析 iXBRL HTML → 提取 8 項 GAAP 原始指標
+    ↓ NotebookLM 驗證（需提供筆記本名稱）
+比對 XBRL 數值 vs NotebookLM，差異 > 1% 列出人工複審
+    ↓ 確認後寫入
+financial_facts   → source = 'XBRL_TWSE'（8 項 GAAP 原始指標）
+financial_metrics → source = 'COMPUTED_FROM_XBRL_TWSE'（7 項派生比率）
+    ↓ 接著執行
+/supplement-financials → 補足 Segments、Non-GAAP（寫入 financial_supplement）
 ```
+
+## 寫入的指標
+
+**financial_facts（XBRL 原始）**
+
+| 指標 | 說明 |
+|---|---|
+| operating_revenue | 營業收入 |
+| income_before_taxes | 稅前淨利 |
+| net_income | 本期淨利 |
+| total_current_assets | 流動資產 |
+| total_assets | 資產總計 |
+| total_current_liabilities | 流動負債 |
+| total_liabilities | 負債總計 |
+| total_equity | 權益總額 |
+
+**financial_metrics（派生計算）**
+
+| 指標 | 公式 |
+|---|---|
+| current_ratio | 流動資產 / 流動負債 |
+| debt_to_equity | 負債 / 權益 |
+| equity_ratio | 權益 / 資產 |
+| net_margin_pct | 淨利 / 營收 × 100 |
+| roe | 淨利 / 權益 × 100 |
+| roa | 淨利 / 資產 × 100 |
+| pretax_margin | 稅前淨利 / 營收 × 100 |
 
 ## 範例
 
-**用法 1：指定文件路徑**
 ```
-/parse-twse-ixbrl 2454 /Users/mensch5566/Downloads/tifrs-fr1-m1-ci-cr-2454-2025Q4.html
-```
-
-**用法 2：自動查找下載目錄**
-```
-/parse-twse-ixbrl 2454
-```
-（會自動在 `~/Downloads` 中尋找該 ticker 的最新 XBRL 文件）
-
-## 輸出
-
-- 列出所有提取的指標及數值
-- 與 Supabase 的比對結果
-- 驗證統計（匹配數、差異數、未找到數）
-- 如有單位不匹配，自動提示需轉換
-
-## 注意事項
-
-- 首次使用前需確保 `scripts/parse_twse_ixbrl.py` 存在
-- Supabase 連線需要有效的 API key（已配置在環境變數）
-- XBRL 檔案通常在公司年報公佈後 2-3 天上線 TWSE 網站
-- 單位轉換：XBRL 基本單位 ÷ 1,000 = Supabase 千位單位
-
-## 實作細節
-
-**Python 脚本** (`parse_ixbrl.py`)：
-- 自動化參數化 XBRL 解析
-- 從 HTML 表格提取財務數據
-- 與 Supabase 自動比對並驗證
-- 支持單位轉換（XBRL 基本單位 → Supabase 千位單位）
-- 優先匹配中文標籤（避免英文歧義）
-
-**入口點** (`run.sh`)：
-- 簡單的 bash 包裝，調用 Python 脚本
-- 支援直接傳遞參數
-
-## 驗證結果示例
-
-```
-✅ 5 個匹配（資產負債表）
-❌ 2 個差異（損益表）
-ⓘ 1 個未找到（指標不在 DB）
+/parse-twse-ixbrl 2454 --notebook 聯發科研究筆記
+/parse-twse-ixbrl 2454 --notebook 聯發科研究筆記 Q4_FY2025
+/parse-twse-ixbrl 2454 --skip-verify
 ```
 
-## 後續改進方向
+## 執行腳本
 
-- [ ] 自動從 TWSE API 下載最新 XBRL 文件
-- [ ] 支援多家公司批量解析
-- [ ] 匯出驗證報告為 CSV/Excel
-- [ ] 建立 XBRL 歷史追蹤表
-- [ ] 添加更多財務指標到 Supabase 的 financial_facts 表
+```bash
+python3 batch_parse.py <ticker> [--skip-verify] [--notebook <name>] [periods...]
+```
+
+檔案來源搜尋順序：
+1. `~/Downloads/tifrs-fr1-m1-ci-cr-{ticker}-*.html`
+2. `~/Library/Mobile Documents/iCloud~md~obsidian/.../Semiconductors/` 遞迴搜尋
+
+## NotebookLM 驗證說明
+
+執行時若未提供 `--notebook`，會互動式詢問筆記本名稱。
+筆記本名稱每次都需提供，因為筆記內容常變動，不應硬編碼。

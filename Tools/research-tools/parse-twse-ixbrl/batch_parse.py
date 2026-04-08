@@ -143,16 +143,21 @@ def period_to_end_date(period: str) -> str:
     return f"{year}-{month:02d}-{last_day}"
 
 
-def query_notebooklm_for_verification(ticker: str, period: str, parsed: dict) -> list:
+def query_notebooklm_for_verification(ticker: str, period: str, parsed: dict, notebook_name: str = None) -> list:
     """
     從 NotebookLM 查詢該 ticker 的對應期別數據，回傳差異列表。
-    目前為 stub，待 NotebookLM notebook ID 整合後啟用。
-    回傳：[(metric, xbrl_value, nb_value, diff_pct), ...]
+    需要 Claude Code agent 透過 NotebookLM MCP 執行，此函式為接口定義。
+
+    參數：
+      notebook_name：筆記本名稱（如「聯發科研究筆記」），由用戶在執行時提供
+    回傳：
+      [(metric, xbrl_value, nb_value, diff_pct), ...]
     """
-    # TODO: 整合 NotebookLM
-    # 1. 找出對應 ticker 的 notebook ID（從 memory 或 config）
-    # 2. 用 notebook_query 查詢指定期別的各項財務數字
-    # 3. 逐一比對，記錄差異 > 1% 的項目
+    # 由 Claude Code agent 執行時：
+    # 1. 用 notebook_name 呼叫 notebooklm.notebook_list() 找到對應 notebook_id
+    # 2. 呼叫 notebooklm.notebook_query(id, f"{ticker} {period} 各項財務指標")
+    # 3. 解析回傳，提取各 metric 的數值，與 parsed 逐一比對
+    # 4. 回傳差異 > 1% 的項目
     return []
 
 
@@ -194,7 +199,7 @@ def write_financial_metrics(ticker: str, period: str, period_end: str, computed:
     return len(records)
 
 
-def parse_and_insert(ticker: str, period: str, file_path: str, skip_verify: bool = False) -> bool:
+def parse_and_insert(ticker: str, period: str, file_path: str, skip_verify: bool = False, notebook_name: str = None) -> bool:
     """完整管道：解析 → 驗證 → 寫入 facts → 寫入 metrics"""
     print(f"\n📄 {period}")
 
@@ -213,7 +218,7 @@ def parse_and_insert(ticker: str, period: str, file_path: str, skip_verify: bool
 
     # Step 2: NotebookLM 驗證（有差異則人工複審）
     if not skip_verify:
-        diffs = query_notebooklm_for_verification(ticker, period, facts)
+        diffs = query_notebooklm_for_verification(ticker, period, facts, notebook_name)
         if diffs:
             print(f"  ⚠️  NotebookLM 差異 {len(diffs)} 項（需人工複審）:")
             for metric, xbrl_val, nb_val, diff_pct in diffs:
@@ -239,17 +244,40 @@ def parse_and_insert(ticker: str, period: str, file_path: str, skip_verify: bool
 
 def main():
     if len(sys.argv) < 2:
-        print("用法: python3 batch_parse.py <ticker> [--skip-verify] [periods...]")
+        print("用法: python3 batch_parse.py <ticker> [--skip-verify] [--notebook <name>] [periods...]")
         print("\n範例:")
-        print("  python3 batch_parse.py 2454                    # 解析所有本地檔案")
-        print("  python3 batch_parse.py 2454 --skip-verify      # 跳過 NotebookLM 驗證")
-        print("  python3 batch_parse.py 2454 Q4_FY2025          # 只解析指定期別")
+        print("  python3 batch_parse.py 2454                              # 解析所有本地檔案（會詢問筆記本名稱）")
+        print("  python3 batch_parse.py 2454 --skip-verify               # 跳過 NotebookLM 驗證")
+        print("  python3 batch_parse.py 2454 --notebook 聯發科研究筆記   # 指定筆記本名稱")
+        print("  python3 batch_parse.py 2454 Q4_FY2025                   # 只解析指定期別")
         sys.exit(1)
 
     ticker = sys.argv[1]
     args = sys.argv[2:]
     skip_verify = '--skip-verify' in args
-    requested_periods = [a for a in args if a != '--skip-verify']
+
+    # 解析 --notebook 參數
+    notebook_name = None
+    if '--notebook' in args:
+        nb_idx = args.index('--notebook')
+        if nb_idx + 1 < len(args):
+            notebook_name = args[nb_idx + 1]
+            args = [a for i, a in enumerate(args) if i != nb_idx and i != nb_idx + 1]
+
+    # 若未提供筆記本且未跳過驗證，互動式詢問
+    if not skip_verify and notebook_name is None:
+        print("📚 NotebookLM 驗證：請提供筆記本名稱")
+        print("   （直接按 Enter 跳過驗證）")
+        try:
+            name = input("   筆記本名稱: ").strip()
+            if name:
+                notebook_name = name
+            else:
+                skip_verify = True
+        except (EOFError, KeyboardInterrupt):
+            skip_verify = True
+
+    requested_periods = [a for a in args if not a.startswith('--')]
 
     files_by_period = find_local_xbrl_files(ticker)
     if not files_by_period:
@@ -270,7 +298,7 @@ def main():
 
     success = 0
     for period in sorted(periods_to_parse.keys(), reverse=True):
-        if parse_and_insert(ticker, period, periods_to_parse[period], skip_verify):
+        if parse_and_insert(ticker, period, periods_to_parse[period], skip_verify, notebook_name):
             success += 1
         time.sleep(0.3)
 
