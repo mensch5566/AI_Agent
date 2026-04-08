@@ -139,6 +139,9 @@ export const LABEL_MAP: Record<string, string> = {
 
 // ── Canonical display orders ────────────────────────────────────────────────
 
+// Metrics to exclude from IS table (effective_tax_rate lives in Financial Ratios only)
+export const IS_PCT_EXCLUDE = new Set(["effective_tax_rate"]);
+
 export const IS_METRIC_ORDER = [
   "revenue",
   "cost_of_goods_sold", "cost_of_goods_and_services_sold",
@@ -151,7 +154,7 @@ export const IS_METRIC_ORDER = [
   "other_nonoperating_income_expense", "nonoperating_income_expense_total",
   "equity_method_investments", "equity_in_net_income_of_investees",
   "income_before_taxes",
-  "income_tax_expense", "effective_tax_rate",
+  "income_tax_expense",
   "net_income", "net_margin_pct",
   "eps_basic", "eps_diluted",
   "shares_basic_millions", "shares_diluted_millions",
@@ -236,27 +239,47 @@ export const TOTAL_KEYS = new Set([
   "free_cash_flow", "ending_cash", "current_ratio", "eps_diluted",
 ]);
 
-export const RATIO_ORDER = [
-  "gross_margin_pct", "operating_margin_pct", "net_margin_pct",
-  "roe", "roa", "asset_turnover", "interest_coverage", "fcf_margin_pct",
-  "current_ratio", "quick_ratio", "debt_to_equity", "net_debt_to_equity",
-  "equity_ratio",
+export const RATIO_CATEGORIES: { label: string; metrics: string[] }[] = [
+  {
+    label: "Profitability",
+    metrics: ["gross_margin_pct", "operating_margin_pct", "net_margin_pct", "fcf_margin_pct", "roe", "roa"],
+  },
+  {
+    label: "Liquidity",
+    metrics: ["current_ratio", "quick_ratio"],
+  },
+  {
+    label: "Leverage",
+    metrics: ["debt_to_equity", "net_debt_to_equity", "equity_ratio", "interest_coverage"],
+  },
+  {
+    label: "Efficiency",
+    metrics: ["asset_turnover"],
+  },
+  {
+    label: "Tax",
+    metrics: ["effective_tax_rate"],
+  },
 ];
 
+/** Flat ordered list derived from categories — used as fallback sort order */
+export const RATIO_ORDER = RATIO_CATEGORIES.flatMap((c) => c.metrics);
+
 export const RATIO_DEFINITIONS: Record<string, string> = {
-  current_ratio: "Current Assets ÷ Current Liabilities — measures short-term liquidity",
-  quick_ratio: "(Current Assets − Inventory) ÷ Current Liabilities — liquidity excluding inventory",
-  debt_to_equity: "Total Liabilities ÷ Total Equity — overall leverage",
-  net_debt_to_equity: "(Total Debt − Cash) ÷ Total Equity — net leverage",
-  equity_ratio: "Total Equity ÷ Total Assets — proportion funded by shareholders",
-  gross_margin_pct: "Gross Profit ÷ Revenue — profitability after direct costs",
-  operating_margin_pct: "Operating Income ÷ Revenue — profitability after all opex",
-  net_margin_pct: "Net Income ÷ Revenue — bottom-line profitability",
-  roe: "Net Income ÷ Total Equity — return on shareholders' equity (quarterly, not annualized)",
-  roa: "Net Income ÷ Total Assets — return on total assets (quarterly, not annualized)",
-  asset_turnover: "Revenue ÷ Total Assets — asset efficiency (quarterly, not annualized)",
-  interest_coverage: "Operating Income ÷ Interest Expense — ability to service debt",
-  fcf_margin_pct: "Free Cash Flow ÷ Revenue — cash generation efficiency",
+  gross_margin_pct: "Gross Profit ÷ Revenue",
+  operating_margin_pct: "Operating Income ÷ Revenue",
+  net_margin_pct: "Net Income ÷ Revenue",
+  fcf_margin_pct: "Free Cash Flow ÷ Revenue",
+  roe: "Net Income ÷ Total Equity (quarterly, not annualized)",
+  roa: "Net Income ÷ Total Assets (quarterly, not annualized)",
+  current_ratio: "Current Assets ÷ Current Liabilities",
+  quick_ratio: "(Current Assets − Inventory) ÷ Current Liabilities",
+  debt_to_equity: "Total Liabilities ÷ Total Equity",
+  net_debt_to_equity: "(Total Debt − Cash) ÷ Total Equity",
+  equity_ratio: "Total Equity ÷ Total Assets",
+  interest_coverage: "Operating Income ÷ Interest Expense",
+  asset_turnover: "Revenue ÷ Total Assets (quarterly, not annualized)",
+  effective_tax_rate: "Income Tax Expense ÷ Income Before Taxes",
 };
 
 export const CHART_COLORS = [

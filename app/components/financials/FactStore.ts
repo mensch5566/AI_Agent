@@ -333,6 +333,10 @@ export class FactStore {
       if (rev != null && ta && ta !== 0) ratios.push(["asset_turnover", rnd4(rev / ta)]);
       if (oi != null && intExp && intExp !== 0) ratios.push(["interest_coverage", rnd(oi / intExp)]);
       if (fcf != null && rev && rev !== 0) ratios.push(["fcf_margin_pct", rnd4(fcf / rev)]);
+      // effective_tax_rate: compute from annual income_tax_expense / income_before_taxes
+      const annualTax = v("income_statement", "income_tax_expense");
+      const annualIbt = v("income_statement", "income_before_taxes");
+      if (annualTax != null && annualIbt && annualIbt !== 0) ratios.push(["effective_tax_rate", rnd4(annualTax / annualIbt)]);
 
       for (const [metric, value] of ratios) {
         annualFacts.push({
@@ -347,27 +351,13 @@ export class FactStore {
         });
       }
 
-      // Also write IS-level pct metrics back to income_statement so IS table shows correct annual values
-      const isTaxExp = v("income_statement", "income_tax_expense");
-      const isIbt = v("income_statement", "income_before_taxes");
-      const isPctFacts: [string, number | null][] = [
-        ["gross_margin_pct", gp != null && rev ? rnd4(gp / rev) : null],
-        ["operating_margin_pct", oi != null && rev ? rnd4(oi / rev) : null],
-        ["net_margin_pct", ni != null && rev ? rnd4(ni / rev) : null],
-        ["effective_tax_rate", isTaxExp != null && isIbt && isIbt !== 0 ? rnd4(isTaxExp / isIbt) : null],
-      ];
-      for (const [metric, value] of isPctFacts) {
-        if (value == null) continue;
-        annualFacts.push({
-          period: fy,
-          period_end: null,
-          statement: "income_statement",
-          metric,
-          dimension: "",
-          value,
-          unit: null,
-          source: null,
-        });
+      // Write three IS margin rates back to income_statement for annual IS display
+      const IS_MARGIN_METRICS = ["gross_margin_pct", "operating_margin_pct", "net_margin_pct"] as const;
+      for (const metric of IS_MARGIN_METRICS) {
+        const ratioFact = annualFacts.find((f) => f.statement === "financial_ratios" && f.metric === metric && f.period === fy);
+        if (ratioFact) {
+          annualFacts.push({ ...ratioFact, statement: "income_statement" });
+        }
       }
     }
 

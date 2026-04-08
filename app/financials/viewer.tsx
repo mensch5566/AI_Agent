@@ -16,9 +16,10 @@ import {
 import { Line } from "react-chartjs-2";
 import SegmentPieChart from "@/app/components/financials/SegmentPieChart";
 import {
-  TICKER_LABELS, TOTAL_KEYS, RATIO_ORDER, RATIO_DEFINITIONS, CHART_COLORS,
+  TICKER_LABELS, TOTAL_KEYS, RATIO_CATEGORIES, RATIO_DEFINITIONS, CHART_COLORS,
   sortPeriods, isPct, isEps, fmtVal, labelFor, sortMetrics,
-  IS_METRIC_ORDER, BS_ASSETS_ORDER, BS_LIABILITIES_ORDER, BS_EQUITY_ORDER,
+  IS_METRIC_ORDER, IS_PCT_EXCLUDE,
+  BS_ASSETS_ORDER, BS_LIABILITIES_ORDER, BS_EQUITY_ORDER,
   CF_OPERATING_ORDER, CF_INVESTING_ORDER, CF_FINANCING_ORDER, CF_SUMMARY_ORDER,
   prevQoQ, prevYoY, growthPct, fmtGrowth, skipGrowthForKey,
   type GrowthMode,
@@ -183,7 +184,10 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
   useEffect(() => { if (viewMode === "annual" && growthMode === "qoq") setGrowthMode("value"); }, [viewMode]);
 
   const periods = store.periodsIS();
-  const metrics = sortMetrics(store.metrics("income_statement"), IS_METRIC_ORDER);
+  const metrics = sortMetrics(
+    store.metrics("income_statement").filter((m) => !IS_PCT_EXCLUDE.has(m)),
+    IS_METRIC_ORDER,
+  );
   const rows: TableRow[] = metrics.map((key) => ({
     type: "data" as const,
     key,
@@ -293,17 +297,34 @@ function CashFlowStatement({ store }: { store: FactStore }) {
    Ratios Panel
    ================================================================ */
 function RatiosPanel({ store }: { store: FactStore }) {
-  const periods = store.periods("financial_ratios");
-  const allMetrics = store.metrics("financial_ratios");
+  // financial_ratios covers most metrics; effective_tax_rate falls back to income_statement
+  const ratioMetrics = store.metrics("financial_ratios");
+  const isMetrics = store.metrics("income_statement");
+  const periods = store.periodsIS();
+
+  // Lookup: financial_ratios first, then income_statement fallback
+  const ratioVal = (key: string, p: string): number | null => {
+    const v1 = store.val("financial_ratios", key, p);
+    if (v1 != null) return v1;
+    return store.val("income_statement", key, p);
+  };
+
+  // Build available categories (only include metrics present in data)
+  const availCats = RATIO_CATEGORIES.map((cat) => ({
+    ...cat,
+    metrics: cat.metrics.filter((m) =>
+      ratioMetrics.includes(m) || (m === "effective_tax_rate" && isMetrics.includes("effective_tax_rate"))
+    ),
+  })).filter((cat) => cat.metrics.length > 0);
+
+  const allAvail = availCats.flatMap((c) => c.metrics);
+
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(["gross_margin_pct", "operating_margin_pct", "net_margin_pct"]),
   );
 
-  if (!allMetrics.length)
+  if (!allAvail.length)
     return <div className="p-10 text-center text-sm text-[#7f8c8d]">No financial ratios computed.</div>;
-
-  const ordered = RATIO_ORDER.filter((k) => allMetrics.includes(k));
-  for (const k of allMetrics) if (!ordered.includes(k)) ordered.push(k);
 
   const toggleMetric = (m: string) => {
     setSelected((prev) => {
@@ -313,14 +334,14 @@ function RatiosPanel({ store }: { store: FactStore }) {
     });
   };
 
-  const selArr = ordered.filter((k) => selected.has(k));
+  const selArr = allAvail.filter((k) => selected.has(k));
   const usePercent = selArr.some((k) => isPct(k));
 
   const chartData = {
     labels: periods,
     datasets: selArr.map((key, i) => ({
       label: labelFor(key),
-      data: periods.map((p) => store.val("financial_ratios", key, p)),
+      data: periods.map((p) => ratioVal(key, p)),
       borderColor: CHART_COLORS[i % CHART_COLORS.length],
       backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + "22",
       tension: 0.3, pointRadius: 3, spanGaps: true,
@@ -330,20 +351,26 @@ function RatiosPanel({ store }: { store: FactStore }) {
   return (
     <>
       <div className="mb-4 rounded-md bg-[var(--bg-card)] p-4 shadow-sm">
-        <div className="mb-3 flex flex-wrap items-center gap-1.5">
-          {ordered.map((key) => (
-            <button key={key} onClick={() => toggleMetric(key)}
-              className={`cursor-pointer rounded-full border px-3 py-1 text-xs transition-all select-none ${
-                selected.has(key)
-                  ? "border-[#1f4e79] bg-[#1f4e79] text-white"
-                  : "border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text)] hover:border-[#2a6da8] hover:text-[#2a6da8]"
-              }`}
-            >
-              {labelFor(key)}
-            </button>
+        {/* Category-grouped metric selectors */}
+        <div className="mb-4 space-y-2">
+          {availCats.map((cat) => (
+            <div key={cat.label} className="flex flex-wrap items-center gap-1.5">
+              <span className="w-24 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#7f8c8d]">{cat.label}</span>
+              {cat.metrics.map((key) => (
+                <button key={key} onClick={() => toggleMetric(key)}
+                  className={`cursor-pointer rounded-full border px-3 py-1 text-xs transition-all select-none ${
+                    selected.has(key)
+                      ? "border-[#1f4e79] bg-[#1f4e79] text-white"
+                      : "border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text)] hover:border-[#2a6da8] hover:text-[#2a6da8]"
+                  }`}
+                >
+                  {labelFor(key)}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
-        <div className="relative h-[320px]">
+        <div className="relative h-[280px]">
           {selArr.length > 0 && <Line data={chartData} options={{
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: "index" as const, intersect: false },
@@ -360,8 +387,11 @@ function RatiosPanel({ store }: { store: FactStore }) {
               y: { ticks: { font: { size: 10 }, callback: (v: any) => usePercent ? (v * 100).toFixed(0) + "%" : Number(v).toFixed(2) } },
             },
           }} />}
+          {!selArr.length && <div className="flex h-full items-center justify-center text-sm text-[#7f8c8d]">Select metrics above to chart</div>}
         </div>
       </div>
+
+      {/* Table with category section headers */}
       <div className="overflow-x-auto rounded-md shadow-sm">
         <table className="w-full border-collapse bg-[var(--bg-card)] text-xs">
           <thead>
@@ -378,29 +408,37 @@ function RatiosPanel({ store }: { store: FactStore }) {
             </tr>
           </thead>
           <tbody>
-            {ordered.map((key, i) => {
-              const isTotal = TOTAL_KEYS.has(key);
-              const bgBase = isTotal ? "bg-[var(--bg-highlight)]" : i % 2 === 0 ? "bg-[var(--bg-subtle)]" : "bg-[var(--bg-card)]";
-              const textCls = isTotal ? "font-bold text-[#7b3f00]" : "";
-              const def = RATIO_DEFINITIONS[key];
-              return (
-                <tr key={key}>
-                  <td className={`group sticky left-0 z-[5] border border-[var(--border)] px-3 py-1.5 text-left font-medium ${bgBase} ${textCls} relative cursor-help`}>
-                    {labelFor(key)}
-                    {def && <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded bg-[#2c3e50] px-2.5 py-1.5 text-[11px] font-normal text-white shadow-lg group-hover:block">{def}</span>}
+            {availCats.map((cat) => (
+              <>
+                <tr key={cat.label + "-hdr"}>
+                  <td colSpan={periods.length + 1}
+                    className="border border-[var(--border)] bg-[#2c3e50] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white/80">
+                    {cat.label}
                   </td>
-                  {periods.map((p) => {
-                    const v = store.val("financial_ratios", key, p);
-                    const f = fmtVal(v, key, store.currency);
-                    return (
-                      <td key={p} className={`border border-[var(--border)] px-3 py-1.5 tabular-nums ${bgBase} ${textCls} ${
-                        f.cls === "negative" ? "text-right text-[#c0392b]" : f.cls === "null-val" ? "text-center text-[#7f8c8d]" : "text-right"
-                      }`}>{f.text}</td>
-                    );
-                  })}
                 </tr>
-              );
-            })}
+                {cat.metrics.map((key, i) => {
+                  const def = RATIO_DEFINITIONS[key];
+                  const bgBase = i % 2 === 0 ? "bg-[var(--bg-subtle)]" : "bg-[var(--bg-card)]";
+                  return (
+                    <tr key={key}>
+                      <td className={`group sticky left-0 z-[5] border border-[var(--border)] px-3 py-1.5 text-left font-medium ${bgBase} relative cursor-help`}>
+                        {labelFor(key)}
+                        {def && <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded bg-[#2c3e50] px-2.5 py-1.5 text-[11px] font-normal text-white shadow-lg group-hover:block">{def}</span>}
+                      </td>
+                      {periods.map((p) => {
+                        const v = ratioVal(key, p);
+                        const f = fmtVal(v, key, store.currency);
+                        return (
+                          <td key={p} className={`border border-[var(--border)] px-3 py-1.5 tabular-nums ${bgBase} ${
+                            f.cls === "negative" ? "text-right text-[#c0392b]" : f.cls === "null-val" ? "text-center text-[#7f8c8d]" : "text-right"
+                          }`}>{f.text}</td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </>
+            ))}
           </tbody>
         </table>
       </div>
