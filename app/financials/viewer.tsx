@@ -119,12 +119,12 @@ function DataTable({
             const isEpsRow = isEps(row.key);
             const bgBase = isEpsRow  ? "bg-[#1f4e79]"
               : isTotal              ? "bg-[var(--bg-highlight)]"
-              : isSubtotal           ? "bg-amber-50 dark:bg-amber-950/30"
+              : isSubtotal           ? "bg-[#e8f4fd] dark:bg-blue-900/20"
               : isRatioRow           ? "bg-[var(--bg-card)]"
               : "bg-[var(--bg-card)]";
             const textCls = isEpsRow ? "font-bold text-white"
               : isTotal              ? "font-bold text-[#7b3f00]"
-              : isSubtotal           ? "font-semibold text-amber-800 dark:text-amber-300"
+              : isSubtotal           ? "font-semibold text-[#1565c0] dark:text-blue-300"
               : isRatioRow           ? "text-[#aaa] dark:text-[#888]"
               : "";
             const skipGrowth = isGrowth && skipGrowthForKey(row.key);
@@ -279,36 +279,6 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
     return result;
   };
 
-  // Inject "Total Operating Expenses" before operating_income (opex stored as positive → sum)
-  const OPEX_SOURCES: [string, number][] = [
-    ["research_and_development", 1], ["selling_general_administrative", 1],
-    ["restructuring_charges", 1], ["other_operating_income_expense_net", 1],
-    ["operating_expenses", 1],
-  ];
-  if (!rows.some((r) => r.type === "data" && r.key === "total_operating_expenses")) {
-    const opexIdx = rows.findIndex((r) => r.type === "data" && r.key === "operating_income");
-    if (opexIdx > 0 && OPEX_SOURCES.some(([m]) => isMetrics.includes(m))) {
-      const vals = syntheticSum(OPEX_SOURCES);
-      if (Object.values(vals).some((v) => v !== null))
-        rows.splice(opexIdx, 0, { type: "data", key: "total_operating_expenses", label: "Total Operating Expenses", vals });
-    }
-  }
-
-  // Inject "Total Interest and Other Income (Expense), net"
-  // interest_expense stored as positive → negate; equity_method_investments excluded (sub-item of other_nonop)
-  const NONOP_SOURCES: [string, number][] = [
-    ["interest_income", 1], ["interest_income_net", 1], ["investment_income", 1],
-    ["interest_expense", -1],
-    ["other_nonoperating_income_expense", 1],
-  ];
-  if (!rows.some((r) => r.type === "data" && r.key === "nonoperating_income_expense_total")) {
-    const nonopIdx = rows.findIndex((r) => r.type === "data" && r.key === "income_before_taxes");
-    if (nonopIdx > 0 && NONOP_SOURCES.some(([m]) => isMetrics.includes(m))) {
-      const vals = syntheticSum(NONOP_SOURCES);
-      if (Object.values(vals).some((v) => v !== null))
-        rows.splice(nonopIdx, 0, { type: "data", key: "nonoperating_income_expense_total", label: "Total Interest and Other Income (Expense), net", vals });
-    }
-  }
 
   const isGrowth = growthMode !== "value";
   const prevFn = growthMode === "qoq" ? prevQoQ : prevYoY;

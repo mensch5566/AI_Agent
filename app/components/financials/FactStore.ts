@@ -203,7 +203,10 @@ export class FactStore {
   /** Create a new FactStore with quarterly data aggregated to annual */
   toAnnual(): FactStore {
     const SUM_EXCLUDE = new Set([
+      // 美股舊格式
       "eps_basic", "eps_diluted",
+      // 台股 XBRL 格式（Q4 已是全年值，直接用 Q4，不累加）
+      "basic_eps", "diluted_eps",
       "shares_basic", "shares_diluted", "shares_basic_millions", "shares_diluted_millions",
       // pct metrics must NOT be summed — they'll be recomputed from annual totals
       "gross_margin_pct", "operating_margin_pct", "net_margin_pct",
@@ -269,23 +272,32 @@ export class FactStore {
       }
     }
 
-    // Recompute annual EPS = net_income / shares
-    for (const epsKey of ["eps_basic", "eps_diluted"]) {
-      const sharesKey = epsKey === "eps_basic" ? "shares_basic" : "shares_diluted";
+    // Annual EPS：優先用 Q4 值（Q4 XBRL 本就是全年 EPS）
+    // 若無 Q4，回退到 net_income / shares 計算
+    for (const epsKey of ["basic_eps", "diluted_eps", "eps_basic", "eps_diluted"]) {
       for (const fy of Object.keys(fyMap)) {
+        // 已被 SUM_EXCLUDE 跳過，annualFacts 裡沒有這個 metric，需手動補
+        const q4 = `Q4_FY${fy.replace("FY", "")}`;
+        const q4Val = this.idx.get("income_statement")?.get(epsKey)?.get("")?.get(q4);
+        if (q4Val != null) {
+          annualFacts.push({
+            period: fy, period_end: null,
+            statement: "income_statement", metric: epsKey,
+            dimension: "", value: q4Val, unit: null, source: null,
+          });
+          continue;
+        }
+        // 回退：美股用 net_income / shares 計算
+        const sharesKey = (epsKey === "eps_basic" || epsKey === "basic_eps") ? "shares_basic" : "shares_diluted";
         const ni = annualFacts.find(f => f.statement === "income_statement" && f.metric === "net_income" && f.period === fy);
         const sh = annualFacts.find(f => f.statement === "income_statement" && f.metric === sharesKey && f.period === fy)
-          || annualFacts.find(f => f.statement === "income_statement" && f.metric === sharesKey + "_millions" && f.period === fy);
+          ?? annualFacts.find(f => f.statement === "income_statement" && f.metric === sharesKey + "_millions" && f.period === fy);
         if (ni && sh && sh.value !== 0) {
           annualFacts.push({
-            period: fy,
-            period_end: null,
-            statement: "income_statement",
-            metric: epsKey,
-            dimension: "",
-            value: Math.round((ni.value / sh.value) * 100) / 100,
-            unit: null,
-            source: null,
+            period: fy, period_end: null,
+            statement: "income_statement", metric: epsKey,
+            dimension: "", value: Math.round((ni.value / sh.value) * 100) / 100,
+            unit: null, source: null,
           });
         }
       }
@@ -298,23 +310,34 @@ export class FactStore {
 
       const ca = v("balance_sheet_assets", "total_current_assets");
       const cl = v("balance_sheet_liabilities", "total_current_liabilities");
+      // 台股 XBRL 名稱 + 美股舊名稱 fallback
       const inv = v("balance_sheet_assets", "inventories");
-      const cash = v("balance_sheet_assets", "cash_and_cash_equivalents");
+      const cash = v("balance_sheet_assets", "cash_and_equivalents")
+                ?? v("balance_sheet_assets", "cash_and_cash_equivalents");
       const ta = v("balance_sheet_assets", "total_assets");
       const tl = v("balance_sheet_liabilities", "total_liabilities");
       const te = v("balance_sheet_equity", "total_equity");
-      const ltd = v("balance_sheet_liabilities", "long_term_debt") ?? 0;
-      const cd = v("balance_sheet_liabilities", "current_debt") ?? 0;
+      const ltd = v("balance_sheet_liabilities", "long_term_debt_current")
+               ?? v("balance_sheet_liabilities", "long_term_debt") ?? 0;
+      const cd = v("balance_sheet_liabilities", "short_term_borrowings")
+              ?? v("balance_sheet_liabilities", "current_debt") ?? 0;
       const totalDebt = ltd + cd;
-      const rev = v("income_statement", "revenue");
+      // 台股用 operating_revenue；美股舊格式用 revenue
+      const rev = v("income_statement", "operating_revenue")
+               ?? v("income_statement", "revenue");
       const gp = v("income_statement", "gross_profit");
       const oi = v("income_statement", "operating_income");
       const ni = v("income_statement", "net_income");
       const intExp = v("income_statement", "interest_expense");
-      const ocf = v("cash_flow_operating", "net_cash_from_operating");
-      const capex = v("cash_flow_investing", "capital_expenditures");
-      const fcf = ocf != null && capex != null ? ocf - capex
-        : v("cash_flow_summary", "free_cash_flow");
+      // 台股 CF 用 operating_cash_flow；美股舊格式 fallback
+      const ocf = v("cash_flow_operating", "operating_cash_flow")
+               ?? v("cash_flow_operating", "net_cash_from_operating")
+               ?? v("cash_flow_operating", "net_cash_from_operating_activities");
+      const capex = v("cash_flow_investing", "capex")
+                 ?? v("cash_flow_investing", "capital_expenditures");
+      const fcf = ocf != null && capex != null ? ocf + capex   // capex 已是負值
+        : v("cash_flow_summary", "free_cash_flow")
+        ?? v("cash_flow_summary", "fcf");
 
       const rnd = (n: number) => Math.round(n * 100) / 100;
       const rnd4 = (n: number) => Math.round(n * 10000) / 10000;

@@ -73,6 +73,39 @@
   3. 確認不會意外覆蓋資料
 - 不要假設 schema 跟上次一樣，每次重新確認
 
+## Financial Viewer 開發規則
+
+**任何涉及財務報表（Financial Viewer）的開發，開始前必須走以下流程：**
+
+### 開工前三步（強制）
+
+1. **讀 skill 文件**
+   - `Tools/research-tools/parse-twse-ixbrl/skill.md`
+   - 必看：Known Limitations、CHANGELOG（裡面記錄了踩過的坑）
+
+2. **讀表結構清單**
+   - `docs/financials-view-schema.md`
+   - 確認要動的指標在哪張表、是否已確認、有無待處理項目
+   - **未確認的指標不得寫入、計算或前端讀取**
+
+3. **確認 DB 現況**
+   - 查 Supabase 確認實際數據，不要靠記憶假設
+   - 特別確認：financial_metrics 的 pct 指標是小數格式（0.4814）不是百分比（48.14）
+
+### 開工後（修完要做）
+
+- 跑 skill.md 裡的驗證腳本確認數值正確
+- 把本次修的 bug/改動補進 skill.md 的 CHANGELOG
+- 有新的 Known Limitation 也補進去
+
+### 關鍵陷阱備忘
+
+- **Supabase 預設 1000 row limit**：超過 20 期 × 87 項就會截斷，API 必須用 range() pagination
+- **Q4 EPS 是全年值**：XBRL 無 Q4 單季 EPS，`basic_eps`/`diluted_eps` 在 Q4 存全年
+- **financial_metrics 格式**：存小數（0.4814），前端 fmtVal 會乘 100，不要改成百分比
+- **isEps() 判斷**：台股 key 是 `basic_eps`/`diluted_eps`，不是 `eps_basic`/`eps_diluted`
+- **toAnnual() metric 名稱**：台股用 `operating_revenue`，美股舊格式用 `revenue`
+
 ## 代碼規則
 
 - 不寫 hack，考慮全局影響和後續擴展

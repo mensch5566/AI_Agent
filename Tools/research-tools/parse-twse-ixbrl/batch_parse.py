@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-台股 XBRL 批量解析 - 統一數據管道
-流程：本地 XBRL HTML → 解析 → NotebookLM 驗證 → 寫入 financial_facts → 計算 financial_metrics
+台股 XBRL 批量解析 - 統一數據管道（全量版）
+流程：本地 XBRL HTML → 解析所有三表 ix:nonFraction 標籤 → 寫入 financial_facts → 計算 financial_metrics
 """
 
 import sys
@@ -9,8 +9,6 @@ import re
 import json
 import time
 from pathlib import Path
-from collections import defaultdict
-from lxml import html as html_lib
 from supabase import create_client
 
 SUPABASE_URL = "https://zpriwdyjmqvbtaektnlq.supabase.co"
@@ -18,163 +16,392 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-METRIC_MAPPING = {
-    '營業收入合計': 'operating_revenue',
-    'Total operating revenue': 'operating_revenue',
-    '繼續營業單位稅前淨利': 'income_before_taxes',
-    'Profit (loss) from continued operations': 'income_before_taxes',
-    '本期淨利': 'net_income',
-    'Profit (loss) for the period': 'net_income',
-    '流動資產合計': 'total_current_assets',
-    'Total current assets': 'total_current_assets',
-    '資產總計': 'total_assets',
-    'Total assets': 'total_assets',
-    '流動負債合計': 'total_current_liabilities',
-    'Total current liabilities': 'total_current_liabilities',
-    '負債總計': 'total_liabilities',
-    'Total liabilities': 'total_liabilities',
-    '權益總額': 'total_equity',
-    'Total equity': 'total_equity',
+# ─────────────────────────────────────────────
+# XBRL 概念 → (metric 名稱, 報表類型, 排序號)
+# 報表類型：IS = 損益表 / BS = 資產負債表 / CF = 現金流量表
+# 排序號對應 PDF 科目代碼，CF 用 800x 系列
+# ─────────────────────────────────────────────
+XBRL_MAP = {
+    # ── 損益表 IS ──
+    'ifrs-full:Revenue':                                                                                ('operating_revenue',              'IS', 4000),
+    'tifrs-bsci-ci:OperatingCosts':                                                                    ('cost_of_revenue',                 'IS', 5000),
+    'tifrs-bsci-ci:GrossProfitLossFromOperations':                                                     ('gross_profit',                    'IS', 5900),
+    'ifrs-full:GrossProfit':                                                                            ('gross_profit',                    'IS', 5900),
+    'ifrs-full:SellingExpense':                                                                         ('selling_expenses',                'IS', 6100),
+    'ifrs-full:AdministrativeExpense':                                                                  ('general_admin_expenses',          'IS', 6200),
+    'ifrs-full:ResearchAndDevelopmentExpense':                                                          ('r_and_d_expenses',                'IS', 6300),
+    'ifrs-full:ImpairmentLossImpairmentGainAndReversalOfImpairmentLossDeterminedInAccordanceWithIFRS9':('expected_credit_loss',            'IS', 6450),
+    'ifrs-full:OperatingExpense':                                                                       ('operating_expenses',              'IS', 6800),
+    'ifrs-full:ProfitLossFromOperatingActivities':                                                      ('operating_income',                'IS', 6900),
+    'ifrs-full:RevenueFromInterest':                                                                    ('interest_income',                 'IS', 7100),
+    'ifrs-full:OtherRevenue':                                                                           ('other_income',                    'IS', 7010),
+    'ifrs-full:OtherGainsLosses':                                                                       ('other_gains_losses',              'IS', 7020),
+    'ifrs-full:FinanceCosts':                                                                           ('interest_expense',                'IS', 7050),
+    'ifrs-full:ShareOfProfitLossOfAssociatesAndJointVenturesAccountedForUsingEquityMethod':             ('equity_method_income',            'IS', 7060),
+    'tifrs-bsci-ci:NonoperatingIncomeAndExpenses':                                                     ('non_operating_income_expense',    'IS', 7000),
+    'ifrs-full:ProfitLossBeforeTax':                                                                    ('income_before_taxes',             'IS', 7900),
+    'ifrs-full:IncomeTaxExpenseContinuingOperations':                                                   ('income_tax_expense',              'IS', 7950),
+    'ifrs-full:ProfitLoss':                                                                             ('net_income',                      'IS', 8200),
+    'ifrs-full:OtherComprehensiveIncomeThatWillNotBeReclassifiedToProfitOrLossNetOfTax':               ('oci_not_reclassified',            'IS', 8310),
+    'ifrs-full:OtherComprehensiveIncomeBeforeTaxGainsLossesFromInvestmentsInEquityInstruments':        ('oci_fvoci_equity',                'IS', 8316),
+    'ifrs-full:OtherComprehensiveIncomeThatWillBeReclassifiedToProfitOrLossNetOfTax':                  ('oci_reclassified',                'IS', 8360),
+    'ifrs-full:OtherComprehensiveIncomeBeforeTaxExchangeDifferencesOnTranslation':                     ('oci_fx_translation',              'IS', 8361),
+    'ifrs-full:OtherComprehensiveIncome':                                                               ('other_comprehensive_income',      'IS', 8300),
+    'ifrs-full:ComprehensiveIncome':                                                                    ('total_comprehensive_income',      'IS', 8500),
+    'ifrs-full:ProfitLossAttributableToOwnersOfParent':                                                ('net_income_parent',               'IS', 8610),
+    'ifrs-full:ProfitLossAttributableToNoncontrollingInterests':                                       ('net_income_nci',                  'IS', 8620),
+    'ifrs-full:ComprehensiveIncomeAttributableToOwnersOfParent':                                       ('comprehensive_income_parent',     'IS', 8710),
+    'ifrs-full:ComprehensiveIncomeAttributableToNoncontrollingInterests':                              ('comprehensive_income_nci',        'IS', 8720),
+    'ifrs-full:BasicEarningsLossPerShare':                                                              ('basic_eps',                       'IS', 9710),
+    'ifrs-full:BasicEarningsLossPerShareFromContinuingOperations':                                     ('basic_eps',                       'IS', 9710),
+    'ifrs-full:DilutedEarningsLossPerShare':                                                            ('diluted_eps',                     'IS', 9810),
+    'ifrs-full:DilutedEarningsLossPerShareFromContinuingOperations':                                   ('diluted_eps',                     'IS', 9810),
+
+    # ── 資產負債表 BS — 資產 ──
+    'ifrs-full:CashAndCashEquivalents':                                                                 ('cash_and_equivalents',            'BS', 1110),
+    'ifrs-full:CurrentFinancialAssetsAtFairValueThroughProfitOrLoss':                                  ('financial_assets_fvtpl_current',  'BS', 1120),
+    'ifrs-full:CurrentFinancialAssetsAtFairValueThroughOtherComprehensiveIncome':                      ('financial_assets_fvoci_current',  'BS', 1125),
+    'ifrs-full:CurrentFinancialAssetsAtAmortisedCost':                                                 ('financial_assets_ac_current',     'BS', 1130),
+    'tifrs-bsci-ci:AccountsReceivableNet':                                                             ('accounts_receivable',             'BS', 1150),
+    'ifrs-full:OtherCurrentReceivables':                                                               ('other_receivables',               'BS', 1160),
+    'ifrs-full:Inventories':                                                                            ('inventories',                     'BS', 1170),
+    'ifrs-full:CurrentPrepayments':                                                                     ('prepaid_expenses',                'BS', 1180),
+    'ifrs-full:CurrentTaxAssets':                                                                       ('current_tax_assets',              'BS', 1185),
+    'ifrs-full:OtherCurrentAssets':                                                                     ('other_current_assets',            'BS', 1190),
+    'ifrs-full:CurrentAssets':                                                                          ('total_current_assets',            'BS', 1200),
+    'ifrs-full:PropertyPlantAndEquipment':                                                              ('ppe_net',                         'BS', 1510),
+    'ifrs-full:RightofuseAssets':                                                                       ('right_of_use_assets',             'BS', 1515),
+    'ifrs-full:IntangibleAssetsAndGoodwill':                                                            ('intangibles_and_goodwill',        'BS', 1520),
+    'ifrs-full:InvestmentAccountedForUsingEquityMethod':                                               ('equity_method_investments',       'BS', 1530),
+    'ifrs-full:NoncurrentFinancialAssetsAtFairValueThroughOtherComprehensiveIncome':                   ('financial_assets_fvoci_nc',       'BS', 1540),
+    'ifrs-full:NoncurrentFinancialAssetsAtAmortisedCost':                                              ('financial_assets_ac_nc',          'BS', 1545),
+    'ifrs-full:DeferredTaxAssets':                                                                      ('deferred_tax_assets',             'BS', 1550),
+    'ifrs-full:OtherNoncurrentAssets':                                                                  ('other_noncurrent_assets',         'BS', 1560),
+    'ifrs-full:NoncurrentAssets':                                                                       ('total_noncurrent_assets',         'BS', 1600),
+    'ifrs-full:Assets':                                                                                 ('total_assets',                    'BS', 1900),
+
+    # ── 資產負債表 BS — 負債 ──
+    'ifrs-full:ShorttermBorrowings':                                                                    ('short_term_borrowings',           'BS', 2110),
+    'ifrs-full:TradeAndOtherCurrentPayablesToTradeSuppliers':                                          ('accounts_payable',                'BS', 2150),
+    'ifrs-full:TradeAndOtherCurrentPayablesToRelatedParties':                                          ('accounts_payable_related',        'BS', 2155),
+    'ifrs-full:OtherCurrentPayables':                                                                   ('other_payables',                  'BS', 2160),
+    'ifrs-full:CurrentContractLiabilities':                                                             ('contract_liabilities_current',    'BS', 2170),
+    'ifrs-full:CurrentTaxLiabilities':                                                                  ('current_tax_liabilities',         'BS', 2180),
+    'tifrs-bsci-ci:CurrentLeaseLiabilities':                                                           ('lease_liabilities_current',       'BS', 2190),
+    'ifrs-full:OtherCurrentLiabilities':                                                                ('other_current_liabilities',       'BS', 2195),
+    'ifrs-full:CurrentLiabilities':                                                                     ('total_current_liabilities',       'BS', 2200),
+    'tifrs-bsci-ci:LongtermLiabilitiesCurrentPortion':                                                ('long_term_debt_current',          'BS', 2310),
+    'tifrs-bsci-ci:LongtermNotesAndAccountsPayable':                                                   ('long_term_payables',              'BS', 2320),
+    'ifrs-full:NoncurrentFinanceLeaseLiabilities':                                                     ('lease_liabilities_noncurrent',    'BS', 2330),
+    'ifrs-full:DeferredTaxLiabilities':                                                                 ('deferred_tax_liabilities',        'BS', 2340),
+    'ifrs-full:NoncurrentRecognisedLiabilitiesDefinedBenefitPlan':                                    ('pension_liabilities',             'BS', 2350),
+    'ifrs-full:OtherNoncurrentLiabilities':                                                             ('other_noncurrent_liabilities',    'BS', 2360),
+    'ifrs-full:NoncurrentLiabilities':                                                                  ('total_noncurrent_liabilities',    'BS', 2400),
+    'ifrs-full:Liabilities':                                                                            ('total_liabilities',               'BS', 2900),
+
+    # ── 資產負債表 BS — 權益 ──
+    'ifrs-full:IssuedCapital':                                                                          ('common_stock',                    'BS', 3110),
+    'ifrs-full:CapitalReserve':                                                                         ('capital_surplus',                 'BS', 3200),
+    'ifrs-full:StatutoryReserve':                                                                       ('legal_reserve',                   'BS', 3310),
+    'tifrs-bsci-ci:UnappropriatedRetainedEarningsAaccumulatedDeficit':                                ('retained_earnings',               'BS', 3320),
+    'ifrs-full:OtherEquityInterest':                                                                    ('other_equity',                    'BS', 3400),
+    'ifrs-full:TreasuryShares':                                                                         ('treasury_shares',                 'BS', 3500),
+    'ifrs-full:EquityAttributableToOwnersOfParent':                                                    ('equity_attributable_to_parent',   'BS', 3600),
+    'ifrs-full:NoncontrollingInterests':                                                                ('non_controlling_interests',       'BS', 3700),
+    'ifrs-full:Equity':                                                                                 ('total_equity',                    'BS', 3900),
+
+    # ── 現金流量表 CF ──
+    'ifrs-full:CashFlowsFromUsedInOperatingActivities':                                                ('operating_cash_flow',             'CF', 8010),
+    'tifrs-SCF:NetCashFlowsFromUsedInInvestingActivities':                                             ('investing_cash_flow',             'CF', 8020),
+    'tifrs-SCF:CashFlowsFromUsedInFinancingActivities':                                                ('financing_cash_flow',             'CF', 8030),
+    'ifrs-full:PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities':                    ('capex',                           'CF', 8021),
+    'ifrs-full:AdjustmentsForDepreciationExpense':                                                      ('depreciation_expense',            'CF', 8011),
+    'ifrs-full:AdjustmentsForAmortisationExpense':                                                      ('amortization_expense',            'CF', 8012),
+    'ifrs-full:DividendsPaidClassifiedAsFinancingActivities':                                           ('dividends_paid',                  'CF', 8031),
+    'ifrs-full:IncreaseDecreaseInCashAndCashEquivalents':                                               ('net_change_in_cash',              'CF', 8040),
+    'tifrs-SCF:CashAndCashEquivalentsAtEndOfPeriod':                                                   ('ending_cash',                     'CF', 8050),
+    'tifrs-SCF:CashAndCashEquivalentsAtBeginningOfPeriod':                                             ('beginning_cash',                  'CF', 8045),
 }
 
-# 派生指標計算規則：(metric_name, formula_str, numerator_key, denominator_key, is_percent)
+# 派生指標
+# (metric_name, formula_str, numerator_key, denominator_key, is_percent)
 DERIVED_METRICS = [
-    ('current_ratio',  'total_current_assets / total_current_liabilities',  'total_current_assets',   'total_current_liabilities', False),
-    ('debt_to_equity', 'total_liabilities / total_equity',                  'total_liabilities',      'total_equity',              False),
-    ('equity_ratio',   'total_equity / total_assets',                       'total_equity',           'total_assets',              False),
-    ('net_margin_pct', 'net_income / operating_revenue * 100',              'net_income',             'operating_revenue',         True),
-    ('roe',            'net_income / total_equity * 100',                   'net_income',             'total_equity',              True),
-    ('roa',            'net_income / total_assets * 100',                   'net_income',             'total_assets',              True),
-    ('pretax_margin',  'income_before_taxes / operating_revenue * 100',     'income_before_taxes',    'operating_revenue',         True),
+    # ── IS 比率 ──
+    ('gross_margin_pct',        'gross_profit / operating_revenue * 100',            'gross_profit',           'operating_revenue',         True),
+    ('operating_margin_pct',    'operating_income / operating_revenue * 100',        'operating_income',       'operating_revenue',         True),
+    ('pretax_margin',           'income_before_taxes / operating_revenue * 100',     'income_before_taxes',    'operating_revenue',         True),
+    ('net_margin_pct',          'net_income / operating_revenue * 100',              'net_income',             'operating_revenue',         True),
+    ('r_and_d_ratio',           'r_and_d_expenses / operating_revenue * 100',        'r_and_d_expenses',       'operating_revenue',         True),
+    ('opex_ratio',              'operating_expenses / operating_revenue * 100',      'operating_expenses',     'operating_revenue',         True),
+    ('effective_tax_rate',      'income_tax_expense / income_before_taxes * 100',    'income_tax_expense',     'income_before_taxes',       True),
+    ('interest_coverage',       'operating_income / interest_expense',               'operating_income',       'interest_expense',          False),
+    # ── BS 比率 ──
+    ('current_ratio',           'total_current_assets / total_current_liabilities',  'total_current_assets',   'total_current_liabilities', False),
+    ('debt_to_equity',          'total_liabilities / total_equity',                  'total_liabilities',      'total_equity',              False),
+    ('equity_ratio',            'total_equity / total_assets',                       'total_equity',           'total_assets',              False),
+    # ── IS + BS ──
+    ('roe',                     'net_income / total_equity * 100',                   'net_income',             'total_equity',              True),
+    ('roa',                     'net_income / total_assets * 100',                   'net_income',             'total_assets',              True),
+    # ── CF 衍生 ──
+    ('fcf',                     'operating_cash_flow + capex',                       'operating_cash_flow',    None,                        False),
 ]
-
-INCOME_METRICS = {'operating_revenue', 'income_before_taxes', 'net_income'}
 
 
 def find_local_xbrl_files(ticker: str) -> dict:
-    """
-    在本地尋找所有 XBRL 檔案，搜尋順序：
-    1. ~/Downloads/
-    2. iCloud Obsidian Vault（Semiconductors/{TICKER}/MOPS Filings/XML/）
-    """
     search_dirs = [
         Path.home() / "Downloads",
         Path.home() / "Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian/Khouse/Semiconductors",
     ]
-
     pattern = f"tifrs-fr1-m1-ci-cr-{ticker}-*.html"
     files_by_period = {}
-
     for base_dir in search_dirs:
-        # 直接搜尋 base_dir
-        for file_path in base_dir.glob(pattern):
-            _add_xbrl_file(files_by_period, file_path)
-
-        # 搜尋子目錄（Obsidian vault 有額外層級）
         for file_path in base_dir.rglob(pattern):
-            _add_xbrl_file(files_by_period, file_path)
-
+            m = re.search(r'(\d{4})Q(\d)', file_path.name)
+            if m and f"Q{m.group(2)}_FY{m.group(1)}" not in files_by_period:
+                files_by_period[f"Q{m.group(2)}_FY{m.group(1)}"] = str(file_path)
     return files_by_period
 
 
-def _add_xbrl_file(files_by_period: dict, file_path: Path):
-    match = re.search(r'(\d{4})Q(\d)', file_path.name)
-    if match:
-        year = match.group(1)
-        quarter = match.group(2)
-        period = f"Q{quarter}_FY{year}"
-        if period not in files_by_period:  # 先找到的優先（Downloads > Obsidian）
-            files_by_period[period] = str(file_path)
+def _sort_order_to_statement(sort_order: int) -> str:
+    """將 XBRL_MAP 的 sort_order 對應到前端 FactStore 期待的 statement 名稱"""
+    if 1000 <= sort_order < 2000: return "balance_sheet_assets"
+    if 2000 <= sort_order < 3000: return "balance_sheet_liabilities"
+    if 3000 <= sort_order < 4000: return "balance_sheet_equity"
+    if 8010 <= sort_order <= 8019: return "cash_flow_operating"
+    if 8020 <= sort_order <= 8029: return "cash_flow_investing"
+    if 8030 <= sort_order <= 8039: return "cash_flow_financing"
+    if 8040 <= sort_order <= 8060: return "cash_flow_summary"
+    return "income_statement"
 
 
-def parse_ixbrl_html(file_path: str) -> dict:
-    """解析 iXBRL HTML，提取財務指標"""
-    with open(file_path, 'rb') as f:
-        root = html_lib.parse(f).getroot()
+def _parse_content(content: str, as_of_ctx: str, from_ctx: str) -> dict:
+    """
+    從 iXBRL HTML 提取財務數據。
+    - BS 指標：用 as_of_ctx（點時間）
+    - CF 的 beginning_cash / ending_cash：也用 as_of_ctx
+    - IS / CF 其餘：用 from_ctx（期間）
+    回傳：{metric: (value, statement, sort_order)}
+    """
+    # 這些 CF 指標在 XBRL 用 AsOf context，不是 From...To...
+    CF_ASOF = {'beginning_cash', 'ending_cash'}
 
-    metric_candidates = {}
-    for table in root.xpath('//table'):
-        rows = table.xpath('.//tr')
-        for row_idx, row in enumerate(rows):
-            cells = row.xpath('.//td | .//th')
-            if len(cells) < 2:
-                continue
-            label_text = cells[1].text_content().strip() if len(cells) > 1 else cells[0].text_content().strip()
+    tag_pat = re.compile(
+        r'<ix:nonFraction\s+([^>]*?)>\s*([^<]*?)\s*</ix:nonFraction>',
+        re.DOTALL
+    )
+    results = {}
 
-            for tw_name, metric_key in METRIC_MAPPING.items():
-                if tw_name not in label_text:
-                    continue
-                for cell in cells[2:]:
-                    text = re.sub(r'[,\s]', '', cell.text_content().strip())
-                    if text and text.lstrip('-').replace('.', '').isdigit():
-                        try:
-                            value = float(text)
-                            is_chinese = any('\u4e00' <= c <= '\u9fff' for c in tw_name)
-                            score = 1 if is_chinese else 0
-                            if metric_key not in metric_candidates:
-                                metric_candidates[metric_key] = []
-                            metric_candidates[metric_key].append((score, value))
-                        except ValueError:
-                            pass
-                        break
-
-    return {k: max(v, key=lambda x: x[0])[1] for k, v in metric_candidates.items()}
-
-
-def compute_metrics(facts: dict) -> dict:
-    """根據原始指標計算派生比率"""
-    computed = {}
-    for metric_name, formula, num_key, den_key, pct in DERIVED_METRICS:
-        num = facts.get(num_key)
-        den = facts.get(den_key)
-        if num is None or den is None or den == 0:
+    for attrs_str, raw_value in tag_pat.findall(content):
+        name_m = re.search(r'\bname="([^"]+)"', attrs_str)
+        ctx_m  = re.search(r'\bcontextRef="([^"]+)"', attrs_str)
+        sign_m = re.search(r'\bsign="([^"]+)"', attrs_str)
+        if not name_m or not ctx_m:
             continue
-        computed[metric_name] = (round(num / den * (100 if pct else 1), 4), formula)
+
+        xbrl_name = name_m.group(1)
+        ctx       = ctx_m.group(1)
+        if xbrl_name not in XBRL_MAP:
+            continue
+
+        metric_name, _stmt_raw, sort_order = XBRL_MAP[xbrl_name]
+        stmt = _sort_order_to_statement(sort_order)
+
+        # 確定這個 metric 該用哪個 context
+        is_bs     = stmt.startswith('balance_sheet')
+        use_as_of = is_bs or metric_name in CF_ASOF
+        expected  = as_of_ctx if use_as_of else from_ctx
+
+        # 無維度後綴、且符合期望 context
+        has_member = '_' in ctx and not ctx.endswith('_Total3')
+        if has_member or ctx != expected:
+            continue
+
+        val_str = re.sub(r'[,\s]', '', raw_value)
+        if not val_str or val_str in ('-', '—', ''):
+            continue
+        try:
+            value = float(val_str)
+        except ValueError:
+            continue
+
+        if sign_m and sign_m.group(1) == '-':
+            value = -value
+
+        if metric_name not in results:
+            results[metric_name] = (value, stmt, sort_order)
+
+    return results
+
+
+def _subtract_ytd(current: dict, prior: dict, also_is: bool = False) -> dict:
+    """
+    從 YTD 計算單季值：current − prior。
+    - also_is=False（Q2/Q3 用）：只減 CF，IS 保留原值（已是單季）
+    - also_is=True（Q4 用）：IS 和 CF 都減
+    BS、EPS、ending_cash、beginning_cash 永遠不相減。
+    """
+    CF_STMTS = {'cash_flow_operating', 'cash_flow_investing',
+                'cash_flow_financing', 'cash_flow_summary'}
+    NO_SUB   = {'basic_eps', 'diluted_eps', 'ending_cash', 'beginning_cash'}
+    result   = dict(current)
+    for metric, (cur_val, stmt, sort_order) in current.items():
+        if metric in NO_SUB:
+            continue
+        is_cf = stmt in CF_STMTS
+        is_is = stmt == 'income_statement'
+        if not (is_cf or (also_is and is_is)):
+            continue
+        prior_val = prior.get(metric, (None,))[0]
+        if prior_val is not None:
+            result[metric] = (round(cur_val - prior_val, 4), stmt, sort_order)
+    return result
+
+
+def parse_ixbrl_full(file_path: str, period: str, files_by_period: dict | None = None) -> dict:
+    """
+    解析單季財務數據：
+    ┌──────┬──────────────────────────────────────────────────────────┐
+    │ Q1   │ IS/CF：From Jan-Mar（YTD = 單季），BS：AsOf Mar 31       │
+    │ Q2   │ IS：From Apr-Jun（單季 context），                        │
+    │      │ CF：Q2_YTD − Q1（YTD），BS：AsOf Jun 30                 │
+    │ Q3   │ IS：From Jul-Sep（單季 context），                        │
+    │      │ CF：Q3_YTD − Q2_YTD，BS：AsOf Sep 30                    │
+    │ Q4   │ IS/CF：FY_total − Q3_YTD，BS：AsOf Dec 31（無計算）     │
+    └──────┴──────────────────────────────────────────────────────────┘
+    """
+    m = re.match(r'Q(\d)_FY(\d{4})', period)
+    if not m:
+        return {}
+    q, year = int(m.group(1)), m.group(2)
+
+    # 期末日期
+    end_month = q * 3
+    end_day   = ['31', '30', '30', '31'][q - 1]
+    as_of_ctx = f"AsOf{year}{end_month:02d}{end_day}"
+
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        content = f.read()
+
+    fbp = files_by_period or {}
+
+    if q == 1:
+        # Q1：單季 = YTD（Jan-Mar）
+        from_ctx = f"From{year}0101To{year}0331"
+        return _parse_content(content, as_of_ctx, from_ctx)
+
+    if q in (2, 3):
+        # IS：單季 context
+        q_start_month = (q - 1) * 3 + 1
+        q_start = f"{year}{q_start_month:02d}01"
+        is_ctx = f"From{q_start}To{year}{end_month:02d}{end_day}"
+
+        # CF：YTD context（From Jan to 本季末）
+        cf_ytd_ctx = f"From{year}0101To{year}{end_month:02d}{end_day}"
+
+        # 取當期：IS 用 is_ctx，CF 用 cf_ytd_ctx
+        # 分兩次 parse，以 cf_ytd_ctx 為主（含 CF），再覆蓋 IS 部分
+        cur_cf  = _parse_content(content, as_of_ctx, cf_ytd_ctx)   # CF YTD
+        cur_is  = _parse_content(content, as_of_ctx, is_ctx)        # IS 單季
+
+        # 合併：IS 用單季值，CF 用 YTD（稍後再相減）
+        merged = {**cur_cf}
+        for k, v in cur_is.items():
+            stmt = _sort_order_to_statement(v[2])
+            if stmt == 'income_statement':
+                merged[k] = v
+
+        # 前一季期末日期（用來找前期 YTD）
+        prev_q       = q - 1
+        prev_month   = prev_q * 3
+        prev_day     = ['31', '30', '30', '31'][prev_q - 1]
+        prev_as_of   = f"AsOf{year}{prev_month:02d}{prev_day}"
+        prev_cf_ctx  = f"From{year}0101To{year}{prev_month:02d}{prev_day}"
+        prev_period  = f"Q{prev_q}_FY{year}"
+        prev_file    = fbp.get(prev_period)
+
+        if prev_file:
+            with open(prev_file, 'r', encoding='utf-8', errors='ignore') as f:
+                prev_content = f.read()
+            prior_cf = _parse_content(prev_content, prev_as_of, prev_cf_ctx)
+            # 只減 CF，IS 已是單季值，不再相減
+            return _subtract_ytd(merged, prior_cf, also_is=False)
+        else:
+            print(f"  ⚠️  找不到 {prev_period} 檔案，CF 使用 YTD（非單季）")
+            return merged
+
+    # Q4：IS/CF = FY − Q3_YTD，BS 直接用 Dec 31（AsOf20xx1231）
+    fy_ctx  = f"From{year}0101To{year}1231"
+    fy_data = _parse_content(content, as_of_ctx, fy_ctx)
+
+    q3_period = f"Q3_FY{year}"
+    q3_file   = fbp.get(q3_period)
+    if q3_file:
+        q3_as_of = f"AsOf{year}0930"
+        q3_ytd   = f"From{year}0101To{year}0930"
+        with open(q3_file, 'r', encoding='utf-8', errors='ignore') as f:
+            q3_content = f.read()
+        q3_data = _parse_content(q3_content, q3_as_of, q3_ytd)
+        # IS 和 CF 都要減（Q4 = FY − Q3_YTD）
+        return _subtract_ytd(fy_data, q3_data, also_is=True)
+    else:
+        print(f"  ⚠️  找不到 Q3_FY{year} 檔案，Q4 使用全年數（非單季）")
+        return fy_data
+
+
+def compute_metrics(facts_flat: dict) -> dict:
+    """facts_flat: {metric: value}"""
+    computed = {}
+    for name, formula, num_k, den_k, pct in DERIVED_METRICS:
+        num = facts_flat.get(num_k)
+        if num is None:
+            continue
+
+        if den_k is None:
+            # 加法型指標（如 FCF = OCF + capex）
+            # formula 格式：'a + b'，從 facts_flat 加總
+            operands = [k.strip() for k in formula.split('+')]
+            total = 0.0
+            ok = True
+            for k in operands:
+                v = facts_flat.get(k)
+                if v is None:
+                    ok = False
+                    break
+                total += v
+            if ok:
+                computed[name] = (round(total, 4), formula)
+            continue
+
+        den = facts_flat.get(den_k)
+        if den is None or den == 0:
+            continue
+        # pct 指標存小數（0.4814），不乘 100，與前端 fmtVal(val*100) 一致
+        computed[name] = (round(num / den, 6), formula)
     return computed
 
 
 def period_to_end_date(period: str) -> str:
-    """將 Q{n}_FY{year} 轉成期末日"""
-    parts = period.split('_')
-    q = int(parts[0][1:])
-    year = parts[1][2:]
+    m = re.match(r'Q(\d)_FY(\d{4})', period)
+    q, year = int(m.group(1)), m.group(2)
     month = q * 3
-    last_day = ['31', '30', '30', '31'][q - 1]
-    return f"{year}-{month:02d}-{last_day}"
-
-
-def query_notebooklm_for_verification(ticker: str, period: str, parsed: dict, notebook_name: str = None) -> list:
-    """
-    從 NotebookLM 查詢該 ticker 的對應期別數據，回傳差異列表。
-    需要 Claude Code agent 透過 NotebookLM MCP 執行，此函式為接口定義。
-
-    參數：
-      notebook_name：筆記本名稱（如「聯發科研究筆記」），由用戶在執行時提供
-    回傳：
-      [(metric, xbrl_value, nb_value, diff_pct), ...]
-    """
-    # 由 Claude Code agent 執行時：
-    # 1. 用 notebook_name 呼叫 notebooklm.notebook_list() 找到對應 notebook_id
-    # 2. 呼叫 notebooklm.notebook_query(id, f"{ticker} {period} 各項財務指標")
-    # 3. 解析回傳，提取各 metric 的數值，與 parsed 逐一比對
-    # 4. 回傳差異 > 1% 的項目
-    return []
+    day = ['31', '30', '30', '31'][q - 1]
+    return f"{year}-{month:02d}-{day}"
 
 
 def write_financial_facts(ticker: str, period: str, period_end: str, facts: dict) -> int:
-    """寫入 financial_facts（XBRL 原始數據）"""
+    """facts: {metric: (value, statement, sort_order)}"""
     records = []
-    for metric, value in facts.items():
+    for metric, (value, stmt, sort_order) in facts.items():
         records.append({
-            'ticker': ticker,
-            'period': period,
+            'ticker':     ticker,
+            'period':     period,
             'period_end': period_end,
-            'statement': 'income_statement' if metric in INCOME_METRICS else 'balance_sheet',
-            'metric': metric,
-            'value': value,
-            'unit': None,
-            'dimension': '',
-            'source': 'XBRL_TWSE'
+            'statement':  stmt,
+            'metric':     metric,
+            'value':      value,
+            'unit':       None,
+            'dimension':  '',
+            'source':     'XBRL_TWSE',
         })
     if records:
         supabase.table('financial_facts').upsert(records, ignore_duplicates=False).execute()
@@ -182,130 +409,76 @@ def write_financial_facts(ticker: str, period: str, period_end: str, facts: dict
 
 
 def write_financial_metrics(ticker: str, period: str, period_end: str, computed: dict) -> int:
-    """寫入 financial_metrics（派生指標）"""
     records = []
     for metric, (value, formula) in computed.items():
         records.append({
-            'ticker': ticker,
-            'period': period,
+            'ticker':     ticker,
+            'period':     period,
             'period_end': period_end,
-            'metric': metric,
-            'value': value,
-            'formula': formula,
-            'source': 'COMPUTED_FROM_XBRL_TWSE'
+            'metric':     metric,
+            'value':      value,
+            'formula':    formula,
+            'source':     'COMPUTED_FROM_XBRL_TWSE',
         })
     if records:
         supabase.table('financial_metrics').upsert(records, on_conflict='ticker,period,metric,source').execute()
     return len(records)
 
 
-def parse_and_insert(ticker: str, period: str, file_path: str, skip_verify: bool = False, notebook_name: str = None) -> bool:
-    """完整管道：解析 → 驗證 → 寫入 facts → 寫入 metrics"""
+def parse_and_insert(ticker: str, period: str, file_path: str, files_by_period: dict | None = None) -> bool:
     print(f"\n📄 {period}")
 
-    # Step 1: 解析
-    try:
-        facts = parse_ixbrl_html(file_path)
-        if not facts:
-            print(f"  ⚠️  無數據")
-            return False
-        print(f"  ✓ 解析 {len(facts)} 項原始指標")
-    except Exception as e:
-        print(f"  ✗ 解析失敗: {e}")
+    facts = parse_ixbrl_full(file_path, period, files_by_period)
+    if not facts:
+        print(f"  ⚠️  無數據")
         return False
 
+    facts_flat = {k: v[0] for k, v in facts.items()}
+    by_stmt = {}
+    for m, (v, s, _) in facts.items():
+        by_stmt.setdefault(s, 0)
+        by_stmt[s] += 1
+    print(f"  ✓ 解析 {len(facts)} 項：" + ", ".join(f"{s}={n}" for s, n in sorted(by_stmt.items())))
+
     period_end = period_to_end_date(period)
-
-    # Step 2: NotebookLM 驗證（有差異則人工複審）
-    if not skip_verify:
-        diffs = query_notebooklm_for_verification(ticker, period, facts, notebook_name)
-        if diffs:
-            print(f"  ⚠️  NotebookLM 差異 {len(diffs)} 項（需人工複審）:")
-            for metric, xbrl_val, nb_val, diff_pct in diffs:
-                print(f"     {metric}: XBRL={xbrl_val:,.0f} / NB={nb_val:,.0f} ({diff_pct:+.1f}%)")
-            # 繼續寫入，但標記待複審
-    else:
-        print(f"  → 跳過 NotebookLM 驗證")
-
-    # Step 3: 計算派生指標
-    computed = compute_metrics(facts)
+    computed   = compute_metrics(facts_flat)
     print(f"  ✓ 計算 {len(computed)} 項派生指標")
 
-    # Step 4: 寫入 Supabase
     try:
-        n_facts = write_financial_facts(ticker, period, period_end, facts)
+        n_facts   = write_financial_facts(ticker, period, period_end, facts)
         n_metrics = write_financial_metrics(ticker, period, period_end, computed)
         print(f"  ✓ 寫入 facts={n_facts}, metrics={n_metrics}")
         return True
     except Exception as e:
         print(f"  ✗ 寫入失敗: {e}")
+        import traceback; traceback.print_exc()
         return False
 
 
 def main():
     if len(sys.argv) < 2:
-        print("用法: python3 batch_parse.py <ticker> [--skip-verify] [--notebook <name>] [periods...]")
-        print("\n範例:")
-        print("  python3 batch_parse.py 2454                              # 解析所有本地檔案（會詢問筆記本名稱）")
-        print("  python3 batch_parse.py 2454 --skip-verify               # 跳過 NotebookLM 驗證")
-        print("  python3 batch_parse.py 2454 --notebook 聯發科研究筆記   # 指定筆記本名稱")
-        print("  python3 batch_parse.py 2454 Q4_FY2025                   # 只解析指定期別")
+        print("用法: python3 batch_parse.py <ticker> [periods...]")
+        print("  python3 batch_parse.py 2454")
+        print("  python3 batch_parse.py 2454 Q4_FY2025")
         sys.exit(1)
 
     ticker = sys.argv[1]
-    args = sys.argv[2:]
-    skip_verify = '--skip-verify' in args
+    requested = [a for a in sys.argv[2:] if not a.startswith('--')]
 
-    # 解析 --notebook 參數
-    notebook_name = None
-    if '--notebook' in args:
-        nb_idx = args.index('--notebook')
-        if nb_idx + 1 < len(args):
-            notebook_name = args[nb_idx + 1]
-            args = [a for i, a in enumerate(args) if i != nb_idx and i != nb_idx + 1]
-
-    # 若未提供筆記本且未跳過驗證，互動式詢問
-    if not skip_verify and notebook_name is None:
-        print("📚 NotebookLM 驗證：請提供筆記本名稱")
-        print("   （直接按 Enter 跳過驗證）")
-        try:
-            name = input("   筆記本名稱: ").strip()
-            if name:
-                notebook_name = name
-            else:
-                skip_verify = True
-        except (EOFError, KeyboardInterrupt):
-            skip_verify = True
-
-    requested_periods = [a for a in args if not a.startswith('--')]
-
-    files_by_period = find_local_xbrl_files(ticker)
-    if not files_by_period:
-        print(f"❌ 找不到 {ticker} 的 XBRL 檔案（Downloads 目錄）")
+    files = find_local_xbrl_files(ticker)
+    if not files:
+        print(f"❌ 找不到 {ticker} 的 XBRL 檔案")
         sys.exit(1)
 
-    if requested_periods:
-        periods_to_parse = {p: files_by_period[p] for p in requested_periods if p in files_by_period}
-        missing = [p for p in requested_periods if p not in files_by_period]
-        if missing:
-            print(f"⚠️  找不到以下期別的檔案: {', '.join(missing)}")
-    else:
-        periods_to_parse = files_by_period
+    periods = {p: files[p] for p in requested if p in files} if requested else files
+    missing = [p for p in requested if p not in files]
+    if missing:
+        print(f"⚠️  找不到: {', '.join(missing)}")
 
-    print(f"\n📊 解析 {ticker} — {len(periods_to_parse)} 個期別\n")
-    if skip_verify:
-        print("  （已跳過 NotebookLM 驗證）\n")
-
-    success = 0
-    for period in sorted(periods_to_parse.keys(), reverse=True):
-        if parse_and_insert(ticker, period, periods_to_parse[period], skip_verify, notebook_name):
-            success += 1
-        time.sleep(0.3)
-
+    print(f"\n📊 解析 {ticker} — {len(periods)} 個期別")
+    ok = sum(parse_and_insert(ticker, p, periods[p], files) for p in sorted(periods, reverse=True))
     print(f"\n{'='*50}")
-    print(f"完成: {success}/{len(periods_to_parse)} 個期別")
-    print(f"  financial_facts  → XBRL_TWSE")
-    print(f"  financial_metrics → COMPUTED_FROM_XBRL_TWSE")
+    print(f"完成: {ok}/{len(periods)}")
 
 
 if __name__ == '__main__':

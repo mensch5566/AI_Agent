@@ -8,10 +8,81 @@ export const TICKER_LABELS: Record<string, string> = {
 };
 
 export const LABEL_MAP: Record<string, string> = {
+  // ── 台股 XBRL (TIFRS) ──
+  operating_revenue: "營業收入",
+  cost_of_revenue: "營業成本",
+  selling_expenses: "推銷費用",
+  general_admin_expenses: "管理費用",
+  r_and_d_expenses: "研究發展費用",
+  expected_credit_loss: "預期信用減損利益（損失）",
+  operating_expenses: "營業費用合計",
+  operating_income: "營業利益",
+  interest_income: "利息收入",
+  other_income: "其他收入",
+  other_gains_losses: "其他利益及損失",
+  interest_expense: "財務成本",
+  equity_method_income: "採用權益法認列之損益",
+  non_operating_income_expense: "營業外收入及支出合計",
+  gross_profit: "營業毛利",
+  income_before_taxes: "稅前淨利",
+  net_income: "本期淨利",
+  income_tax_expense: "所得稅費用",
+  net_income_parent: "  本期淨利－母公司業主",
+  net_income_nci: "  本期淨利－非控制權益",
+  oci_not_reclassified: "  不重分類至損益之其他綜合損益",
+  oci_fvoci_equity: "    權益工具投資未實現評價損益",
+  oci_reclassified: "  後續可能重分類至損益之項目",
+  oci_fx_translation: "    國外營運機構兌換差額",
+  other_comprehensive_income: "其他綜合損益（稅後淨額）",
+  total_comprehensive_income: "本期綜合損益總額",
+  comprehensive_income_parent: "  綜合損益－母公司業主",
+  comprehensive_income_nci: "  綜合損益－非控制權益",
+  basic_eps: "基本每股盈餘（元）",
+  diluted_eps: "稀釋每股盈餘（元）",
+  // BS Assets
+  cash_and_equivalents: "現金及約當現金",
+  financial_assets_fvtpl_current: "透過損益按公允價值衡量之金融資產－流動",
+  financial_assets_fvoci_current: "透過其他綜合損益按公允價值衡量之金融資產－流動",
+  financial_assets_ac_current: "按攤銷後成本衡量之金融資產－流動",
+  other_receivables: "其他應收款",
+  prepaid_expenses: "預付款項",
+  current_tax_assets: "當期所得稅資產",
+  ppe_net: "不動產、廠房及設備",
+  right_of_use_assets: "使用權資產",
+  intangibles_and_goodwill: "無形資產及商譽",
+  equity_method_investments: "採用權益法之投資",
+  financial_assets_fvoci_nc: "透過其他綜合損益按公允價值衡量之金融資產－非流動",
+  financial_assets_ac_nc: "按攤銷後成本衡量之金融資產－非流動",
+  total_noncurrent_assets: "非流動資產合計",
+  // BS Liabilities
+  short_term_borrowings: "短期借款",
+  accounts_payable_related: "應付帳款－關係人",
+  contract_liabilities_current: "合約負債－流動",
+  current_tax_liabilities: "本期所得稅負債",
+  lease_liabilities_current: "租賃負債－流動",
+  long_term_debt_current: "長期負債－一年內到期",
+  long_term_payables: "長期應付票據及帳款",
+  lease_liabilities_noncurrent: "租賃負債－非流動",
+  pension_liabilities: "退休金負債",
+  total_noncurrent_liabilities: "非流動負債合計",
+  // BS Equity
+  capital_surplus: "資本公積",
+  legal_reserve: "法定盈餘公積",
+  other_equity: "其他權益",
+  treasury_shares: "庫藏股票",
+  equity_attributable_to_parent: "歸屬母公司業主之權益",
+  non_controlling_interests: "非控制權益",
+  // CF
+  operating_cash_flow: "營業活動之淨現金流入（出）",
+  depreciation_expense: "折舊費用",
+  amortization_expense: "攤銷費用",
+  investing_cash_flow: "投資活動之淨現金流入（出）",
+  capex: "購置不動產廠房設備",
+  financing_cash_flow: "融資活動之淨現金流入（出）",
+  // ── 美股 / 舊格式（保留相容）──
   revenue: "Revenue",
   cost_of_goods_sold: "Cost of Goods Sold",
   cost_of_goods_and_services_sold: "Cost of Goods Sold",
-  gross_profit: "Gross Profit",
   gross_margin: "Gross Margin",
   gross_margin_pct: "  Gross Margin %",
   research_and_development: "R&D Expense",
@@ -21,24 +92,16 @@ export const LABEL_MAP: Record<string, string> = {
   advanced_technology_costs: "Advanced Technology Costs",
   equity_related_compensation: "Equity-related Compensation",
   amortization_of_intangible_assets: "Amortization of Intangibles",
-  operating_expenses: "Operating Expenses",
   other_operating_income_expense_net: "Other Operating Income/Exp",
-  operating_income: "Operating Income (Loss)",
   operating_margin_pct: "  Operating Margin %",
-  interest_expense: "Interest Expense",
-  interest_income: "Interest Income",
   interest_income_net: "Interest Income (net)",
   investment_income: "Investment Income",
   other_nonoperating_income_expense: "Other Non-op Income/Exp",
   nonoperating_income_expense_total: "Total Interest and Other Income (Expense), net",
   total_operating_expenses: "Total Operating Expenses",
-  income_before_taxes: "Income Before Taxes",
-  income_tax_expense: "Income Tax Expense",
   income_tax_provision: "Income Tax Provision",
   effective_tax_rate: "  Effective Tax Rate",
-  equity_method_investments: "Equity Method Investments",
   equity_in_net_income_of_investees: "Equity in Investees",
-  net_income: "Net Income (Loss)",
   net_margin_pct: "  Net Margin %",
   eps_basic: "EPS — Basic",
   eps_diluted: "EPS — Diluted",
@@ -145,51 +208,96 @@ export const LABEL_MAP: Record<string, string> = {
 export const IS_PCT_EXCLUDE = new Set(["effective_tax_rate"]);
 
 export const IS_METRIC_ORDER = [
-  "revenue",
-  "cost_of_goods_sold", "cost_of_goods_and_services_sold",
+  // ── 台股 XBRL (TIFRS) ──
+  "operating_revenue",
+  "cost_of_revenue",
   "gross_profit", "gross_margin_pct",
-  "research_and_development", "selling_general_administrative",
+  "selling_expenses", "general_admin_expenses", "r_and_d_expenses",
+  "expected_credit_loss",
   "operating_expenses",
-  "restructuring_charges", "other_operating_income_expense_net",
   "operating_income", "operating_margin_pct",
-  "interest_income", "interest_income_net", "investment_income",
-  "interest_expense",
-  "other_nonoperating_income_expense", "nonoperating_income_expense_total",
-  "equity_method_investments", "equity_in_net_income_of_investees",
+  "interest_income", "other_income", "other_gains_losses",
+  "interest_expense", "equity_method_income",
+  "non_operating_income_expense",
   "income_before_taxes",
   "income_tax_expense",
   "net_income", "net_margin_pct",
+  "net_income_parent", "net_income_nci",
+  "oci_not_reclassified", "oci_fvoci_equity",
+  "oci_reclassified", "oci_fx_translation",
+  "other_comprehensive_income",
+  "total_comprehensive_income",
+  "comprehensive_income_parent", "comprehensive_income_nci",
+  "basic_eps", "diluted_eps",
+  // ── 美股 / 舊格式（保留相容）──
+  "revenue",
+  "cost_of_goods_sold", "cost_of_goods_and_services_sold",
+  "research_and_development", "selling_general_administrative",
+  "restructuring_charges", "other_operating_income_expense_net",
+  "interest_income_net", "investment_income",
+  "other_nonoperating_income_expense", "nonoperating_income_expense_total",
+  "equity_in_net_income_of_investees",
   "eps_basic", "eps_diluted",
   "shares_basic_millions", "shares_diluted_millions",
 ];
 
 export const BS_ASSETS_ORDER = [
+  // ── 台股 XBRL ──
+  "cash_and_equivalents",
+  "financial_assets_fvtpl_current", "financial_assets_fvoci_current", "financial_assets_ac_current",
+  "accounts_receivable", "other_receivables",
+  "inventories", "prepaid_expenses", "current_tax_assets", "other_current_assets",
+  "total_current_assets",
+  "ppe_net", "right_of_use_assets", "intangibles_and_goodwill",
+  "equity_method_investments",
+  "financial_assets_fvoci_nc", "financial_assets_ac_nc",
+  "deferred_tax_assets", "other_noncurrent_assets",
+  "total_noncurrent_assets",
+  "total_assets",
+  // ── 美股 / 舊格式 ──
   "cash_and_cash_equivalents", "short_term_investments",
   "accounts_receivable", "inventories",
-  "other_current_assets", "total_current_assets",
+  "other_current_assets",
   "property_plant_equipment_net",
   "goodwill", "intangible_assets",
   "operating_lease_rou_asset",
-  "deferred_tax_assets", "other_noncurrent_assets",
-  "total_assets",
 ];
 
 export const BS_LIABILITIES_ORDER = [
-  "current_debt", "accounts_payable",
+  // ── 台股 XBRL ──
+  "short_term_borrowings",
+  "accounts_payable", "accounts_payable_related", "other_payables",
+  "contract_liabilities_current", "current_tax_liabilities",
+  "lease_liabilities_current", "other_current_liabilities",
+  "total_current_liabilities",
+  "long_term_debt_current", "long_term_payables",
+  "lease_liabilities_noncurrent", "deferred_tax_liabilities",
+  "pension_liabilities", "other_noncurrent_liabilities",
+  "total_noncurrent_liabilities",
+  "total_liabilities",
+  // ── 美股 / 舊格式 ──
+  "current_debt",
   "accrued_liabilities", "deferred_revenue",
-  "other_current_liabilities", "total_current_liabilities",
   "long_term_debt",
-  "operating_lease_noncurrent", "deferred_tax_liabilities",
-  "other_noncurrent_liabilities", "total_liabilities",
+  "operating_lease_noncurrent",
 ];
 
 export const BS_EQUITY_ORDER = [
-  "common_stock", "additional_paid_in_capital",
-  "retained_earnings", "aoci",
-  "total_equity", "total_liabilities_and_equity",
+  // ── 台股 XBRL ──
+  "common_stock", "capital_surplus", "legal_reserve",
+  "retained_earnings", "other_equity", "treasury_shares",
+  "equity_attributable_to_parent", "non_controlling_interests",
+  "total_equity",
+  // ── 美股 / 舊格式 ──
+  "additional_paid_in_capital", "aoci",
+  "total_liabilities_and_equity",
 ];
 
 export const CF_OPERATING_ORDER = [
+  // ── 台股 XBRL ──
+  "operating_cash_flow",
+  "depreciation_expense", "amortization_expense",
+  // ── 美股 / 舊格式 ──
   "net_income",
   "depreciation_and_amortization", "depreciation", "amortization",
   "stock_based_compensation", "equity_related_compensation",
@@ -201,6 +309,10 @@ export const CF_OPERATING_ORDER = [
 ];
 
 export const CF_INVESTING_ORDER = [
+  // ── 台股 XBRL ──
+  "capex",
+  "investing_cash_flow",
+  // ── 美股 / 舊格式 ──
   "capital_expenditures", "purchases_of_investments",
   "proceeds_from_investments", "acquisitions",
   "other_investing_activities",
@@ -208,9 +320,13 @@ export const CF_INVESTING_ORDER = [
 ];
 
 export const CF_FINANCING_ORDER = [
+  // ── 台股 XBRL ──
+  "dividends_paid",
+  "financing_cash_flow",
+  // ── 美股 / 舊格式 ──
   "proceeds_from_debt", "repayments_of_debt",
   "proceeds_from_stock_issuance", "stock_repurchases",
-  "dividends_paid", "other_financing_activities",
+  "other_financing_activities",
   "net_cash_from_financing", "net_cash_from_financing_activities",
   "net_cash_used_for_financing_activities",
 ];
@@ -233,22 +349,31 @@ export function sortMetrics(metrics: string[], order: string[]): string[] {
 
 /** Secondary subtotals — displayed with yellow highlight (not red) */
 export const SUBTOTAL_KEYS = new Set([
-  "total_operating_expenses",
-  "nonoperating_income_expense_total",
+  // 台股 XBRL
+  "operating_expenses", "non_operating_income_expense",
+  "other_comprehensive_income",
+  // 美股 / 舊格式
+  "total_operating_expenses", "nonoperating_income_expense_total",
 ]);
 
 /** IS metrics to hide from display */
 export const IS_HIDDEN = new Set<string>();
 
 export const TOTAL_KEYS = new Set([
-  "gross_profit", "gross_margin", "operating_income",
-  "income_before_taxes", "net_income", "total_current_assets", "total_assets",
-  "total_current_liabilities", "total_liabilities", "total_equity",
-  "total_liabilities_and_equity", "net_cash_from_operating",
-  "net_cash_from_operating_activities", "net_cash_from_investing",
-  "net_cash_used_for_investing_activities", "net_cash_from_financing",
-  "net_cash_used_for_financing_activities", "net_cash_from_financing_activities",
-  "free_cash_flow", "ending_cash", "current_ratio", "eps_diluted",
+  // 台股 XBRL
+  "gross_profit", "operating_income", "income_before_taxes", "net_income",
+  "total_comprehensive_income",
+  "total_current_assets", "total_noncurrent_assets", "total_assets",
+  "total_current_liabilities", "total_noncurrent_liabilities", "total_liabilities",
+  "equity_attributable_to_parent", "total_equity",
+  "operating_cash_flow", "investing_cash_flow", "financing_cash_flow",
+  "ending_cash", "basic_eps", "diluted_eps",
+  // 美股 / 舊格式
+  "gross_margin", "total_liabilities_and_equity",
+  "net_cash_from_operating", "net_cash_from_operating_activities",
+  "net_cash_from_investing", "net_cash_used_for_investing_activities",
+  "net_cash_from_financing", "net_cash_used_for_financing_activities", "net_cash_from_financing_activities",
+  "free_cash_flow", "current_ratio", "eps_diluted",
 ]);
 
 export const RATIO_CATEGORIES: { label: string; metrics: string[] }[] = [
@@ -315,7 +440,8 @@ export const sortPeriods = (periods: string[]) =>
 export const isPct = (key: string) =>
   key.includes("pct") || key.includes("rate") || key === "equity_ratio" || key === "roe" || key === "roa" || key === "asset_turnover";
 
-export const isEps = (key: string) => key.startsWith("eps");
+export const isEps = (key: string) =>
+  key.startsWith("eps") || key === "basic_eps" || key === "diluted_eps";
 
 export function fmtVal(val: number | null | undefined, key: string, currency?: string) {
   if (val === null || val === undefined) return { text: "—", cls: "null-val" };
