@@ -223,9 +223,34 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
     if (!expandedSubs.has(parentKey)) continue;
     const parentIdx = rows.findIndex((r) => r.type === "data" && r.key === parentKey);
     if (parentIdx < 0) continue;
-    const toInsert: TableRow[] = subKeys
-      .filter((m) => isMetrics.includes(m))
-      .map((m) => ({ type: "data" as const, key: m, label: labelFor(m), vals: store.valMap("income_statement", m), indent: true }));
+    const presentSubs = subKeys.filter((m) => isMetrics.includes(m));
+    const toInsert: TableRow[] = presentSubs.map((m) => ({
+      type: "data" as const, key: m, label: labelFor(m),
+      vals: store.valMap("income_statement", m), indent: true,
+    }));
+
+    // Compute residual: parent − Σ sub-items (per period)
+    const parentVals = store.valMap("income_statement", parentKey);
+    const residualVals: ValMap = {};
+    let hasResidual = false;
+    for (const p of periods) {
+      const parentV = parentVals[p];
+      const subSum = presentSubs.reduce<number | null>((acc, m) => {
+        const v = store.val("income_statement", m, p);
+        return v != null ? (acc ?? 0) + v : acc;
+      }, null);
+      if (parentV != null && subSum != null) {
+        const residual = Math.round((parentV - subSum) * 100) / 100;
+        residualVals[p] = Math.abs(residual) > 0.01 ? residual : null;
+        if (residualVals[p] != null) hasResidual = true;
+      } else {
+        residualVals[p] = null;
+      }
+    }
+    if (hasResidual) {
+      toInsert.push({ type: "data" as const, key: `_residual_${parentKey}`, label: "Other", vals: residualVals, indent: true });
+    }
+
     rows.splice(parentIdx + 1, 0, ...toInsert);
   }
 
