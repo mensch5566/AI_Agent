@@ -17,7 +17,9 @@ import { Line } from "react-chartjs-2";
 import SegmentPieChart from "@/app/components/financials/SegmentPieChart";
 import {
   TICKER_LABELS, TOTAL_KEYS, RATIO_ORDER, RATIO_DEFINITIONS, CHART_COLORS,
-  sortPeriods, isPct, isEps, fmtVal, labelFor,
+  sortPeriods, isPct, isEps, fmtVal, labelFor, sortMetrics,
+  IS_METRIC_ORDER, BS_ASSETS_ORDER, BS_LIABILITIES_ORDER, BS_EQUITY_ORDER,
+  CF_OPERATING_ORDER, CF_INVESTING_ORDER, CF_FINANCING_ORDER, CF_SUMMARY_ORDER,
   prevQoQ, prevYoY, growthPct, fmtGrowth, skipGrowthForKey,
   type GrowthMode,
 } from "@/app/components/financials/constants";
@@ -181,7 +183,7 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
   useEffect(() => { if (viewMode === "annual" && growthMode === "qoq") setGrowthMode("value"); }, [viewMode]);
 
   const periods = store.periodsIS();
-  const metrics = store.metrics("income_statement");
+  const metrics = sortMetrics(store.metrics("income_statement"), IS_METRIC_ORDER);
   const rows: TableRow[] = metrics.map((key) => ({
     type: "data" as const,
     key,
@@ -243,12 +245,12 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
 function BalanceSheet({ store }: { store: FactStore }) {
   const periods = store.periodsBS();
   const rows: TableRow[] = [];
-  for (const [stmt, label] of [
-    ["balance_sheet_assets", "ASSETS"],
-    ["balance_sheet_liabilities", "LIABILITIES"],
-    ["balance_sheet_equity", "EQUITY"],
+  for (const [stmt, label, order] of [
+    ["balance_sheet_assets", "ASSETS", BS_ASSETS_ORDER],
+    ["balance_sheet_liabilities", "LIABILITIES", BS_LIABILITIES_ORDER],
+    ["balance_sheet_equity", "EQUITY", BS_EQUITY_ORDER],
   ] as const) {
-    const metrics = store.metrics(stmt);
+    const metrics = sortMetrics(store.metrics(stmt), order);
     if (!metrics.length) continue;
     rows.push({ type: "section", label });
     for (const key of metrics) {
@@ -264,12 +266,12 @@ function BalanceSheet({ store }: { store: FactStore }) {
 function CashFlowStatement({ store }: { store: FactStore }) {
   const periods = store.periodsIS();
   const rows: TableRow[] = [];
-  for (const [stmt, label] of [
-    ["cash_flow_operating", "OPERATING ACTIVITIES"],
-    ["cash_flow_investing", "INVESTING ACTIVITIES"],
-    ["cash_flow_financing", "FINANCING ACTIVITIES"],
+  for (const [stmt, label, order] of [
+    ["cash_flow_operating", "OPERATING ACTIVITIES", CF_OPERATING_ORDER],
+    ["cash_flow_investing", "INVESTING ACTIVITIES", CF_INVESTING_ORDER],
+    ["cash_flow_financing", "FINANCING ACTIVITIES", CF_FINANCING_ORDER],
   ] as const) {
-    const metrics = store.metrics(stmt);
+    const metrics = sortMetrics(store.metrics(stmt), order);
     if (!metrics.length) continue;
     rows.push({ type: "section", label });
     for (const key of metrics) {
@@ -277,7 +279,7 @@ function CashFlowStatement({ store }: { store: FactStore }) {
     }
   }
   // Summary items
-  const summaryMetrics = store.metrics("cash_flow_summary");
+  const summaryMetrics = sortMetrics(store.metrics("cash_flow_summary"), CF_SUMMARY_ORDER);
   if (summaryMetrics.length) {
     rows.push({ type: "section", label: "SUMMARY" });
     for (const key of summaryMetrics) {

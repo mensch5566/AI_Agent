@@ -137,6 +137,94 @@ export const LABEL_MAP: Record<string, string> = {
   fcf_margin_pct: "FCF Margin %",
 };
 
+// ── Canonical display orders ────────────────────────────────────────────────
+
+export const IS_METRIC_ORDER = [
+  "revenue",
+  "cost_of_goods_sold", "cost_of_goods_and_services_sold",
+  "gross_profit", "gross_margin_pct",
+  "research_and_development", "selling_general_administrative",
+  "restructuring_charges", "other_operating_income_expense_net",
+  "operating_income", "operating_margin_pct",
+  "interest_income", "interest_income_net", "investment_income",
+  "interest_expense",
+  "other_nonoperating_income_expense", "nonoperating_income_expense_total",
+  "equity_method_investments", "equity_in_net_income_of_investees",
+  "income_before_taxes",
+  "income_tax_expense", "effective_tax_rate",
+  "net_income", "net_margin_pct",
+  "eps_basic", "eps_diluted",
+  "shares_basic_millions", "shares_diluted_millions",
+];
+
+export const BS_ASSETS_ORDER = [
+  "cash_and_cash_equivalents", "short_term_investments",
+  "accounts_receivable", "inventories",
+  "other_current_assets", "total_current_assets",
+  "property_plant_equipment_net",
+  "goodwill", "intangible_assets",
+  "operating_lease_rou_asset",
+  "deferred_tax_assets", "other_noncurrent_assets",
+  "total_assets",
+];
+
+export const BS_LIABILITIES_ORDER = [
+  "current_debt", "accounts_payable",
+  "accrued_liabilities", "deferred_revenue",
+  "other_current_liabilities", "total_current_liabilities",
+  "long_term_debt",
+  "operating_lease_noncurrent", "deferred_tax_liabilities",
+  "other_noncurrent_liabilities", "total_liabilities",
+];
+
+export const BS_EQUITY_ORDER = [
+  "common_stock", "additional_paid_in_capital",
+  "retained_earnings", "aoci",
+  "total_equity", "total_liabilities_and_equity",
+];
+
+export const CF_OPERATING_ORDER = [
+  "net_income",
+  "depreciation_and_amortization", "depreciation", "amortization",
+  "stock_based_compensation", "equity_related_compensation",
+  "deferred_income_taxes",
+  "changes_in_working_capital", "changes_in_accounts_receivable",
+  "changes_in_inventories", "changes_in_accounts_payable",
+  "other_operating_activities",
+  "net_cash_from_operating", "net_cash_from_operating_activities",
+];
+
+export const CF_INVESTING_ORDER = [
+  "capital_expenditures", "purchases_of_investments",
+  "proceeds_from_investments", "acquisitions",
+  "other_investing_activities",
+  "net_cash_from_investing", "net_cash_used_for_investing_activities",
+];
+
+export const CF_FINANCING_ORDER = [
+  "proceeds_from_debt", "repayments_of_debt",
+  "proceeds_from_stock_issuance", "stock_repurchases",
+  "dividends_paid", "other_financing_activities",
+  "net_cash_from_financing", "net_cash_from_financing_activities",
+  "net_cash_used_for_financing_activities",
+];
+
+export const CF_SUMMARY_ORDER = [
+  "fx_effect_on_cash", "fx_effect",
+  "net_change_in_cash", "beginning_cash", "ending_cash",
+  "free_cash_flow",
+];
+
+/** Sort `metrics` according to a canonical order; unknowns go to the end. */
+export function sortMetrics(metrics: string[], order: string[]): string[] {
+  const idx = new Map(order.map((k, i) => [k, i]));
+  return [...metrics].sort((a, b) => {
+    const ia = idx.has(a) ? idx.get(a)! : 9999;
+    const ib = idx.has(b) ? idx.get(b)! : 9999;
+    return ia - ib;
+  });
+}
+
 export const TOTAL_KEYS = new Set([
   "revenue", "gross_profit", "gross_margin", "operating_income",
   "income_before_taxes", "net_income", "total_current_assets", "total_assets",
