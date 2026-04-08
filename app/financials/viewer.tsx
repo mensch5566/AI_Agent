@@ -83,14 +83,14 @@ function DataTable({
       <table className="w-full border-collapse bg-[var(--bg-card)] text-xs">
         <thead>
           <tr>
-            <th className="sticky left-0 z-[11] min-w-[260px] border border-[var(--border)] bg-[#1f4e79] px-3 py-1.5 text-left font-semibold text-white">
+            <th className="sticky left-0 z-[11] min-w-[260px] border border-[var(--border)] bg-[var(--primary)] px-3 py-1.5 text-left font-semibold text-white">
               Metric
             </th>
             {periods.map((p) => {
               const end = store.periodEnd(p);
               const qCount = store.incompleteFYQuarters(p);
               return (
-                <th key={p} className="border border-[var(--border)] bg-[#1f4e79] px-3 py-1.5 text-center font-semibold text-white">
+                <th key={p} className="border border-[var(--border)] bg-[var(--primary)] px-3 py-1.5 text-center font-semibold text-white">
                   {p}
                   {qCount && <span className="ml-1 inline-block rounded bg-amber-500/80 px-1 py-px text-[9px] font-normal leading-tight text-white" title={`僅 ${qCount} 季數據`}>{qCount}Q</span>}
                   {end && <span className="block text-[10px] font-normal text-white/70">{end}</span>}
@@ -106,7 +106,7 @@ function DataTable({
                 <tr key={`sec-${i}`}>
                   <td
                     colSpan={periods.length + 1}
-                    className="border border-[var(--border)] bg-[#d6e4f0] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-[#1f4e79]"
+                    className="border border-[var(--border)] bg-[var(--primary)/10] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--primary)]"
                   >
                     {row.label}
                   </td>
@@ -209,7 +209,7 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
     const label = hasSubItems ? (
       <button
         onClick={() => toggleSub(key)}
-        className="flex items-center gap-1 text-left hover:text-[#1f4e79]"
+        className="flex items-center gap-1 text-left hover:text-[var(--primary)]"
       >
         <span className="text-[10px] text-[#7f8c8d]">{isExpanded ? "▼" : "▶"}</span>
         {labelFor(key)}
@@ -465,8 +465,8 @@ function RatiosPanel({ store }: { store: FactStore }) {
                 <button key={key} onClick={() => toggleMetric(key)}
                   className={`cursor-pointer rounded-full border px-3 py-1 text-xs transition-all select-none ${
                     selected.has(key)
-                      ? "border-[#1f4e79] bg-[#1f4e79] text-white"
-                      : "border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text)] hover:border-[#2a6da8] hover:text-[#2a6da8]"
+                      ? "border-[var(--primary)] bg-[var(--primary)] text-white"
+                      : "border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text)] hover:border-[var(--primary-lt)] hover:text-[var(--primary-lt)]"
                   }`}
                 >
                   {labelFor(key)}
@@ -501,11 +501,11 @@ function RatiosPanel({ store }: { store: FactStore }) {
         <table className="w-full border-collapse bg-[var(--bg-card)] text-xs">
           <thead>
             <tr>
-              <th className="sticky left-0 z-[11] min-w-[260px] border border-[var(--border)] bg-[#1f4e79] px-3 py-1.5 text-left font-semibold text-white">Metric</th>
+              <th className="sticky left-0 z-[11] min-w-[260px] border border-[var(--border)] bg-[var(--primary)] px-3 py-1.5 text-left font-semibold text-white">Metric</th>
               {periods.map((p) => {
                 const end = store.periodEnd(p);
                 return (
-                  <th key={p} className="border border-[var(--border)] bg-[#1f4e79] px-3 py-1.5 text-center font-semibold text-white">
+                  <th key={p} className="border border-[var(--border)] bg-[var(--primary)] px-3 py-1.5 text-center font-semibold text-white">
                     {p}{end && <span className="block text-[10px] font-normal text-white/70">{end}</span>}
                   </th>
                 );
@@ -517,7 +517,7 @@ function RatiosPanel({ store }: { store: FactStore }) {
               <>
                 <tr key={cat.label + "-hdr"}>
                   <td colSpan={periods.length + 1}
-                    className="border border-[var(--border)] bg-[#2c3e50] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white/80">
+                    className="border border-[var(--border)] bg-\[var(--primary-dk)\] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white/80">
                     {cat.label}
                   </td>
                 </tr>
@@ -528,7 +528,7 @@ function RatiosPanel({ store }: { store: FactStore }) {
                     <tr key={key}>
                       <td className={`group sticky left-0 z-[5] border border-[var(--border)] px-3 py-1.5 text-left font-medium ${bgBase} relative cursor-help`}>
                         {labelFor(key)}
-                        {def && <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded bg-[#2c3e50] px-2.5 py-1.5 text-[11px] font-normal text-white shadow-lg group-hover:block">{def}</span>}
+                        {def && <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded bg-\[var(--primary-dk)\] px-2.5 py-1.5 text-[11px] font-normal text-white shadow-lg group-hover:block">{def}</span>}
                       </td>
                       {periods.map((p) => {
                         const v = ratioVal(key, p);
@@ -694,9 +694,9 @@ function SegmentPanel({ store, viewMode }: { store: FactStore; viewMode: "quarte
         <table className="w-full border-collapse bg-[var(--bg-card)] text-xs">
           <thead>
             <tr>
-              <th className="sticky left-0 z-[11] min-w-[180px] border border-[var(--border)] bg-[#1f4e79] px-3 py-1.5 text-left font-semibold text-white">Segment</th>
+              <th className="sticky left-0 z-[11] min-w-[180px] border border-[var(--border)] bg-[var(--primary)] px-3 py-1.5 text-left font-semibold text-white">Segment</th>
               {periods.map((p) => (
-                <th key={p} className="border border-[var(--border)] bg-[#1f4e79] px-3 py-1.5 text-center font-semibold text-white whitespace-nowrap">{p}</th>
+                <th key={p} className="border border-[var(--border)] bg-[var(--primary)] px-3 py-1.5 text-center font-semibold text-white whitespace-nowrap">{p}</th>
               ))}
             </tr>
           </thead>
@@ -735,9 +735,9 @@ function NonGaapPanel({ store, viewMode }: { store: FactStore; viewMode: "quarte
         <table className="w-full border-collapse bg-[var(--bg-card)] text-xs">
           <thead>
             <tr>
-              <th className="sticky left-0 z-[11] min-w-[200px] border border-[var(--border)] bg-[#1f4e79] px-3 py-1.5 text-left font-semibold text-white">Metric</th>
+              <th className="sticky left-0 z-[11] min-w-[200px] border border-[var(--border)] bg-[var(--primary)] px-3 py-1.5 text-left font-semibold text-white">Metric</th>
               {periods.map((p) => (
-                <th key={p} className="border border-[var(--border)] bg-[#1f4e79] px-3 py-1.5 text-center font-semibold text-white whitespace-nowrap">{p}</th>
+                <th key={p} className="border border-[var(--border)] bg-[var(--primary)] px-3 py-1.5 text-center font-semibold text-white whitespace-nowrap">{p}</th>
               ))}
             </tr>
           </thead>
@@ -837,7 +837,7 @@ export default function Viewer() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-page)]">
-      <div className="sticky top-0 z-50 flex items-center gap-4 bg-[#1f4e79] px-6 py-3 text-white shadow-md">
+      <div className="sticky top-0 z-50 flex items-center gap-4 bg-[var(--primary)] px-6 py-3 text-white shadow-md">
         <Link href="/" className="text-sm text-white opacity-70 transition-opacity hover:opacity-100">← Portal</Link>
         <h1 className="text-base font-semibold whitespace-nowrap">Financials Viewer</h1>
         <select
@@ -871,7 +871,7 @@ export default function Viewer() {
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`-mb-0.5 cursor-pointer border-b-2 px-5 py-2.5 text-[13px] font-medium transition-all select-none ${
-              tab === t.id ? "border-[#1f4e79] font-bold text-[#1f4e79]" : "border-transparent text-[#7f8c8d] hover:text-[#2a6da8]"
+              tab === t.id ? "border-[var(--primary)] font-bold text-[var(--primary)]" : "border-transparent text-[#7f8c8d] hover:text-[var(--primary-lt)]"
             }`}
           >{t.label}</button>
         ))}
