@@ -202,7 +202,13 @@ export class FactStore {
 
   /** Create a new FactStore with quarterly data aggregated to annual */
   toAnnual(): FactStore {
-    const SUM_EXCLUDE = new Set(["eps_basic", "eps_diluted", "shares_basic", "shares_diluted", "shares_basic_millions", "shares_diluted_millions"]);
+    const SUM_EXCLUDE = new Set([
+      "eps_basic", "eps_diluted",
+      "shares_basic", "shares_diluted", "shares_basic_millions", "shares_diluted_millions",
+      // pct metrics must NOT be summed — they'll be recomputed from annual totals
+      "gross_margin_pct", "operating_margin_pct", "net_margin_pct",
+      "effective_tax_rate",
+    ]);
     const AVG_KEYS = new Set(["shares_basic", "shares_diluted", "shares_basic_millions", "shares_diluted_millions"]);
     const LAST_STATEMENTS = new Set(["balance_sheet_assets", "balance_sheet_liabilities", "balance_sheet_equity"]);
 
@@ -333,6 +339,29 @@ export class FactStore {
           period: fy,
           period_end: null,
           statement: "financial_ratios",
+          metric,
+          dimension: "",
+          value,
+          unit: null,
+          source: null,
+        });
+      }
+
+      // Also write IS-level pct metrics back to income_statement so IS table shows correct annual values
+      const isTaxExp = v("income_statement", "income_tax_expense");
+      const isIbt = v("income_statement", "income_before_taxes");
+      const isPctFacts: [string, number | null][] = [
+        ["gross_margin_pct", gp != null && rev ? rnd4(gp / rev) : null],
+        ["operating_margin_pct", oi != null && rev ? rnd4(oi / rev) : null],
+        ["net_margin_pct", ni != null && rev ? rnd4(ni / rev) : null],
+        ["effective_tax_rate", isTaxExp != null && isIbt && isIbt !== 0 ? rnd4(isTaxExp / isIbt) : null],
+      ];
+      for (const [metric, value] of isPctFacts) {
+        if (value == null) continue;
+        annualFacts.push({
+          period: fy,
+          period_end: null,
+          statement: "income_statement",
           metric,
           dimension: "",
           value,
