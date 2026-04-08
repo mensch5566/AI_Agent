@@ -231,9 +231,20 @@ export function sortMetrics(metrics: string[], order: string[]): string[] {
   });
 }
 
-export const TOTAL_KEYS = new Set([
-  "gross_profit", "gross_margin", "total_operating_expenses", "operating_income",
+/** Secondary subtotals — displayed with yellow highlight (not red) */
+export const SUBTOTAL_KEYS = new Set([
+  "total_operating_expenses",
   "nonoperating_income_expense_total",
+]);
+
+/** IS metrics to hide from display (XBRL sub-items already included in other lines) */
+export const IS_HIDDEN = new Set([
+  "equity_method_investments",
+  "equity_in_net_income_of_investees",
+]);
+
+export const TOTAL_KEYS = new Set([
+  "gross_profit", "gross_margin", "operating_income",
   "income_before_taxes", "net_income", "total_current_assets", "total_assets",
   "total_current_liabilities", "total_liabilities", "total_equity",
   "total_liabilities_and_equity", "net_cash_from_operating",

@@ -16,9 +16,9 @@ import {
 import { Line } from "react-chartjs-2";
 import SegmentPieChart from "@/app/components/financials/SegmentPieChart";
 import {
-  TICKER_LABELS, TOTAL_KEYS, RATIO_CATEGORIES, RATIO_DEFINITIONS, CHART_COLORS,
+  TICKER_LABELS, TOTAL_KEYS, SUBTOTAL_KEYS, RATIO_CATEGORIES, RATIO_DEFINITIONS, CHART_COLORS,
   sortPeriods, isPct, isEps, fmtVal, labelFor, sortMetrics,
-  IS_METRIC_ORDER, IS_PCT_EXCLUDE,
+  IS_METRIC_ORDER, IS_PCT_EXCLUDE, IS_HIDDEN,
   BS_ASSETS_ORDER, BS_LIABILITIES_ORDER, BS_EQUITY_ORDER,
   CF_OPERATING_ORDER, CF_INVESTING_ORDER, CF_FINANCING_ORDER, CF_SUMMARY_ORDER,
   prevQoQ, prevYoY, growthPct, fmtGrowth, skipGrowthForKey,
@@ -114,8 +114,9 @@ function DataTable({
               );
             }
             const isTotal = TOTAL_KEYS.has(row.key);
-            const bgBase = isTotal ? "bg-[var(--bg-highlight)]" : i % 2 === 0 ? "bg-[var(--bg-subtle)]" : "bg-[var(--bg-card)]";
-            const textCls = isTotal ? "font-bold text-[#7b3f00]" : "";
+            const isSubtotal = SUBTOTAL_KEYS.has(row.key);
+            const bgBase = isTotal ? "bg-[var(--bg-highlight)]" : isSubtotal ? "bg-amber-50 dark:bg-amber-950/30" : i % 2 === 0 ? "bg-[var(--bg-subtle)]" : "bg-[var(--bg-card)]";
+            const textCls = isTotal ? "font-bold text-[#7b3f00]" : isSubtotal ? "font-semibold text-amber-800 dark:text-amber-300" : "";
             const skipGrowth = isGrowth && skipGrowthForKey(row.key);
             return (
               <tr key={row.key + i}>
@@ -186,7 +187,7 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
   const periods = store.periodsIS();
   const isMetrics = store.metrics("income_statement");
   const metrics = sortMetrics(
-    isMetrics.filter((m) => !IS_PCT_EXCLUDE.has(m)),
+    isMetrics.filter((m) => !IS_PCT_EXCLUDE.has(m) && !IS_HIDDEN.has(m)),
     IS_METRIC_ORDER,
   );
   const rows: TableRow[] = metrics.map((key) => ({
@@ -219,7 +220,7 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
   }
 
   // Inject "Total Interest and Other Income (Expense), net" before income_before_taxes
-  const NONOP_SOURCES = ["interest_income", "interest_income_net", "investment_income", "interest_expense", "other_nonoperating_income_expense", "equity_method_investments", "equity_in_net_income_of_investees"];
+  const NONOP_SOURCES = ["interest_income", "interest_income_net", "investment_income", "interest_expense", "other_nonoperating_income_expense"];
   if (!rows.some((r) => r.type === "data" && r.key === "nonoperating_income_expense_total")) {
     const nonopIdx = rows.findIndex((r) => r.type === "data" && r.key === "income_before_taxes");
     if (nonopIdx > 0 && NONOP_SOURCES.some((m) => isMetrics.includes(m))) {
