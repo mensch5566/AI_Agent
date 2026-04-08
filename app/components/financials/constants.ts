@@ -30,7 +30,8 @@ export const LABEL_MAP: Record<string, string> = {
   interest_income_net: "Interest Income (net)",
   investment_income: "Investment Income",
   other_nonoperating_income_expense: "Other Non-op Income/Exp",
-  nonoperating_income_expense_total: "Non-op Income/Exp Total",
+  nonoperating_income_expense_total: "Total Interest and Other Income (Expense), net",
+  total_operating_expenses: "Total Operating Expenses",
   income_before_taxes: "Income Before Taxes",
   income_tax_expense: "Income Tax Expense",
   income_tax_provision: "Income Tax Provision",
@@ -231,7 +232,8 @@ export function sortMetrics(metrics: string[], order: string[]): string[] {
 }
 
 export const TOTAL_KEYS = new Set([
-  "gross_profit", "gross_margin", "operating_income",
+  "gross_profit", "gross_margin", "total_operating_expenses", "operating_income",
+  "nonoperating_income_expense_total",
   "income_before_taxes", "net_income", "total_current_assets", "total_assets",
   "total_current_liabilities", "total_liabilities", "total_equity",
   "total_liabilities_and_equity", "net_cash_from_operating",

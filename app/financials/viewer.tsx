@@ -184,8 +184,9 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
   useEffect(() => { if (viewMode === "annual" && growthMode === "qoq") setGrowthMode("value"); }, [viewMode]);
 
   const periods = store.periodsIS();
+  const isMetrics = store.metrics("income_statement");
   const metrics = sortMetrics(
-    store.metrics("income_statement").filter((m) => !IS_PCT_EXCLUDE.has(m)),
+    isMetrics.filter((m) => !IS_PCT_EXCLUDE.has(m)),
     IS_METRIC_ORDER,
   );
   const rows: TableRow[] = metrics.map((key) => ({
@@ -194,6 +195,39 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
     label: labelFor(key),
     vals: store.valMap("income_statement", key),
   }));
+
+  // Compute synthetic total rows from constituent line items
+  const syntheticSum = (sources: string[]): Record<string, number | null> => {
+    const present = sources.filter((m) => isMetrics.includes(m));
+    const result: Record<string, number | null> = {};
+    for (const p of periods) {
+      const vals = present.map((m) => store.val("income_statement", m, p)).filter((v): v is number => v !== null);
+      result[p] = vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+    }
+    return result;
+  };
+
+  // Inject "Total Operating Expenses" before operating_income (skip if data already has it)
+  const OPEX_SOURCES = ["research_and_development", "selling_general_administrative", "restructuring_charges", "other_operating_income_expense_net"];
+  if (!rows.some((r) => r.type === "data" && (r.key === "total_operating_expenses" || r.key === "operating_expenses"))) {
+    const opexIdx = rows.findIndex((r) => r.type === "data" && r.key === "operating_income");
+    if (opexIdx > 0 && OPEX_SOURCES.some((m) => isMetrics.includes(m))) {
+      const vals = syntheticSum(OPEX_SOURCES);
+      if (Object.values(vals).some((v) => v !== null))
+        rows.splice(opexIdx, 0, { type: "data", key: "total_operating_expenses", label: "Total Operating Expenses", vals });
+    }
+  }
+
+  // Inject "Total Interest and Other Income (Expense), net" before income_before_taxes
+  const NONOP_SOURCES = ["interest_income", "interest_income_net", "investment_income", "interest_expense", "other_nonoperating_income_expense", "equity_method_investments", "equity_in_net_income_of_investees"];
+  if (!rows.some((r) => r.type === "data" && r.key === "nonoperating_income_expense_total")) {
+    const nonopIdx = rows.findIndex((r) => r.type === "data" && r.key === "income_before_taxes");
+    if (nonopIdx > 0 && NONOP_SOURCES.some((m) => isMetrics.includes(m))) {
+      const vals = syntheticSum(NONOP_SOURCES);
+      if (Object.values(vals).some((v) => v !== null))
+        rows.splice(nonopIdx, 0, { type: "data", key: "nonoperating_income_expense_total", label: "Total Interest and Other Income (Expense), net", vals });
+    }
+  }
 
   const isGrowth = growthMode !== "value";
   const prevFn = growthMode === "qoq" ? prevQoQ : prevYoY;
