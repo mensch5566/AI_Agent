@@ -2,13 +2,44 @@
 
 ## 個股研究規則
 
-### 財務數據精準度
+### 財務數據精準度與統一管道
 - 財報數字必須 **100% 精準**，不能瞎掰、不能隨便從網路找到就貼上
-- 財務數據（現金、營收、EPS 等）來源：
-  - **Supabase `financial_facts` 表**（前端透過 `/api/financials/[ticker]` 拉取）
-  - 涵蓋：GAAP 三表、Cash Flow、Financial Ratios、Segments、Non-GAAP
-  - 新增/更新數據：編輯 `public/data/financials/{TICKER}/` JSON → 跑 `scripts/migrate_financials.py`
-  - JSON 保留做 version control + audit trail
+- **所有財務數據必須透過統一管道寫入 Supabase**，禁止直接 INSERT/UPDATE
+
+#### 台股 XBRL 管道 (Taiwan TWSE)
+路徑：`/Tools/research-tools/parse-twse-ixbrl/`
+1. 本地讀取 TWSE 手動下載的 XBRL HTML 檔案
+2. `batch_parse.py` → 批量解析並提取指標
+3. 與 NotebookLM 驗證（讀取對應 ticker 筆記本，比對差異）
+4. 人工複審差異項（異常標註、補充說明）
+5. 確認無誤後寫入 `financial_facts` + `financial_companies`
+6. 補足 XML 上無直接提供的指標（從 NotebookLM 或補充表）
+7. source tag：`XBRL_TWSE`
+
+#### 美股 SEC 管道 (US Securities)
+路徑：`/Tools/research-tools/parse-sec-filing/`
+1. 從 SEC Edgar XBRL API 下載 10-Q/10-K
+2. `parse_sec.py` → 解析並提取 GAAP 指標
+3. NotebookLM 補足 Segments、Non-GAAP 等指標
+4. 確認無誤後寫入 `financial_facts` + `financial_companies`
+5. source tag：`XBRL_SEC`
+
+#### Financial Guidance 管道（後續）
+路徑：`/Tools/research-tools/parse-guidance/`
+- 從 Earnings Call / Press Release 提取 guidance 數據
+- 寫入 **獨立表** `financial_guidance`（不污染 GAAP 原始數據）
+- source tag：`GUIDANCE_{COMPANY}` 或 `GUIDANCE_ANALYST`
+
+#### Derived Metrics（派生指標）
+- ROE、ROA、current_ratio 等**計算指標**不寫進 `financial_facts`
+- 寫入**獨立表** `financial_metrics`（同時記錄計算公式）
+- 目的：隔離官方 XBRL 數據 vs. 衍生計算
+
+#### 數據修正流程
+- 發現 XBRL 數據有誤 → 重新下載官方版本 + 重新解析
+- 以官方修正版為準，覆蓋舊數據
+- 不保留舊版本（除非官方同時發佈更正聲明）
+
 - **取最新一期**，不要假設哪一期是最新的，查 Supabase 確認
 - 引用時標明數據來源期別（如「Q2 FY2026, SEC filing」）
 - 需要核實數字時，用 NotebookLM query 核對
