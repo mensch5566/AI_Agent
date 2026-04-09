@@ -11,7 +11,11 @@
 - **ticker**（必須）：股票代號，如 `2454`
 - **periods**（可選）：指定期別如 `Q4_FY2025`，預設解析所有本地找到的期別
 
-## 數據管道流程
+## 完整兩步流程
+
+> 新標的或更新財報，**必須依序跑兩個 skill**：
+
+### Step 1：/parse-twse-ixbrl（本 skill）
 
 ```
 本地 TWSE iXBRL HTML（手動下載至 ~/Downloads 或 iCloud Obsidian Vault）
@@ -24,10 +28,31 @@
     ↓ 寫入
 financial_facts   → XBRL 原始數值（source = XBRL_TWSE）
 financial_metrics → 衍生計算指標（source = COMPUTED_FROM_XBRL_TWSE）
-    ↓ 補充（另跑 /supplement-financials）
-financial_supplement → NotebookLM 補值（source = NB_SUPPLEMENTED）
-    Segments / 地區別營收 / Non-GAAP
 ```
+
+### Step 2：/supplement-financials（另一個 skill）
+
+> **前置條件**：對應 ticker 的財報 PDF 已上傳至 NotebookLM
+
+```
+NotebookLM（對應 ticker 筆記本）
+    ↓ 查詢 PDF 財報附注、法說會
+    ↓ 寫入
+financial_supplement → NB 補值（source = NB_SUPPLEMENTED）
+```
+
+**Step 2 補充的指標（XBRL 不提供）：**
+
+| category | metric | 說明 |
+|---|---|---|
+| shares | weighted_avg_shares_basic | 加權平均流通股數－基本（從 EPS 附注取得） |
+| shares | weighted_avg_shares_diluted | 加權平均流通股數－稀釋 |
+| geography | revenue_by_geography | 地區別營收（年報附注） |
+| segment | segment_*_revenue | 業務分部營收（如有，Earnings Call） |
+| non_gaap | eps_non_gaap | Non-TIFRS EPS |
+| non_gaap | operating_margin_non_gaap | Non-TIFRS 營業利益率 |
+
+**Q4 的 weighted_avg_shares**：年報提供全年加權平均，直接存入 Q4_FYxxxx 期別。
 
 ## 寫入的指標
 

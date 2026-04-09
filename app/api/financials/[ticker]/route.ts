@@ -61,8 +61,23 @@ export async function GET(
     });
   }
 
-  // financial_supplement → only geography / segment categories → inject as statement="segments"
+  // financial_supplement → inject by category
   for (const row of supplementRes.data ?? []) {
+    // shares → inject as income_statement rows (displayed at bottom of IS)
+    if (row.category === "shares") {
+      facts.push({
+        period:     row.period,
+        period_end: row.period_end ?? null,
+        statement:  "income_statement",
+        metric:     row.metric,
+        dimension:  row.dimension ?? "",
+        value:      row.value,
+        unit:       row.unit ?? null,
+        source:     row.source,
+      });
+      continue;
+    }
+    // geography / segment → inject as statement="segments"
     if (!["geography", "segment"].includes(row.category)) continue;
     if (!row.dimension) continue;  // 必須有維度
     facts.push({

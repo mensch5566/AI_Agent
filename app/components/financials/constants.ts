@@ -27,18 +27,20 @@ export const LABEL_MAP: Record<string, string> = {
   income_before_taxes: "稅前淨利",
   net_income: "本期淨利",
   income_tax_expense: "所得稅費用",
-  net_income_parent: "  本期淨利－母公司業主",
-  net_income_nci: "  本期淨利－非控制權益",
-  oci_not_reclassified: "  不重分類至損益之其他綜合損益",
-  oci_fvoci_equity: "    權益工具投資未實現評價損益",
-  oci_reclassified: "  後續可能重分類至損益之項目",
-  oci_fx_translation: "    國外營運機構兌換差額",
-  other_comprehensive_income: "其他綜合損益（稅後淨額）",
+  net_income_parent: "淨利歸屬－母公司業主",
+  net_income_nci: "淨利歸屬－非控制權益",
+  oci_not_reclassified: "不重分類至損益之項目",
+  oci_fvoci_equity: "  權益工具投資未實現評價損益",
+  oci_reclassified: "後續可能重分類至損益之項目",
+  oci_fx_translation: "  國外營運機構兌換差額",
+  other_comprehensive_income: "本期其他綜合損益（稅後淨額）",
   total_comprehensive_income: "本期綜合損益總額",
-  comprehensive_income_parent: "  綜合損益－母公司業主",
-  comprehensive_income_nci: "  綜合損益－非控制權益",
+  comprehensive_income_parent: "綜合損益歸屬－母公司業主",
+  comprehensive_income_nci: "綜合損益歸屬－非控制權益",
   basic_eps: "基本每股盈餘（元）",
   diluted_eps: "稀釋每股盈餘（元）",
+  weighted_avg_shares_basic: "加權平均流通股數－基本（股）",
+  weighted_avg_shares_diluted: "加權平均流通股數－稀釋（股）",
   // BS Assets
   cash_and_equivalents: "現金及約當現金",
   financial_assets_fvtpl_current: "透過損益按公允價值衡量之金融資產－流動",
@@ -222,13 +224,22 @@ export const IS_METRIC_ORDER = [
   "income_before_taxes",
   "income_tax_expense",
   "net_income", "net_margin_pct",
-  "net_income_parent", "net_income_nci",
-  "oci_not_reclassified", "oci_fvoci_equity",
-  "oci_reclassified", "oci_fx_translation",
-  "other_comprehensive_income",
+  // 8300 其他綜合損益
+  "oci_not_reclassified",                      // 不重分類至損益之項目（小計）
+    "oci_fvoci_equity",                          //   權益工具未實現評價損益
+  "oci_reclassified",                            // 後續可能重分類至損益之項目（小計）
+    "oci_fx_translation",                        //   國外營運機構兌換差額
+  "other_comprehensive_income",                  // 本期其他綜合損益（稅後淨額）
+  // 8500
   "total_comprehensive_income",
+  // 8610/8620 淨利歸屬於
+  "net_income_parent", "net_income_nci",
+  // 8710/8720 綜合損益歸屬於
   "comprehensive_income_parent", "comprehensive_income_nci",
+  // 9710/9810 每股盈餘
   "basic_eps", "diluted_eps",
+  // 加權平均股數（financial_supplement → injected as income_statement）
+  "weighted_avg_shares_basic", "weighted_avg_shares_diluted",
   // ── 美股 / 舊格式（保留相容）──
   "revenue",
   "cost_of_goods_sold", "cost_of_goods_and_services_sold",
@@ -351,6 +362,7 @@ export function sortMetrics(metrics: string[], order: string[]): string[] {
 export const SUBTOTAL_KEYS = new Set([
   // 台股 XBRL
   "operating_expenses", "non_operating_income_expense",
+  "oci_not_reclassified", "oci_reclassified",  // OCI 兩個小計分類
   "other_comprehensive_income",
   // 美股 / 舊格式
   "total_operating_expenses", "nonoperating_income_expense_total",

@@ -1,7 +1,7 @@
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import ThemeToggle from "@/app/components/ThemeToggle";
 import {
@@ -80,7 +80,7 @@ function DataTable({
 
   return (
     <div className="overflow-x-auto rounded-md shadow-sm">
-      <table className="w-full border-collapse bg-[var(--bg-card)] text-xs">
+      <table className="w-full border-separate border-spacing-0 bg-[var(--bg-card)] text-xs">
         <thead>
           <tr>
             <th className="sticky left-0 z-[11] min-w-[260px] border border-[var(--border)] bg-[#1f4e79] px-3 py-1.5 text-left font-semibold text-white">
@@ -90,7 +90,7 @@ function DataTable({
               const end = store.periodEnd(p);
               const qCount = store.incompleteFYQuarters(p);
               return (
-                <th key={p} className="border border-[var(--border)] bg-[#1f4e79] px-3 py-1.5 text-center font-semibold text-white">
+                <th key={p} className="border-t border-b border-r border-[var(--border)] bg-[#1f4e79] px-3 py-1.5 text-center font-semibold text-white">
                   {p}
                   {qCount && <span className="ml-1 inline-block rounded bg-amber-500/80 px-1 py-px text-[9px] font-normal leading-tight text-white" title={`僅 ${qCount} 季數據`}>{qCount}Q</span>}
                   {end && <span className="block text-[10px] font-normal text-white/70">{end}</span>}
@@ -106,7 +106,7 @@ function DataTable({
                 <tr key={`sec-${i}`}>
                   <td
                     colSpan={periods.length + 1}
-                    className="border border-[var(--border)] bg-[#d6e4f0] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-[#1f4e79]"
+                    className="border-b border-x border-[var(--border)] bg-[#d6e4f0] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-[#1f4e79]"
                   >
                     {row.label}
                   </td>
@@ -130,7 +130,7 @@ function DataTable({
             const skipGrowth = isGrowth && skipGrowthForKey(row.key);
             return (
               <tr key={row.key + i}>
-                <td className={`sticky left-0 z-[5] border border-[var(--border)] py-1.5 text-left font-medium ${bgBase} ${textCls} ${row.indent ? "pl-8 pr-3 italic text-[#555]" : "px-3"}`}>
+                <td className={`sticky left-0 z-[10] border-l border-b border-r border-[var(--border)] py-1.5 text-left font-medium ${bgBase} ${textCls} ${row.indent ? "pl-8 pr-3 italic text-[#555]" : "px-3"}`}>
                   {row.label}
                 </td>
                 {periods.map((p) => {
@@ -147,7 +147,7 @@ function DataTable({
                       <td
                         key={p}
                         title={isPartial ? "數據未完整，僅部分季度" : undefined}
-                        className={`border border-[var(--border)] px-3 py-1.5 tabular-nums ${bgBase} ${
+                        className={`border-b border-r border-[var(--border)] px-3 py-1.5 tabular-nums ${bgBase} ${
                           f.cls === "negative" ? "text-right text-[#c0392b]"
                             : f.cls === "positive" ? "text-right text-[#27ae60]"
                             : f.cls === "null-val" ? "text-center text-[#7f8c8d]"
@@ -163,7 +163,7 @@ function DataTable({
                   return (
                     <td
                       key={p}
-                      className={`border border-[var(--border)] px-3 py-1.5 tabular-nums ${bgBase} ${textCls} ${
+                      className={`border-b border-r border-[var(--border)] px-3 py-1.5 tabular-nums ${bgBase} ${textCls} ${
                         f.cls === "negative" ? "text-right text-[#c0392b]" : f.cls === "null-val" ? "text-center text-[#7f8c8d]" : "text-right"
                       }`}
                     >
@@ -192,6 +192,10 @@ const IS_CHART_METRICS = [
 
 // Sub-items: metrics that are sub-components of another line, shown as indented toggles
 const IS_SUB_ITEMS: Record<string, string[]> = {
+  // 其他綜合損益兩大類 toggle（IFRS 通用，適用所有台股）
+  oci_not_reclassified: ["oci_fvoci_equity"],          // 8310 不重分類至損益之項目
+  oci_reclassified:     ["oci_fx_translation"],         // 8360 後續可能重分類至損益之項目
+  // 非營業收支（美股舊格式）
   other_nonoperating_income_expense: ["equity_method_investments", "equity_in_net_income_of_investees"],
 };
 
@@ -225,7 +229,13 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
         {labelFor(key)}
       </button>
     ) : labelFor(key);
-    return { type: "data" as const, key, label, vals: store.valMap("income_statement", key) };
+    // Q4 加權平均股數是全年值，不應顯示在 Q4 欄位（季度模式）
+    const IS_ANNUAL_ONLY_METRICS = new Set(["weighted_avg_shares_basic", "weighted_avg_shares_diluted"]);
+    const rawVals = store.valMap("income_statement", key);
+    const vals = IS_ANNUAL_ONLY_METRICS.has(key)
+      ? Object.fromEntries(Object.entries(rawVals).map(([p, v]) => [p, p.startsWith("Q4_") ? null : v]))
+      : rawVals;
+    return { type: "data" as const, key, label, vals };
   });
 
   // Inject sub-item rows after parent rows (only when expanded)
@@ -494,8 +504,8 @@ function RatiosPanel({ store }: { store: FactStore }) {
           </thead>
           <tbody>
             {availCats.map((cat) => (
-              <>
-                <tr key={cat.label + "-hdr"}>
+              <React.Fragment key={cat.label}>
+                <tr>
                   <td colSpan={periods.length + 1}
                     className="border border-[var(--border)] bg-[#2c3e50] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white/80">
                     {cat.label}
@@ -506,7 +516,7 @@ function RatiosPanel({ store }: { store: FactStore }) {
                   const bgBase = i % 2 === 0 ? "bg-[var(--bg-subtle)]" : "bg-[var(--bg-card)]";
                   return (
                     <tr key={key}>
-                      <td className={`group sticky left-0 z-[5] border border-[var(--border)] px-3 py-1.5 text-left font-medium ${bgBase} relative cursor-help`}>
+                      <td className={`group sticky left-0 z-[10] border border-[var(--border)] px-3 py-1.5 text-left font-medium ${bgBase} relative cursor-help`}>
                         {labelFor(key)}
                         {def && <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded bg-[#2c3e50] px-2.5 py-1.5 text-[11px] font-normal text-white shadow-lg group-hover:block">{def}</span>}
                       </td>
@@ -522,7 +532,7 @@ function RatiosPanel({ store }: { store: FactStore }) {
                     </tr>
                   );
                 })}
-              </>
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -608,7 +618,7 @@ function SegmentPanel({ store, viewMode }: { store: FactStore; viewMode: "quarte
     const bgBase = isTotal ? "bg-[var(--bg-highlight)]" : idx % 2 === 0 ? "bg-[var(--bg-subtle)]" : "bg-[var(--bg-card)]";
     return (
       <tr key={label}>
-        <td className={`sticky left-0 z-[5] border border-[var(--border)] px-3 py-1.5 text-left font-medium whitespace-nowrap ${bgBase} ${isTotal ? "font-bold text-[#7b3f00]" : ""}`}>
+        <td className={`sticky left-0 z-[10] border border-[var(--border)] px-3 py-1.5 text-left font-medium whitespace-nowrap ${bgBase} ${isTotal ? "font-bold text-[#7b3f00]" : ""}`}>
           {label}
         </td>
         {periods.map((p) => {
@@ -724,7 +734,7 @@ function NonGaapPanel({ store, viewMode }: { store: FactStore; viewMode: "quarte
           <tbody>
             {/* GAAP EPS */}
             <tr>
-              <td className="sticky left-0 z-[5] border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-1.5 text-left font-medium">GAAP EPS (Diluted)</td>
+              <td className="sticky left-0 z-[10] border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-1.5 text-left font-medium">GAAP EPS (Diluted)</td>
               {periods.map((p) => {
                 const v = gaapEps[p];
                 return (
@@ -736,7 +746,7 @@ function NonGaapPanel({ store, viewMode }: { store: FactStore; viewMode: "quarte
             </tr>
             {/* Non-GAAP EPS */}
             <tr>
-              <td className="sticky left-0 z-[5] border border-[var(--border)] bg-[var(--bg-card)] px-3 py-1.5 text-left font-medium">Adjusted EPS (Non-GAAP)</td>
+              <td className="sticky left-0 z-[10] border border-[var(--border)] bg-[var(--bg-card)] px-3 py-1.5 text-left font-medium">Adjusted EPS (Non-GAAP)</td>
               {periods.map((p) => {
                 const v = adjEps[p];
                 return (
@@ -749,7 +759,7 @@ function NonGaapPanel({ store, viewMode }: { store: FactStore; viewMode: "quarte
             </tr>
             {/* Delta */}
             <tr>
-              <td className="sticky left-0 z-[5] border border-[var(--border)] bg-[var(--bg-highlight)] px-3 py-1.5 text-left font-bold text-[#7b3f00]">Δ (Non-GAAP − GAAP)</td>
+              <td className="sticky left-0 z-[10] border border-[var(--border)] bg-[var(--bg-highlight)] px-3 py-1.5 text-left font-bold text-[#7b3f00]">Δ (Non-GAAP − GAAP)</td>
               {periods.map((p) => {
                 const gaap = gaapEps[p];
                 const ng = adjEps[p];

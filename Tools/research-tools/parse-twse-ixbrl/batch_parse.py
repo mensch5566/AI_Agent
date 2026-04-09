@@ -145,6 +145,10 @@ DERIVED_METRICS = [
     # ── CF 衍生 ──
     ('fcf',                     'operating_cash_flow + capex',                       'operating_cash_flow',    None,                        False),
 ]
+# NOTE: shares_outstanding 需特殊處理：
+# Q1/Q2/Q3 可從 net_income_parent / basic_eps 計算（均為單季值）
+# Q4 basic_eps 是全年值，無法與單季 net_income_parent 直接相除
+# Annual view 正確：toAnnual() 會算出 FY net_income_parent / FY_EPS = 正確全年加權平均股數
 
 
 def find_local_xbrl_files(ticker: str) -> dict:

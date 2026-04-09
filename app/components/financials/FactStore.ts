@@ -208,11 +208,12 @@ export class FactStore {
       // 台股 XBRL 格式（Q4 已是全年值，直接用 Q4，不累加）
       "basic_eps", "diluted_eps",
       "shares_basic", "shares_diluted", "shares_basic_millions", "shares_diluted_millions",
+      "weighted_avg_shares_basic", "weighted_avg_shares_diluted",
       // pct metrics must NOT be summed — they'll be recomputed from annual totals
       "gross_margin_pct", "operating_margin_pct", "net_margin_pct",
       "effective_tax_rate",
     ]);
-    const AVG_KEYS = new Set(["shares_basic", "shares_diluted", "shares_basic_millions", "shares_diluted_millions"]);
+    const AVG_KEYS = new Set(["shares_basic", "shares_diluted", "shares_basic_millions", "shares_diluted_millions", "weighted_avg_shares_basic", "weighted_avg_shares_diluted"]);
     const LAST_STATEMENTS = new Set(["balance_sheet_assets", "balance_sheet_liabilities", "balance_sheet_equity"]);
 
     // Group periods by FY
