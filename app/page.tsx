@@ -11,6 +11,14 @@ const research = [
     desc: "三表（損益、資產負債、現金流）及財務比率的時序瀏覽，支援多標的切換。",
     tags: ["SNDK", "2454"],
   },
+  {
+    href: "/equity-research",
+    icon: "📊",
+    nameEn: "Equity Research",
+    name: "個股研究報告",
+    desc: "基本面研究、估值模型與 P/E 矩陣，涵蓋 US 與 TW 標的。",
+    tags: ["SNDK", "聯發科"],
+  },
 ];
 
 function ToolCard({

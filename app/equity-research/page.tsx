@@ -17,6 +17,17 @@ const US_TICKERS = [
   },
 ];
 
+const TW_TICKERS = [
+  {
+    symbol: "2454",
+    name: "聯發科",
+    tags: [
+      { label: "WIP", status: "wip" as const },
+      { label: "AI ASIC", status: "default" as const },
+    ],
+  },
+];
+
 const TAG_STYLE: Record<string, string> = {
   wip: "bg-yellow-100 text-yellow-800",
   ready: "bg-green-100 text-green-800",
@@ -81,7 +92,30 @@ export default function EquityResearchPage() {
         <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--text-muted)]">
           TW Stocks
         </div>
-        <p className="p-2 text-sm italic text-[var(--text-faint)]">尚無標的</p>
+        <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+          {TW_TICKERS.map((t) => (
+            <Link
+              key={t.symbol}
+              href={`/equity-research/${t.symbol}`}
+              className="rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-5 shadow-sm transition-all hover:border-[var(--primary)] hover:shadow-md"
+            >
+              <div className="text-xl font-bold text-[var(--primary)]">
+                {t.name}
+              </div>
+              <div className="mt-0.5 text-xs text-[#6B5E60]">{t.symbol}</div>
+              <div className="mt-2 flex gap-1.5">
+                {t.tags.map((tag) => (
+                  <span
+                    key={tag.label}
+                    className={`rounded px-2 py-0.5 text-[0.68rem] ${TAG_STYLE[tag.status]}`}
+                  >
+                    {tag.label}
+                  </span>
+                ))}
+              </div>
+            </Link>
+          ))}
+        </div>
       </div>
 
       {/* SOP */}

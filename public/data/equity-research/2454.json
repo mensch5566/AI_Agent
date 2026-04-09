@@ -1,0 +1,59 @@
+{
+  "ticker": "2454",
+  "name": "聯發科技股份有限公司",
+  "displayName": "聯發科",
+  "market": "TW",
+  "updated": "2026-04-09",
+  "chapters": [
+    {
+      "id": "ch-valuation",
+      "title": "估值模型",
+      "numeral": "I",
+      "sections": [],
+      "valuations": [
+        {
+          "type": "pe",
+          "title": "P/E",
+          "peLabels": ["手機週期悲觀", "折價", "共識中樞", "AI成長溢價", "完整AI重估"],
+          "versions": [
+            {
+              "id": "v1",
+              "date": "2026-04-09",
+              "label": "CY2026 · 廣發 GF base（ASIC $1.8B）",
+              "trigger": "ASIC Revenue 採廣發證券 Fig.4 假設（450k TPU v8x × $4,000）",
+              "latestReport": "4Q FY2025 法說會",
+              "note": "核心業務 YoY 小幅衰退（手機記憶體成本上漲），ASIC / 資料中心首次實質貢獻。Base EPS NT$69.78 較 FY2025 實績 NT$66.03 成長 +6%，位於 FactSet 共識均值 NT$64.19 上方。",
+              "details": [
+                "**ASIC 基礎來源：廣發證券（GF Securities）報告 Fig.4**，MediaTek TPU earnings assumptions。",
+                "**CoWoS 推算邏輯：** 台積電 2026 年分配 25,000 片 CoWoS-S 封裝產能，每片產出 **18 顆** TPU v8x（A5921 / Zebrafish），合計出貨上限 450k 顆。ASP $4,000 / 顆，廣發 base revenue = **$1.8B**。廣發 Fig.4 表格將 450k 捨入為「0.5M」，但 revenue 維持 $1.8B，以 450k × $4,000 為精確假設。",
+                "**量產時程：** 2026Q1 末風險試產 → Q3 末放量 → Q4 主力出貨。Q3 以早期量產估算，Q4 為主要貢獻季。",
+                "**核心業務假設：** Q1 YoY -5%（管理層指引）；H2 伴隨手機旗艦新機週期小幅回升。毛利率全年目標 ~46%（管理層指引），OpEx% Q1=31%、H2 隨 ASIC 放量逐步改善。稅率 14.5%，稀釋股數 1,588M 股，FX TWD/USD = 31.5。"
+              ],
+              "detailsTable": {
+                "headers": ["情境", "Q1+Q2 ASIC", "Q3 ASIC", "Q4 ASIC", "全年 ASIC", "核心假設"],
+                "rows": [
+                  ["Bear (L)", "$0", "$200M", "$1,000M", "**$1,200M**", "HBM 供應受限，出貨量 ~333k"],
+                  ["Base (M)", "$0", "$300M", "$1,500M", "**$1,800M**", "廣發 base：450k × $4,000 / CoWoS-S 25k片 × 18"],
+                  ["Bull (H)", "$0", "$400M", "$1,600M", "**$2,000M**", "500k 滿載 × $4,000，CoWoS 追加分配"]
+                ]
+              },
+              "peRatios": [20, 24, 28, 32, 36],
+              "eps": {
+                "bear": 57.42,
+                "base": 69.78,
+                "bull": 81.52,
+                "ttm": 66.03
+              },
+              "quarterly": [
+                { "label": "Q1", "bear": 10.45, "base": 12.66, "bull": 15.00, "isActual": false },
+                { "label": "Q2", "bear": 12.11, "base": 14.72, "bull": 17.22, "isActual": false },
+                { "label": "Q3", "bear": 15.20, "base": 18.28, "bull": 21.49, "isActual": false },
+                { "label": "Q4", "bear": 17.30, "base": 21.83, "bull": 25.60, "isActual": false }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
