@@ -7,9 +7,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // 台股 ticker 全為數字，Yahoo Finance 需要加 .TW 後綴
+    const yTicker = /^\d+$/.test(ticker) ? `${ticker}.TW` : ticker;
     const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1d`,
-      { next: { revalidate: 300 } }, // cache 5 min
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yTicker)}?range=1d&interval=1d`,
+      { headers: { "User-Agent": "Mozilla/5.0" }, next: { revalidate: 300 } },
     );
     const data = await res.json();
     const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;

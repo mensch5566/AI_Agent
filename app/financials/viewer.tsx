@@ -18,7 +18,7 @@ import SegmentPieChart from "@/app/components/financials/SegmentPieChart";
 import {
   TICKER_LABELS, TOTAL_KEYS, SUBTOTAL_KEYS, RATIO_CATEGORIES, RATIO_DEFINITIONS, CHART_COLORS,
   sortPeriods, isPct, isEps, fmtVal, labelFor, sortMetrics,
-  IS_METRIC_ORDER, IS_PCT_EXCLUDE, IS_HIDDEN,
+  IS_METRIC_ORDER, US_IS_METRIC_ORDER, IS_PCT_EXCLUDE, IS_HIDDEN,
   BS_ASSETS_ORDER, BS_LIABILITIES_ORDER, BS_EQUITY_ORDER,
   CF_OPERATING_ORDER, CF_INVESTING_ORDER, CF_FINANCING_ORDER, CF_SUMMARY_ORDER,
   prevQoQ, prevYoY, growthPct, fmtGrowth, skipGrowthForKey,
@@ -62,21 +62,32 @@ type TableRow =
   | { type: "data"; key: string; label: React.ReactNode; vals: ValMap; indent?: boolean };
 
 /* ── Generic data table ── */
+const CHART_NON_SELECTABLE = new Set([
+  "weighted_avg_shares_basic", "weighted_avg_shares_diluted",
+]);
+
 function DataTable({
   periods,
   rows,
   store,
   growthMode = "value",
+  onRowClick,
+  chartMetrics,
 }: {
   periods: string[];
   rows: TableRow[];
   store: FactStore;
   growthMode?: GrowthMode;
+  onRowClick?: (key: string) => void;
+  chartMetrics?: string[];
 }) {
   if (!rows.length) return <div className="p-10 text-center text-sm text-[#7f8c8d]">No data available.</div>;
 
   const isGrowth = growthMode !== "value";
   const prevFn = growthMode === "qoq" ? prevQoQ : prevYoY;
+
+  const isChartable = (key: string) =>
+    !!onRowClick && !isPct(key) && !isEps(key) && !key.startsWith("_") && !CHART_NON_SELECTABLE.has(key);
 
   return (
     <div className="overflow-x-auto rounded-md shadow-sm">
@@ -119,7 +130,7 @@ function DataTable({
             const isEpsRow = isEps(row.key);
             const bgBase = isEpsRow  ? "bg-[#1f4e79]"
               : isTotal              ? "bg-[var(--bg-highlight)]"
-              : isSubtotal           ? "bg-[#e8f4fd] dark:bg-blue-900/20"
+              : isSubtotal           ? "bg-[#e8f4fd]"
               : isRatioRow           ? "bg-[var(--bg-card)]"
               : "bg-[var(--bg-card)]";
             const textCls = isEpsRow ? "font-bold text-white"
@@ -128,10 +139,22 @@ function DataTable({
               : isRatioRow           ? "text-[#aaa] dark:text-[#888]"
               : "";
             const skipGrowth = isGrowth && skipGrowthForKey(row.key);
+            const chartIdx = chartMetrics ? chartMetrics.indexOf(row.key) : -1;
+            const isSelected = chartIdx >= 0;
+            const clickable = isChartable(row.key);
             return (
-              <tr key={row.key + i}>
+              <tr
+                key={row.key + i}
+                onClick={clickable ? () => onRowClick!(row.key) : undefined}
+                className={clickable ? "cursor-pointer" : ""}
+              >
                 <td className={`sticky left-0 z-[10] border-l border-b border-r border-[var(--border)] py-1.5 text-left font-medium ${bgBase} ${textCls} ${row.indent ? "pl-8 pr-3 italic text-[#555]" : "px-3"}`}>
-                  {row.label}
+                  {isSelected ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="shrink-0 h-2 w-2 rounded-sm" style={{ backgroundColor: CHART_COLORS[chartIdx % CHART_COLORS.length] }} />
+                      <span>{row.label}</span>
+                    </span>
+                  ) : row.label}
                 </td>
                 {periods.map((p) => {
                   if (isGrowth && !skipGrowth) {
@@ -183,11 +206,12 @@ function DataTable({
 /* ================================================================
    Income Statement
    ================================================================ */
-const IS_CHART_METRICS = [
-  { key: "revenue", label: "Revenue" },
-  { key: "gross_profit", label: "Gross Profit" },
-  { key: "operating_income", label: "Operating Income" },
-  { key: "net_income", label: "Net Income" },
+// 圖表預設指標（按優先順序，取前 3 個有資料的）
+const CHART_DEFAULT_CANDIDATES = [
+  "operating_revenue", "revenue",
+  "gross_profit",
+  "operating_income",
+  "net_income",
 ];
 
 // Sub-items: metrics that are sub-components of another line, shown as indented toggles
@@ -211,10 +235,24 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
 
   const periods = store.periodsIS();
   const isMetrics = store.metrics("income_statement");
+
+  // 圖表選取狀態：最多 3 個，超過時踢掉最舊的
+  const [chartMetrics, setChartMetrics] = useState<string[]>(() =>
+    CHART_DEFAULT_CANDIDATES.filter(k => isMetrics.includes(k)).slice(0, 3)
+  );
+  const toggleChartMetric = (key: string) => {
+    setChartMetrics(prev => {
+      if (prev.includes(key)) return prev.filter(k => k !== key);
+      const next = [...prev, key];
+      if (next.length > 3) next.shift(); // 超過 3 個：移除最舊
+      return next;
+    });
+  };
   const IS_SUB_SET = new Set(Object.values(IS_SUB_ITEMS).flat());
+  const metricOrder = store.currency === "TWD" ? IS_METRIC_ORDER : US_IS_METRIC_ORDER;
   const metrics = sortMetrics(
     isMetrics.filter((m) => !IS_PCT_EXCLUDE.has(m) && !IS_HIDDEN.has(m) && !IS_SUB_SET.has(m)),
-    IS_METRIC_ORDER,
+    metricOrder,
   );
   const rows: TableRow[] = metrics.map((key) => {
     const subKeys = (IS_SUB_ITEMS[key] ?? []).filter((m) => isMetrics.includes(m));
@@ -222,13 +260,13 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
     const isExpanded = expandedSubs.has(key);
     const label = hasSubItems ? (
       <button
-        onClick={() => toggleSub(key)}
+        onClick={(e) => { e.stopPropagation(); toggleSub(key); }}
         className="flex items-center gap-1 text-left hover:text-[#1f4e79]"
       >
         <span className="text-[10px] text-[#7f8c8d]">{isExpanded ? "▼" : "▶"}</span>
-        {labelFor(key)}
+        {labelFor(key, store.currency)}
       </button>
-    ) : labelFor(key);
+    ) : labelFor(key, store.currency);
     // Q4 加權平均股數是全年值，不應顯示在 Q4 欄位（季度模式）
     const IS_ANNUAL_ONLY_METRICS = new Set(["weighted_avg_shares_basic", "weighted_avg_shares_diluted"]);
     const rawVals = store.valMap("income_statement", key);
@@ -245,7 +283,7 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
     if (parentIdx < 0) continue;
     const presentSubs = subKeys.filter((m) => isMetrics.includes(m));
     const toInsert: TableRow[] = presentSubs.map((m) => ({
-      type: "data" as const, key: m, label: labelFor(m),
+      type: "data" as const, key: m, label: labelFor(m, store.currency),
       vals: store.valMap("income_statement", m), indent: true,
     }));
 
@@ -292,15 +330,20 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
 
   const isGrowth = growthMode !== "value";
   const prevFn = growthMode === "qoq" ? prevQoQ : prevYoY;
+  const isTWD = store.currency === "TWD";
+
+  // TWD 單位：千元 → 以百萬元顯示（÷1000）
+  const fmtChartVal = (v: number) =>
+    isTWD ? `NT$${Math.round(v / 1000).toLocaleString()}M` : `$${v.toLocaleString()}M`;
 
   const chartData = {
     labels: periods,
-    datasets: IS_CHART_METRICS
-      .filter(({ key }) => metrics.includes(key))
-      .map(({ key, label }, i) => {
+    datasets: chartMetrics
+      .filter(key => isMetrics.includes(key))
+      .map((key, i) => {
         const vals = store.valMap("income_statement", key);
         return {
-          label,
+          label: labelFor(key, store.currency),
           data: isGrowth
             ? periods.map((p) => { const pk = prevFn(p); const g = growthPct(vals[p], pk ? vals[pk] : null); return g != null ? +(g * 100).toFixed(1) : null; })
             : periods.map((p) => vals[p] ?? null),
@@ -318,22 +361,23 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
         <GrowthToggle mode={growthMode} setMode={setGrowthMode} showQoQ={viewMode === "quarterly"} />
       </div>
       <div className="mb-4 rounded-md bg-[var(--bg-card)] p-4 shadow-sm">
-        <div className="relative h-[320px]">
+        <p className="mb-1 text-[10px] text-[var(--text-muted)]">點擊下方表格列可加入／移除圖表（最多 3 個）</p>
+        <div className="relative h-[300px]">
           <Line data={chartData} options={{
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: "index" as const, intersect: false },
             plugins: {
-              tooltip: { callbacks: { label: (ctx: any) => isGrowth ? `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}%` : `${ctx.dataset.label}: $${ctx.parsed.y?.toLocaleString()}M` } },
+              tooltip: { callbacks: { label: (ctx: any) => isGrowth ? `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}%` : `${ctx.dataset.label}: ${fmtChartVal(ctx.parsed.y)}` } },
               legend: { position: "bottom" as const, labels: { boxWidth: 12, font: { size: 11 } } },
             },
             scales: {
               x: { ticks: { font: { size: 10 }, maxRotation: 45 } },
-              y: { ticks: { font: { size: 10 }, callback: (v: any) => isGrowth ? `${v}%` : `$${v}M` } },
+              y: { ticks: { font: { size: 10 }, callback: (v: any) => isGrowth ? `${v}%` : fmtChartVal(v) } },
             },
           }} />
         </div>
       </div>
-      <DataTable periods={periods} rows={rows} store={store} growthMode={growthMode} />
+      <DataTable periods={periods} rows={rows} store={store} growthMode={growthMode} onRowClick={toggleChartMetric} chartMetrics={chartMetrics} />
     </>
   );
 }
@@ -353,7 +397,7 @@ function BalanceSheet({ store }: { store: FactStore }) {
     if (!metrics.length) continue;
     rows.push({ type: "section", label });
     for (const key of metrics) {
-      rows.push({ type: "data", key, label: labelFor(key), vals: store.valMap(stmt, key) });
+      rows.push({ type: "data", key, label: labelFor(key, store.currency), vals: store.valMap(stmt, key) });
     }
   }
   return <DataTable periods={periods} rows={rows} store={store} />;
@@ -374,7 +418,7 @@ function CashFlowStatement({ store }: { store: FactStore }) {
     if (!metrics.length) continue;
     rows.push({ type: "section", label });
     for (const key of metrics) {
-      rows.push({ type: "data", key, label: labelFor(key), vals: store.valMap(stmt, key) });
+      rows.push({ type: "data", key, label: labelFor(key, store.currency), vals: store.valMap(stmt, key) });
     }
   }
   // Summary items
@@ -382,7 +426,7 @@ function CashFlowStatement({ store }: { store: FactStore }) {
   if (summaryMetrics.length) {
     rows.push({ type: "section", label: "SUMMARY" });
     for (const key of summaryMetrics) {
-      rows.push({ type: "data", key, label: labelFor(key), vals: store.valMap("cash_flow_summary", key) });
+      rows.push({ type: "data", key, label: labelFor(key, store.currency), vals: store.valMap("cash_flow_summary", key) });
     }
   }
   return <DataTable periods={periods} rows={rows} store={store} />;
@@ -435,7 +479,7 @@ function RatiosPanel({ store }: { store: FactStore }) {
   const chartData = {
     labels: periods,
     datasets: selArr.map((key, i) => ({
-      label: labelFor(key),
+      label: labelFor(key, store.currency),
       data: periods.map((p) => ratioVal(key, p)),
       borderColor: CHART_COLORS[i % CHART_COLORS.length],
       backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + "22",
@@ -459,7 +503,7 @@ function RatiosPanel({ store }: { store: FactStore }) {
                       : "border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text)] hover:border-[#2a6da8] hover:text-[#2a6da8]"
                   }`}
                 >
-                  {labelFor(key)}
+                  {labelFor(key, store.currency)}
                 </button>
               ))}
             </div>
@@ -517,7 +561,7 @@ function RatiosPanel({ store }: { store: FactStore }) {
                   return (
                     <tr key={key}>
                       <td className={`group sticky left-0 z-[10] border border-[var(--border)] px-3 py-1.5 text-left font-medium ${bgBase} relative cursor-help`}>
-                        {labelFor(key)}
+                        {labelFor(key, store.currency)}
                         {def && <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded bg-[#2c3e50] px-2.5 py-1.5 text-[11px] font-normal text-white shadow-lg group-hover:block">{def}</span>}
                       </td>
                       {periods.map((p) => {

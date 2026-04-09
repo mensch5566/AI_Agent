@@ -112,6 +112,7 @@ interface ValuationVersion {
   note: string;
   details?: string[];
   detailsTable?: { headers: string[]; rows: string[][] };
+  assumptionsTable?: { headers: string[]; rows: (string | { text: string; href?: string })[][] };
   peRatios: [number, number, number, number];
   eps: { bear: number; base: number; bull: number; ttm: number };
   quarterly: QuarterEPS[];
@@ -817,65 +818,195 @@ function VersionHistory({
   );
 }
 
-function DetailsToggle({
+function LogicModal({
+  version,
   details,
   detailsTable,
+  assumptionsTable,
 }: {
+  version: string;
   details: string[];
   detailsTable?: { headers: string[]; rows: string[][] };
+  assumptionsTable?: { headers: string[]; rows: (string | { text: string; href?: string })[][] };
 }) {
   const [open, setOpen] = useState(false);
+
+  // Close on ESC
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open]);
+
+  function renderCell(cell: string | { text: string; href?: string }) {
+    if (typeof cell === "string") {
+      // Support \n line breaks within table cells
+      const lines = cell.split("\n");
+      if (lines.length === 1) return renderInline(cell);
+      return lines.map((line, i) => (
+        <span key={i}>{renderInline(line)}{i < lines.length - 1 && <br />}</span>
+      ));
+    }
+    if (cell.href) return (
+      <a href={cell.href} target="_blank" rel="noopener"
+        className="text-[var(--primary)] underline underline-offset-2 hover:opacity-80">
+        {cell.text}
+      </a>
+    );
+    return cell.text;
+  }
+
   return (
-    <div className="mt-6 border-t border-[var(--border)] pt-3">
-      <button
-        className="flex w-full items-center justify-between text-left text-[0.85rem] font-semibold hover:text-[var(--primary)]"
-        onClick={() => setOpen(!open)}
-      >
-        估值邏輯
-        <span className="text-xs text-[var(--text-faint)]">{open ? "▲" : "▼"}</span>
-      </button>
+    <>
+      <div className="mt-6 border-t border-[var(--border)] pt-3">
+        <button
+          className="flex w-full items-center justify-between text-left text-[0.85rem] font-semibold hover:text-[var(--primary)]"
+          onClick={() => setOpen(true)}
+        >
+          估值邏輯
+          <span className="text-xs text-[var(--text-faint)]">展開 ↗</span>
+        </button>
+      </div>
+
       {open && (
-        <div className="mt-3">
-          {details.map((p, i) => (
-            <p key={i} className="mb-3 text-[0.95rem] leading-relaxed">
-              {renderInline(p)}
-            </p>
-          ))}
-          {detailsTable && (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-auto text-[0.85rem] border-collapse">
-                <thead>
-                  <tr>
-                    {detailsTable.headers.map((h, i) => (
-                      <th
-                        key={i}
-                        className="border-b border-[var(--border)] px-4 py-1.5 text-left font-semibold text-[var(--text-muted)]"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {detailsTable.rows.map((row, ri) => (
-                    <tr key={ri}>
-                      {row.map((cell, ci) => (
-                        <td
-                          key={ci}
-                          className="border-b border-[var(--border-faint)] px-4 py-1.5"
-                        >
-                          {renderInline(cell)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+        >
+          <div className="relative w-full max-w-[95vw] max-h-[88vh] overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl">
+            {/* Header */}
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg-card)] px-6 py-4">
+              <div>
+                <h2 className="text-base font-semibold">估值邏輯</h2>
+                <p className="mt-0.5 text-xs text-[var(--text-faint)]">{version}</p>
+              </div>
+              <button
+                onClick={() => setOpen(false)}
+                className="text-[var(--text-muted)] hover:text-[var(--text)] text-xl leading-none"
+              >
+                ✕
+              </button>
             </div>
-          )}
+
+            <div className="px-6 py-5 space-y-8">
+              {/* Table 1: 推估方法 (cols: 科目, 推估方法, 來源) */}
+              {assumptionsTable && (
+                <section>
+                  <h3 className="mb-3 text-[0.8rem] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                    推估方法
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[0.85rem] border-collapse">
+                      <thead>
+                        <tr className="bg-[#1f4e79]">
+                          {[0, 1, 2].map((ci) => (
+                            <th key={ci} className="px-4 py-2 text-left font-semibold text-white text-xs">
+                              {assumptionsTable.headers[ci]}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {assumptionsTable.rows.map((row, ri) => (
+                          <tr key={ri} className={ri % 2 === 0 ? "bg-[var(--bg-subtle)]" : "bg-[var(--bg-card)]"}>
+                            {[0, 1, 2].map((ci) => (
+                              <td key={ci} className="border-b border-[var(--border-faint)] px-4 py-2 align-top leading-snug">
+                                {renderCell(row[ci])}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {/* Table 2: 假設明細 (cols: 科目, Bear, Base, Bull) */}
+              {assumptionsTable && (
+                <section>
+                  <h3 className="mb-3 text-[0.8rem] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                    假設明細
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[0.85rem] border-collapse">
+                      <thead>
+                        <tr className="bg-[#1f4e79]">
+                          {[0, 3, 4, 5].map((ci) => (
+                            <th key={ci} className="px-4 py-2 text-left font-semibold text-white text-xs">
+                              {assumptionsTable.headers[ci]}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {assumptionsTable.rows.map((row, ri) => (
+                          <tr key={ri} className={ri % 2 === 0 ? "bg-[var(--bg-subtle)]" : "bg-[var(--bg-card)]"}>
+                            {[0, 3, 4, 5].map((ci) => (
+                              <td key={ci} className="border-b border-[var(--border-faint)] px-4 py-2 align-top leading-snug">
+                                {renderCell(row[ci])}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {/* ASIC Scenario Table */}
+              {detailsTable && (
+                <section>
+                  <h3 className="mb-3 text-[0.8rem] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                    情境明細
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[0.85rem] border-collapse">
+                      <thead>
+                        <tr className="bg-[#1f4e79]">
+                          {detailsTable.headers.map((h, i) => (
+                            <th key={i} className="px-4 py-2 text-left font-semibold text-white text-xs">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {detailsTable.rows.map((row, ri) => (
+                          <tr key={ri} className={ri % 2 === 0 ? "bg-[var(--bg-subtle)]" : "bg-[var(--bg-card)]"}>
+                            {row.map((cell, ci) => (
+                              <td key={ci} className="border-b border-[var(--border-faint)] px-4 py-2">
+                                {renderInline(cell)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {/* Detail Paragraphs */}
+              {details && details.length > 0 && (
+                <section>
+                  <h3 className="mb-3 text-[0.8rem] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                    補充說明
+                  </h3>
+                  <div className="space-y-3">
+                    {details.map((p, i) => (
+                      <p key={i} className="text-[0.92rem] leading-relaxed text-[var(--text)]">
+                        {renderInline(p)}
+                      </p>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -922,7 +1053,12 @@ function PEValuation({
           </div>
         </div>
         {latest.details && latest.details.length > 0 && (
-          <DetailsToggle details={latest.details} detailsTable={latest.detailsTable} />
+          <LogicModal
+            version={`${latest.id} · ${latest.date} · ${latest.label}`}
+            details={latest.details}
+            detailsTable={latest.detailsTable}
+            assumptionsTable={latest.assumptionsTable}
+          />
         )}
       </ContentBox>
 

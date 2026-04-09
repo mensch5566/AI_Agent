@@ -252,6 +252,30 @@ export const IS_METRIC_ORDER = [
   "shares_basic_millions", "shares_diluted_millions",
 ];
 
+/** 美股 IS 科目順序（revenue 在最上面） */
+export const US_IS_METRIC_ORDER = [
+  "revenue",
+  "cost_of_goods_sold", "cost_of_goods_and_services_sold",
+  "gross_profit", "gross_margin", "gross_margin_pct",
+  "research_and_development",
+  "selling_general_administrative", "selling_general_and_administrative",
+  "restructuring_charges", "advanced_technology_costs", "equity_related_compensation",
+  "amortization_of_intangible_assets", "other_operating_income_expense_net",
+  "total_operating_expenses",
+  "operating_income", "operating_margin_pct",
+  "interest_income", "interest_income_net", "investment_income",
+  "interest_expense",
+  "other_nonoperating_income_expense",
+  "equity_in_net_income_of_investees", "equity_method_investments",
+  "nonoperating_income_expense_total",
+  "income_before_taxes",
+  "income_tax_expense", "income_tax_provision",
+  "net_income", "net_income_parent", "net_income_nci",
+  "net_margin_pct",
+  "eps_basic", "eps_diluted",
+  "shares_basic_millions", "shares_diluted_millions",
+];
+
 export const BS_ASSETS_ORDER = [
   // ── 台股 XBRL ──
   "cash_and_equivalents",
@@ -470,8 +494,18 @@ export function fmtVal(val: number | null | undefined, key: string, currency?: s
   return { text: neg ? `(${text})` : text, cls: neg ? "negative" : "" };
 }
 
-export function labelFor(key: string) {
-  return LABEL_MAP[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+const hasChinese = (s: string) => /[\u4e00-\u9fa5（）]/.test(s);
+
+export function labelFor(key: string, currency?: string) {
+  const label = LABEL_MAP[key];
+  if (label) {
+    // 非 TWD（美股）時，中文 label 改走英文 fallback
+    if (currency && currency !== "TWD" && hasChinese(label)) {
+      return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+    return label;
+  }
+  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 /* ================================================================
