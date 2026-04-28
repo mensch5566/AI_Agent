@@ -49,6 +49,12 @@ def clean_html(html_text):
     return text
 
 
+def should_skip_entry(title: str, source: str) -> bool:
+    if title.startswith("討論牆 |"):
+        return True
+    return False
+
+
 def fetch_ticker_rss(ticker: str, query: str, market: str, cutoff: datetime) -> list[dict]:
     locale = RSS_LOCALES.get(market, RSS_LOCALES["US"])
     full_query = f"{query} when:1d"
@@ -75,6 +81,9 @@ def fetch_ticker_rss(ticker: str, query: str, market: str, cutoff: datetime) -> 
             parts = title.rsplit(" - ", 1)
             title = parts[0].strip()
             source = parts[1].strip()
+
+        if should_skip_entry(title, source):
+            continue
 
         # Convert rss/articles/{base64}?oc=5 → news.google.com/articles/{base64}
         raw_url = entry.get("link", "")

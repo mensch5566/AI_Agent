@@ -147,8 +147,9 @@ DERIVED_METRICS = [
 ]
 # NOTE: shares_outstanding 需特殊處理：
 # Q1/Q2/Q3 可從 net_income_parent / basic_eps 計算（均為單季值）
-# Q4 basic_eps 是全年值，無法與單季 net_income_parent 直接相除
-# Annual view 正確：toAnnual() 會算出 FY net_income_parent / FY_EPS = 正確全年加權平均股數
+# Q4 若年報只揭露全年 EPS，應優先用 FY EPS - 9M cumulative EPS，
+# 若 9M cumulative EPS 不可得才 fallback 到 FY EPS - Q1 - Q2 - Q3
+# derived Q4 weighted-average shares 不寫入 financial_facts，應另存 financial_metrics
 
 
 def find_local_xbrl_files(ticker: str) -> dict:
@@ -242,11 +243,11 @@ def _subtract_ytd(current: dict, prior: dict, also_is: bool = False) -> dict:
     從 YTD 計算單季值：current − prior。
     - also_is=False（Q2/Q3 用）：只減 CF，IS 保留原值（已是單季）
     - also_is=True（Q4 用）：IS 和 CF 都減
-    BS、EPS、ending_cash、beginning_cash 永遠不相減。
+    BS、ending_cash、beginning_cash 永遠不相減。
     """
     CF_STMTS = {'cash_flow_operating', 'cash_flow_investing',
                 'cash_flow_financing', 'cash_flow_summary'}
-    NO_SUB   = {'basic_eps', 'diluted_eps', 'ending_cash', 'beginning_cash'}
+    NO_SUB   = {'ending_cash', 'beginning_cash'}
     result   = dict(current)
     for metric, (cur_val, stmt, sort_order) in current.items():
         if metric in NO_SUB:
@@ -259,6 +260,83 @@ def _subtract_ytd(current: dict, prior: dict, also_is: bool = False) -> dict:
         if prior_val is not None:
             result[metric] = (round(cur_val - prior_val, 4), stmt, sort_order)
     return result
+
+
+def _drop_statements(data: dict, statements: set[str]) -> dict:
+    result = {}
+    for metric, (value, stmt, sort_order) in data.items():
+        if stmt in statements:
+            continue
+        result[metric] = (value, stmt, sort_order)
+    return result
+
+
+def _derive_q4_eps_from_annual(
+    fy_data: dict,
+    year: str,
+    q3_ytd_data: dict | None = None,
+    files_by_period: dict | None = None,
+) -> dict:
+    """
+    台股年報 Q4 常只揭露全年 EPS。
+    優先：
+      Q4 EPS = FY EPS - 9M cumulative EPS
+    若 9M cumulative EPS 不可得，且 Q1/Q2/Q3 單季 EPS 都可取得，才 fallback：
+      Q4 EPS = FY EPS - Q1 EPS - Q2 EPS - Q3 EPS
+    """
+    fbp = files_by_period or {}
+
+    derived = {}
+    for metric in ("basic_eps", "diluted_eps"):
+        annual_entry = fy_data.get(metric)
+        if annual_entry is None:
+            continue
+        annual_val, stmt, sort_order = annual_entry
+
+        q3_cum_entry = q3_ytd_data.get(metric) if q3_ytd_data else None
+        if q3_cum_entry is not None:
+            derived[metric] = (
+                round(annual_val - q3_cum_entry[0], 4),
+                stmt,
+                sort_order,
+                "DERIVED_Q4_EPS_FROM_FY_MINUS_9M_CUMULATIVE_EPS",
+            )
+            continue
+
+        prior_quarters: dict[str, dict] = {}
+        ok = True
+        for q in (1, 2, 3):
+            period = f"Q{q}_FY{year}"
+            file_path = fbp.get(period)
+            if not file_path:
+                ok = False
+                break
+            parsed = parse_ixbrl_full(file_path, period, fbp)
+            if not parsed:
+                ok = False
+                break
+            prior_quarters[period] = parsed
+        if not ok:
+            continue
+
+        quarter_vals = []
+        for q in (1, 2, 3):
+            period = f"Q{q}_FY{year}"
+            quarter_entry = prior_quarters.get(period, {}).get(metric)
+            if quarter_entry is None:
+                ok = False
+                break
+            quarter_vals.append(quarter_entry[0])
+        if not ok:
+            continue
+
+        derived[metric] = (
+            round(annual_val - sum(quarter_vals), 4),
+            stmt,
+            sort_order,
+            "DERIVED_Q4_EPS_FROM_FY_MINUS_Q1_Q2_Q3",
+        )
+    return derived
 
 
 def parse_ixbrl_full(file_path: str, period: str, files_by_period: dict | None = None) -> dict:
@@ -330,8 +408,8 @@ def parse_ixbrl_full(file_path: str, period: str, files_by_period: dict | None =
             # 只減 CF，IS 已是單季值，不再相減
             return _subtract_ytd(merged, prior_cf, also_is=False)
         else:
-            print(f"  ⚠️  找不到 {prev_period} 檔案，CF 使用 YTD（非單季）")
-            return merged
+            print(f"  ⚠️  找不到 {prev_period} 檔案，移除當期 CF（避免寫入 YTD）")
+            return _drop_statements(merged, CF_STMTS)
 
     # Q4：IS/CF = FY − Q3_YTD，BS 直接用 Dec 31（AsOf20xx1231）
     fy_ctx  = f"From{year}0101To{year}1231"
@@ -346,10 +424,33 @@ def parse_ixbrl_full(file_path: str, period: str, files_by_period: dict | None =
             q3_content = f.read()
         q3_data = _parse_content(q3_content, q3_as_of, q3_ytd)
         # IS 和 CF 都要減（Q4 = FY − Q3_YTD）
-        return _subtract_ytd(fy_data, q3_data, also_is=True)
+        result = _subtract_ytd(fy_data, q3_data, also_is=True)
+
+        # FY EPS 是全年值，不能直接放進 Q4；優先用 FY - 9M cumulative EPS，
+        # 若 9M cumulative EPS 不可得，才 fallback 到 FY - (Q1 + Q2 + Q3)。
+        for metric in ("basic_eps", "diluted_eps"):
+            result.pop(metric, None)
+        result.update(_derive_q4_eps_from_annual(fy_data, year, q3_data, fbp))
+        return result
     else:
-        print(f"  ⚠️  找不到 Q3_FY{year} 檔案，Q4 使用全年數（非單季）")
-        return fy_data
+        print(f"  ⚠️  找不到 Q3_FY{year} 檔案，移除 Q4 的 IS/CF（避免寫入全年數）")
+        return _drop_statements(fy_data, {'income_statement', 'cash_flow_operating', 'cash_flow_investing', 'cash_flow_financing', 'cash_flow_summary'})
+
+
+def parse_ixbrl_annual_facts(file_path: str, period: str) -> dict:
+    """
+    從 Q4 年報直接提取 FY facts。
+    Annual mode 對台股應優先使用年報直接揭露值，不用季度加總替代。
+    """
+    m = re.match(r'Q4_FY(\d{4})', period)
+    if not m:
+        return {}
+    year = m.group(1)
+    as_of_ctx = f"AsOf{year}1231"
+    fy_ctx = f"From{year}0101To{year}1231"
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        content = f.read()
+    return _parse_content(content, as_of_ctx, fy_ctx)
 
 
 def compute_metrics(facts_flat: dict) -> dict:
@@ -384,6 +485,10 @@ def compute_metrics(facts_flat: dict) -> dict:
     return computed
 
 
+def encode_annual_direct_metric(statement: str, metric: str) -> str:
+    return f"annual_direct__{statement}__{metric}"
+
+
 def period_to_end_date(period: str) -> str:
     m = re.match(r'Q(\d)_FY(\d{4})', period)
     q, year = int(m.group(1)), m.group(2)
@@ -392,10 +497,43 @@ def period_to_end_date(period: str) -> str:
     return f"{year}-{month:02d}-{day}"
 
 
-def write_financial_facts(ticker: str, period: str, period_end: str, facts: dict) -> int:
-    """facts: {metric: (value, statement, sort_order)}"""
+def extract_company_name(file_path: str, ticker: str) -> str:
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        content = f.read()
+
+    patterns = [
+        r'<ix:nonNumeric name="tifrs-notes:CompanyChineseName"[^>]*>([^<]+)</ix:nonNumeric>',
+        r'<ix:nonNumeric name="tifrs-notes:CompanyName"[^>]*>([^<]+)</ix:nonNumeric>',
+        r'<span class="zh">\s*' + re.escape(ticker) + r'\s+([^<]+?)<br',
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, content, re.DOTALL)
+        if m:
+            return m.group(1).strip()
+    return ticker
+
+
+def ensure_company_entry(ticker: str, file_path: str) -> None:
+    company_name = extract_company_name(file_path, ticker)
+    record = {
+        'ticker': ticker,
+        'company': company_name,
+        'cik': None,
+        'exchange': 'TWSE',
+        'currency': 'TWD',
+        'fiscal_year_end_month': 12,
+        'last_updated': time.strftime('%Y-%m-%d'),
+        'notes': 'TWSE MOPS iXBRL consolidated financial statements parsed from local HTML files.',
+    }
+    supabase.table('financial_companies').upsert(record, on_conflict='ticker').execute()
+
+
+def write_financial_facts(ticker: str, period: str, period_end: str, facts: dict, default_source: str = 'XBRL_TWSE') -> int:
+    """facts: {metric: (value, statement, sort_order) | (value, statement, sort_order, source)}"""
     records = []
-    for metric, (value, stmt, sort_order) in facts.items():
+    for metric, payload in facts.items():
+        value, stmt, sort_order = payload[:3]
+        source = payload[3] if len(payload) >= 4 else default_source
         records.append({
             'ticker':     ticker,
             'period':     period,
@@ -405,14 +543,14 @@ def write_financial_facts(ticker: str, period: str, period_end: str, facts: dict
             'value':      value,
             'unit':       None,
             'dimension':  '',
-            'source':     'XBRL_TWSE',
+            'source':     source,
         })
     if records:
         supabase.table('financial_facts').upsert(records, ignore_duplicates=False).execute()
     return len(records)
 
 
-def write_financial_metrics(ticker: str, period: str, period_end: str, computed: dict) -> int:
+def write_financial_metrics(ticker: str, period: str, period_end: str, computed: dict, source: str = 'COMPUTED_FROM_XBRL_TWSE') -> int:
     records = []
     for metric, (value, formula) in computed.items():
         records.append({
@@ -422,11 +560,20 @@ def write_financial_metrics(ticker: str, period: str, period_end: str, computed:
             'metric':     metric,
             'value':      value,
             'formula':    formula,
-            'source':     'COMPUTED_FROM_XBRL_TWSE',
+            'source':     source,
         })
     if records:
         supabase.table('financial_metrics').upsert(records, on_conflict='ticker,period,metric,source').execute()
     return len(records)
+
+
+def purge_legacy_annual_direct_metrics(ticker: str, period: str) -> None:
+    supabase.table('financial_metrics') \
+        .delete() \
+        .eq('ticker', ticker) \
+        .eq('period', period) \
+        .eq('source', 'ANNUAL_DIRECT_XBRL_TWSE') \
+        .execute()
 
 
 def parse_and_insert(ticker: str, period: str, file_path: str, files_by_period: dict | None = None) -> bool:
@@ -437,9 +584,10 @@ def parse_and_insert(ticker: str, period: str, file_path: str, files_by_period: 
         print(f"  ⚠️  無數據")
         return False
 
-    facts_flat = {k: v[0] for k, v in facts.items()}
+    facts_flat = {k: payload[0] for k, payload in facts.items()}
     by_stmt = {}
-    for m, (v, s, _) in facts.items():
+    for m, payload in facts.items():
+        _v, s, _sort_order = payload[:3]
         by_stmt.setdefault(s, 0)
         by_stmt[s] += 1
     print(f"  ✓ 解析 {len(facts)} 項：" + ", ".join(f"{s}={n}" for s, n in sorted(by_stmt.items())))
@@ -451,7 +599,32 @@ def parse_and_insert(ticker: str, period: str, file_path: str, files_by_period: 
     try:
         n_facts   = write_financial_facts(ticker, period, period_end, facts)
         n_metrics = write_financial_metrics(ticker, period, period_end, computed)
-        print(f"  ✓ 寫入 facts={n_facts}, metrics={n_metrics}")
+        annual_note = ""
+        if period.startswith("Q4_"):
+            fy_period = period.replace("Q4_", "")
+            annual_facts = parse_ixbrl_annual_facts(file_path, period)
+            annual_flat = {k: payload[0] for k, payload in annual_facts.items()}
+            annual_metrics = compute_metrics(annual_flat)
+            fy_end = period_end
+            purge_legacy_annual_direct_metrics(ticker, fy_period)
+            annual_fact_written = write_financial_facts(
+                ticker,
+                fy_period,
+                fy_end,
+                annual_facts,
+                default_source='XBRL_TWSE_ANNUAL_DIRECT',
+            )
+            annual_metric_written = write_financial_metrics(
+                ticker,
+                fy_period,
+                fy_end,
+                annual_metrics,
+                source='COMPUTED_FROM_XBRL_TWSE',
+            )
+            n_facts += annual_fact_written
+            n_metrics += annual_metric_written
+            annual_note = f" + annual_facts={annual_fact_written} + annual_metrics={annual_metric_written}"
+        print(f"  ✓ 寫入 facts={n_facts}, metrics={n_metrics}{annual_note}")
         return True
     except Exception as e:
         print(f"  ✗ 寫入失敗: {e}")
@@ -478,6 +651,9 @@ def main():
     missing = [p for p in requested if p not in files]
     if missing:
         print(f"⚠️  找不到: {', '.join(missing)}")
+
+    seed_file = next(iter(periods.values()))
+    ensure_company_entry(ticker, seed_file)
 
     print(f"\n📊 解析 {ticker} — {len(periods)} 個期別")
     ok = sum(parse_and_insert(ticker, p, periods[p], files) for p in sorted(periods, reverse=True))

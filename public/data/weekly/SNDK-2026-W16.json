@@ -1,0 +1,64 @@
+{
+  "reportDate": "2026-04-13",
+  "reportWeek": "2026-W16",
+  "ticker": "SNDK",
+  "company": "Sandisk Corp",
+  "market": "us",
+  "technical": {
+    "close": null,
+    "weekChangePct": null,
+    "volume": null,
+    "date": "2026-04-11",
+    "ma": {},
+    "macd": {},
+    "bollinger": {},
+    "weeklyLabels": [],
+    "weeklyClose": []
+  },
+  "chips": {
+    "market": "us",
+    "tw": {
+      "institutional": {
+        "date": "",
+        "foreign_net": null,
+        "trust_net": null,
+        "dealer_net": null,
+        "foreign_5d_net": null
+      },
+      "margin": {
+        "date": "",
+        "margin_balance": null,
+        "short_balance": null,
+        "margin_change": null,
+        "short_change": null
+      }
+    },
+    "us": {
+      "shortInterest": null,
+      "institutionalOwnership": null,
+      "images": [
+        {
+          "src": "/images/weekly/SNDK-2026-W15/13dg-filings.png",
+          "label": "13D/G Filings（機構持股申報）"
+        },
+        {
+          "src": "/images/weekly/SNDK-2026-W15/13f-filings.png",
+          "label": "13F Filings（機構買賣明細）"
+        }
+      ]
+    }
+  },
+  "news": [
+    {
+      "date": "2026-04-12",
+      "headline": "SanDisk 受惠 AI 需求與 NAND 價格順風，記憶體熱度延續",
+      "summary": "報導指出 AI 儲存需求與 NAND 價格走強，持續帶動 SanDisk 所在的記憶體板塊熱度。",
+      "link": "https://news.google.com/articles/CBMid0FVX3lxTE5nR2pvT0s5UW1IN1lCaWp5MlMtOVpqeHFVaUZUQzBiMklTaHFBOFRfZEZUWFVXckNsVFhualVHczR6MEw2bFdtUUtqelItVzV0YVhXaHdWWmdjVE5fRDBhdjlzVW0yMjFMa0xiRjNYQUxhd1MzSTVZ",
+      "ticker": "SNDK",
+      "sentiment": "bullish",
+      "analysis": "這直接呼應 SNDK 的核心 thesis——財報改善主要來自 NAND 供需失衡與價格上行；若價格順風延續，對後續營收與毛利仍偏正面。"
+    }
+  ],
+  "newsAnalysis": [],
+  "debug": {}
+}

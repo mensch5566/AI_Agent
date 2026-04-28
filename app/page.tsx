@@ -4,6 +4,14 @@ import ThemeToggle from "./components/ThemeToggle";
 
 const research = [
   {
+    href: "/command-center",
+    icon: "🧭",
+    nameEn: "Command Center",
+    name: "投資戰情室",
+    desc: "整合市場、新聞與資金流監控，作為日常盤勢與研究節奏的總覽入口。",
+    tags: ["Market", "News", "Flow"],
+  },
+  {
     href: "/financials",
     icon: "🗂️",
     nameEn: "Financials Viewer",
@@ -18,6 +26,14 @@ const research = [
     name: "個股研究報告",
     desc: "基本面研究、估值模型與 P/E 矩陣，涵蓋 US 與 TW 標的。",
     tags: ["SNDK", "聯發科"],
+  },
+  {
+    href: "/weekly",
+    icon: "📰",
+    nameEn: "Stock Weekly",
+    name: "個股週報",
+    desc: "彙整各標的每週追蹤報告，快速查看歷史週報與市場脈絡。",
+    tags: ["NVDA", "2454"],
   },
 ];
 

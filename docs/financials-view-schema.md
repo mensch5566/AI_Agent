@@ -1,5 +1,18 @@
 # Financials View — Supabase 表結構清單
 
+> 這份文件是 `Financials Viewer` 的 metric dictionary。
+> 
+> 用途：
+> - 定義每個 `key` 對應的 statement、含義、XBRL 標籤與是否允許入庫
+> - 作為 `key -> meaning/source` 的正式對照表
+> 
+> 不處理行為規則：
+> - `Quarterly / Annual` 應如何顯示
+> - 哪些值可否由年報反推成 Q4 單季
+> - derived 值應進哪張表
+> 
+> 上述行為規則統一放在 [financials-data-rules.md](./financials-data-rules.md)。
+
 > **核檢規則**：任何表結構異動（新增 / 修改 / 刪除指標），都必須先在此表更新並獲得確認（最後欄打勾），才可執行。未確認的指標不得寫入、計算或在前端讀取。
 > 
 > **圖例**：✅ 已抽取入庫　⬜ XBRL 有，尚未抽取　❌ XBRL 無，需補充

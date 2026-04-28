@@ -52,7 +52,12 @@ financial_supplement → NB 補值（source = NB_SUPPLEMENTED）
 | non_gaap | eps_non_gaap | Non-TIFRS EPS |
 | non_gaap | operating_margin_non_gaap | Non-TIFRS 營業利益率 |
 
-**Q4 的 weighted_avg_shares**：年報提供全年加權平均，直接存入 Q4_FYxxxx 期別。
+**Q4 的 weighted_avg_shares**：年報常只提供全年加權平均。原始年值可作為 annual disclosure 保存，但不得直接當作 Q4 單季值顯示在 quarterly view；若需要 Q4 單季 shares，應以 derived metric 另存於 `financial_metrics`。
+
+**Annual 規則（台股 period-based statements）**：
+- Annual 必須優先使用 `Q4` 財報直接揭露的 `FYxxxx` 值。
+- 若沒有 direct `FYxxxx` 值，annual 應留空，不得以季度加總回填。
+- 這條規則適用於 `income_statement`、`cash_flow_*`，以及有 direct annual disclosure 的 Taiwan supplement period series。
 
 ## 寫入的指標
 
@@ -90,7 +95,7 @@ financial_supplement → NB 補值（source = NB_SUPPLEMENTED）
 | 9710 | basic_eps | 基本每股盈餘（元） |
 | 9810 | diluted_eps | 稀釋每股盈餘（元） |
 
-> **EPS 說明**：Q4 EPS 為 XBRL 全年值（如 FY2025 = 66.16元），無法從 XBRL 取得 Q4 單季 EPS。
+> **EPS 說明**：Q4 EPS 在 XBRL 常為全年值；parser 會優先以 `FY - 9M cumulative EPS` 還原 `Q4` 單季 EPS，只有在 `9M cumulative EPS` 不可得時，才 fallback 到 `FY - (Q1 + Q2 + Q3)`。annual mode 則應使用 direct `FY` EPS。
 
 **資產負債表（BS）— 47 項**（資產 21 + 負債 17 + 權益 9）
 
@@ -157,9 +162,10 @@ XBRL 未提供的細分維度資料，從 NotebookLM 對應筆記本補值：
 
 | 項目 | 說明 |
 |---|---|
-| Q4 EPS | XBRL Q4 年報只有全年 EPS，Q4 單季 EPS 無法取得。`basic_eps`/`diluted_eps` 在 Q4 存的是全年值（FY2025 = 66.16/66.03） |
+| Q4 EPS | XBRL Q4 年報通常只揭露全年 EPS。parser 應優先以 `FY - 9M cumulative EPS` 還原 `Q4` 單季 EPS；若 cumulative EPS 不可得且 `Q1~Q3` 單季 EPS 齊全，才 fallback 到 `FY - (Q1 + Q2 + Q3)`；若仍無法還原，quarterly 不得顯示全年值 |
+| Annual period tables | 台股 annual 必須使用 direct `FYxxxx` disclosure；若缺 direct `FY`，不得以季度加總 fallback |
 | Q2/Q3 CF | XBRL 無單季 CF context，由 YTD 減前期計算。若前期檔案不存在則存 YTD 並輸出警告 |
-| Q4 IS | FY − Q3 YTD 計算。若 Q3 檔案不存在則存全年並輸出警告 |
+| Q4 IS | FY − Q3 YTD 計算。若 Q3 檔案不存在則移除 Q4 IS/CF，避免把全年值寫進 quarterly |
 | 業務分部 | XBRL 標籤無分部維度，需由 NotebookLM 補值（/supplement-financials） |
 | 公司特有科目 | 若解析數量明顯少於 87，代表該公司有自訂標籤，需手動補進 XBRL_MAP |
 | financial_metrics 格式 | pct 指標存小數（0.4814），前端 `fmtVal` 乘 100 顯示為 48.1%，勿與舊格式（48.14）混用 |
@@ -177,7 +183,6 @@ ticker = '2454'  # 換成要驗的 ticker
 checks = [
     ('financial_facts',   'Q1_FY2025', 'operating_revenue', 153_312_237),
     ('financial_facts',   'Q3_FY2025', 'gross_profit',       66_111_891),
-    ('financial_facts',   'Q4_FY2025', 'basic_eps',          66.16),
     ('financial_metrics', 'Q1_FY2025', 'gross_margin_pct',   0.4814),
 ]
 for table, period, metric, expected in checks:
@@ -212,6 +217,31 @@ for table, period, metric, expected in checks:
 - 單季正確處理：Q1 直讀、Q2/Q3 單季 context、Q4 FY−Q3_YTD
 - IS 衍生指標新增：`effective_tax_rate`、`opex_ratio`、`interest_coverage`、`fcf`
 - financial_supplement 地區別（台灣/亞洲/其他）寫入
+
+### 2026-04-17（Q4 EPS / 規則檔修正）
+
+- 台股 `Q4` `basic_eps` / `diluted_eps` 改為單季值重建：
+  - 優先：`Q4 EPS = FY EPS - 9M cumulative EPS`
+  - fallback：若 cumulative EPS 不可得，才用 `Q4 EPS = FY EPS - Q1 EPS - Q2 EPS - Q3 EPS`
+- 若 `9M cumulative EPS` 與 `Q1~Q3` 單季 EPS 都不可得，Q4 EPS 不寫入 quarterly facts，避免把全年值誤塞進 `Q4`
+- `docs/financials-data-rules.md` 正式定義：
+  - `financial_facts` 只放原始或可正確重建的 quarterly 值
+  - `financial_metrics` 放 derived
+  - `financials-view-schema.md` 專責 `key -> meaning/source` 字典
+
+### 2026-04-16
+
+**新標的 onboarding 修復**
+- 問題：新 ticker 首次解析時，`financial_facts.ticker` 會被 `financial_companies` foreign key 擋住，導致 facts/metrics 全部寫入失敗
+- 修法：`batch_parse.py` 在解析前會先從本地 iXBRL HTML 抽公司名稱，自動 upsert 一筆最小 `financial_companies` metadata
+- 效果：像 `7769 鴻勁` 這類新台股標的可直接從本地 MOPS iXBRL 匯入 `Financials Viewer`
+
+**缺前期檔案時的保守處理**
+- 問題：缺少前期 YTD 檔案時，舊邏輯會把 `Q2/Q3` 的 CF YTD 或 `Q4` 的全年 IS/CF 直接寫入單季期別，造成 quarterly view 失真
+- 修法：
+  - `Q2/Q3` 若缺前一季，直接移除當期 CF，不再寫入 YTD
+  - `Q4` 若缺 `Q3_FYxxxx`，直接移除該期 `IS/CF`，只保留正確的 `BS`
+- 原則：沒有足夠前期檔案就拿掉，不硬填數字
 
 ---
 

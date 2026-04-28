@@ -23,6 +23,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip,
 
 const CATEGORY_LABELS: Record<string, string> = {
   revenue_by_business: "By Business",
+  profit_by_business: "By Business Profit",
   revenue_by_product: "By Product",
   revenue_by_geography: "By Geography",
 };
@@ -83,29 +84,59 @@ export default function SegmentTable({
   const segData = store.segmentData(activeCategory);
   const names = Object.keys(segData);
   const allPeriods = store.segmentPeriods(activeCategory);
+  const quarterlyPeriods = sortPeriods(allPeriods.filter((p) => /^Q\d_FY\d+$/.test(p)));
+  const annualDirectPeriods = sortPeriods(allPeriods.filter((p) => /^FY\d+$/.test(p)));
+  const samplePeriod = allPeriods[0] ?? "";
+  const sampleName = names[0] ?? "";
+  const segmentUnit = samplePeriod && sampleName ? store.unit("segments", activeCategory, samplePeriod, sampleName) : null;
+
+  const formatSegmentValue = (value: number) => {
+    if (segmentUnit === "TWD_thousands") return `NT$ ${value.toLocaleString("en-US")} 千元`;
+    if (segmentUnit === "USD_thousands") return `$ ${value.toLocaleString("en-US")}k`;
+    return value.toLocaleString("en-US");
+  };
+
+  const segmentTickLabel = (value: number | string) => {
+    const n = typeof value === "number" ? value : Number(value);
+    if (Number.isNaN(n)) return String(value);
+    if (segmentUnit === "TWD_thousands") return n.toLocaleString("en-US");
+    if (segmentUnit === "USD_thousands") return `$${n.toLocaleString("en-US")}k`;
+    return n.toLocaleString("en-US");
+  };
 
   // Build segVals with optional annual aggregation
   let periods: string[];
   const segVals: Record<string, Record<string, number | null>> = {};
 
   if (viewMode === "annual") {
-    const fySet = new Set<string>();
-    for (const p of allPeriods) { const m = p.match(/Q\d_FY(\d+)/); if (m) fySet.add(`FY${m[1]}`); }
+    const fySet = new Set<string>(annualDirectPeriods);
+    for (const p of quarterlyPeriods) { const m = p.match(/Q\d_FY(\d+)/); if (m) fySet.add(`FY${m[1]}`); }
     periods = sortPeriods([...fySet]);
     for (const name of names) {
       segVals[name] = {};
       const fyMap: Record<string, number[]> = {};
+      const directAnnual: Record<string, number> = {};
       for (const [p, v] of Object.entries(segData[name])) {
-        const m = p.match(/Q\d_FY(\d+)/); if (!m || v == null) continue;
+        if (v == null) continue;
+        const direct = p.match(/^FY(\d+)$/);
+        if (direct) {
+          directAnnual[`FY${direct[1]}`] = v;
+          continue;
+        }
+        const m = p.match(/Q\d_FY(\d+)/); if (!m) continue;
         const fy = `FY${m[1]}`; if (!fyMap[fy]) fyMap[fy] = []; fyMap[fy].push(v);
       }
       for (const fy of periods) {
+        if (directAnnual[fy] != null) {
+          segVals[name][fy] = directAnnual[fy];
+          continue;
+        }
         const vals = fyMap[fy];
         segVals[name][fy] = vals?.length ? vals.reduce((a, b) => a + b, 0) : null;
       }
     }
   } else {
-    periods = allPeriods;
+    periods = quarterlyPeriods;
     for (const name of names) {
       segVals[name] = {};
       for (const p of periods) segVals[name][p] = segData[name][p] ?? null;
@@ -120,6 +151,7 @@ export default function SegmentTable({
     const vals = names.map((s) => segVals[s][p]).filter((v): v is number => v != null);
     totalVals[p] = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) : null;
   }
+  const pieEligiblePeriods = periods.filter((p) => names.every((n) => (segVals[n]?.[p] ?? 0) >= 0));
 
   const isGrowth = growthMode !== "value";
   const prevFn = growthMode === "qoq" ? prevQoQ : prevYoY;
@@ -195,18 +227,20 @@ export default function SegmentTable({
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: "index" as const, intersect: false },
             plugins: {
-              tooltip: { callbacks: { label: (ctx) => isGrowth ? `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}%` : `${ctx.dataset.label}: $${ctx.parsed.y}M` } },
+              tooltip: { callbacks: { label: (ctx) => isGrowth ? `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}%` : `${ctx.dataset.label}: ${formatSegmentValue(ctx.parsed.y ?? 0)}` } },
               legend: { position: "bottom" as const, labels: { boxWidth: 12, font: { size: 11 } } },
             },
             scales: {
               x: { ticks: { font: { size: 10 }, maxRotation: 45 } },
-              y: { ticks: { font: { size: 10 }, callback: (v) => isGrowth ? `${v}%` : `$${v}M` } },
+              y: { ticks: { font: { size: 10 }, callback: (v) => isGrowth ? `${v}%` : segmentTickLabel(v) } },
             },
           }} />
         </div>
       </div>
 
-      <SegmentPieChart segVals={segVals} periods={periods} />
+      {pieEligiblePeriods.length > 0 && (
+        <SegmentPieChart segVals={segVals} periods={pieEligiblePeriods} formatValue={formatSegmentValue} />
+      )}
 
       <div className="overflow-x-auto rounded-md shadow-sm">
         <table className="w-full border-collapse bg-[var(--bg-card)] text-xs">
@@ -224,7 +258,9 @@ export default function SegmentTable({
           </tbody>
         </table>
       </div>
-      <div className="mt-1.5 text-right text-[10px] text-[var(--text-faint)]">Source: NotebookLM / SEC EDGAR · Unit: $M</div>
+      <div className="mt-1.5 text-right text-[10px] text-[var(--text-faint)]">
+        Source: NotebookLM / SEC EDGAR · Unit: {segmentUnit === "TWD_thousands" ? "TWD thousands" : segmentUnit === "USD_thousands" ? "USD thousands" : "reported value"}
+      </div>
     </div>
   );
 }

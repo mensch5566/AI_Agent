@@ -15,6 +15,7 @@ import {
 } from "chart.js";
 import { Line } from "react-chartjs-2";
 import SegmentPieChart from "@/app/components/financials/SegmentPieChart";
+import ValuationChart from "@/app/components/financials/ValuationChart";
 import {
   TICKER_LABELS, TOTAL_KEYS, SUBTOTAL_KEYS, RATIO_CATEGORIES, RATIO_DEFINITIONS, CHART_COLORS,
   sortPeriods, isPct, isEps, fmtVal, labelFor, sortMetrics,
@@ -25,7 +26,7 @@ import {
   type GrowthMode,
 } from "@/app/components/financials/constants";
 import { useFinancialData } from "@/app/components/financials/useFinancialData";
-import { FactStore, type ValMap } from "@/app/components/financials/FactStore";
+import { FactStore, type NoteMap, type ValMap } from "@/app/components/financials/FactStore";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -56,10 +57,22 @@ function GrowthToggle({ mode, setMode, showQoQ = true }: { mode: GrowthMode; set
   );
 }
 
+function CellNoteMarker({ note, symbol, tone }: { note: string; symbol: string; tone: "derived" | "info" }) {
+  const colorClass = tone === "derived" ? "text-amber-500" : "text-sky-600";
+  return (
+    <span className="group relative ml-1 inline-flex cursor-help items-center align-super">
+      <span className={`text-[10px] font-semibold ${colorClass}`}>{symbol}</span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden w-56 -translate-x-1/2 rounded bg-[#2c3e50] px-2 py-1.5 text-left text-[11px] font-normal leading-snug text-white shadow-lg group-hover:block">
+        {note}
+      </span>
+    </span>
+  );
+}
+
 /* ── Row types for table rendering ── */
 type TableRow =
   | { type: "section"; label: string }
-  | { type: "data"; key: string; label: React.ReactNode; vals: ValMap; indent?: boolean };
+  | { type: "data"; key: string; label: React.ReactNode; vals: ValMap; notes?: NoteMap; indent?: boolean; derivedPeriods?: Set<string> };
 
 /* ── Generic data table ── */
 const CHART_NON_SELECTABLE = new Set([
@@ -183,14 +196,23 @@ function DataTable({
                   }
                   const v = row.vals?.[p];
                   const f = fmtVal(v, row.key, store.currency);
+                  const isDerived = row.derivedPeriods?.has(p) ?? false;
+                  const note = row.notes?.[p] ?? null;
                   return (
                     <td
                       key={p}
                       className={`border-b border-r border-[var(--border)] px-3 py-1.5 tabular-nums ${bgBase} ${textCls} ${
                         f.cls === "negative" ? "text-right text-[#c0392b]" : f.cls === "null-val" ? "text-center text-[#7f8c8d]" : "text-right"
                       }`}
+                      title={note ?? (isDerived ? "Derived value" : undefined)}
                     >
                       {f.text}
+                      {isDerived && f.cls !== "null-val" && (
+                        <CellNoteMarker note={note ?? "Derived value"} symbol="*" tone="derived" />
+                      )}
+                      {!isDerived && note && f.cls !== "null-val" && (
+                        <CellNoteMarker note={note} symbol="†" tone="info" />
+                      )}
                     </td>
                   );
                 })}
@@ -233,7 +255,7 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
     return next;
   });
 
-  const periods = store.periodsIS();
+  const periods = (viewMode === "annual" ? store.periodsIS().filter((p) => /^FY\d+$/.test(p)) : store.periodsIS().filter((p) => /^Q\d_FY\d+$/.test(p)));
   const isMetrics = store.metrics("income_statement");
 
   // 圖表選取狀態：最多 3 個，超過時踢掉最舊的
@@ -249,6 +271,7 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
     });
   };
   const IS_SUB_SET = new Set(Object.values(IS_SUB_ITEMS).flat());
+  const ticker = store.company?.ticker;
   const metricOrder = store.currency === "TWD" ? IS_METRIC_ORDER : US_IS_METRIC_ORDER;
   const metrics = sortMetrics(
     isMetrics.filter((m) => !IS_PCT_EXCLUDE.has(m) && !IS_HIDDEN.has(m) && !IS_SUB_SET.has(m)),
@@ -264,16 +287,28 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
         className="flex items-center gap-1 text-left hover:text-[#1f4e79]"
       >
         <span className="text-[10px] text-[#7f8c8d]">{isExpanded ? "▼" : "▶"}</span>
-        {labelFor(key, store.currency)}
+        {labelFor(key, store.currency, ticker)}
       </button>
-    ) : labelFor(key, store.currency);
-    // Q4 加權平均股數是全年值，不應顯示在 Q4 欄位（季度模式）
-    const IS_ANNUAL_ONLY_METRICS = new Set(["weighted_avg_shares_basic", "weighted_avg_shares_diluted"]);
+    ) : labelFor(key, store.currency, ticker);
+    const IS_ANNUAL_ONLY_METRICS = new Set([
+      "weighted_avg_shares_basic", "weighted_avg_shares_diluted",
+    ]);
     const rawVals = store.valMap("income_statement", key);
-    const vals = IS_ANNUAL_ONLY_METRICS.has(key)
-      ? Object.fromEntries(Object.entries(rawVals).map(([p, v]) => [p, p.startsWith("Q4_") ? null : v]))
+    const derivedPeriods = new Set<string>();
+    const vals = IS_ANNUAL_ONLY_METRICS.has(key) && viewMode === "quarterly"
+      ? Object.fromEntries(periods.map((p) => {
+          if (key === "weighted_avg_shares_basic" || key === "weighted_avg_shares_diluted") {
+            const derivedMetric = key === "weighted_avg_shares_basic"
+              ? "weighted_avg_shares_basic_derived"
+              : "weighted_avg_shares_diluted_derived";
+            const derived = p.startsWith("Q4_") ? store.val("financial_ratios", derivedMetric, p) : null;
+            if (derived != null) derivedPeriods.add(p);
+            return [p, derived ?? (p.startsWith("Q4_") ? null : (rawVals[p] ?? null))];
+          }
+          return [p, p.startsWith("Q4_") ? null : (rawVals[p] ?? null)];
+        }))
       : rawVals;
-    return { type: "data" as const, key, label, vals };
+    return { type: "data" as const, key, label, vals, notes: store.noteMap("income_statement", key), derivedPeriods };
   });
 
   // Inject sub-item rows after parent rows (only when expanded)
@@ -283,8 +318,8 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
     if (parentIdx < 0) continue;
     const presentSubs = subKeys.filter((m) => isMetrics.includes(m));
     const toInsert: TableRow[] = presentSubs.map((m) => ({
-      type: "data" as const, key: m, label: labelFor(m, store.currency),
-      vals: store.valMap("income_statement", m), indent: true,
+      type: "data" as const, key: m, label: labelFor(m, store.currency, ticker),
+      vals: store.valMap("income_statement", m), notes: store.noteMap("income_statement", m), indent: true,
     }));
 
     // Compute residual: parent − Σ sub-items (per period)
@@ -343,7 +378,7 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
       .map((key, i) => {
         const vals = store.valMap("income_statement", key);
         return {
-          label: labelFor(key, store.currency),
+          label: labelFor(key, store.currency, ticker),
           data: isGrowth
             ? periods.map((p) => { const pk = prevFn(p); const g = growthPct(vals[p], pk ? vals[pk] : null); return g != null ? +(g * 100).toFixed(1) : null; })
             : periods.map((p) => vals[p] ?? null),
@@ -378,6 +413,11 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
         </div>
       </div>
       <DataTable periods={periods} rows={rows} store={store} growthMode={growthMode} onRowClick={toggleChartMetric} chartMetrics={chartMetrics} />
+      {viewMode === "quarterly" && (isMetrics.includes("weighted_avg_shares_basic") || isMetrics.includes("weighted_avg_shares_diluted")) && (
+        <p className="mt-2 text-[11px] text-[var(--text-muted)]">
+          Q4 weighted-average shares are shown as <span className="font-semibold">derived</span> values from `financial_metrics` when the annual report only discloses full-year share counts.
+        </p>
+      )}
     </>
   );
 }
@@ -385,8 +425,9 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
 /* ================================================================
    Balance Sheet
    ================================================================ */
-function BalanceSheet({ store }: { store: FactStore }) {
-  const periods = store.periodsBS();
+function BalanceSheet({ store, viewMode }: { store: FactStore; viewMode: "quarterly" | "annual" }) {
+  const periods = (viewMode === "annual" ? store.periodsBS().filter((p) => /^FY\d+$/.test(p)) : store.periodsBS().filter((p) => /^Q\d_FY\d+$/.test(p)));
+  const ticker = store.company?.ticker;
   const rows: TableRow[] = [];
   for (const [stmt, label, order] of [
     ["balance_sheet_assets", "ASSETS", BS_ASSETS_ORDER],
@@ -397,7 +438,7 @@ function BalanceSheet({ store }: { store: FactStore }) {
     if (!metrics.length) continue;
     rows.push({ type: "section", label });
     for (const key of metrics) {
-      rows.push({ type: "data", key, label: labelFor(key, store.currency), vals: store.valMap(stmt, key) });
+      rows.push({ type: "data", key, label: labelFor(key, store.currency, ticker), vals: store.valMap(stmt, key), notes: store.noteMap(stmt, key) });
     }
   }
   return <DataTable periods={periods} rows={rows} store={store} />;
@@ -406,8 +447,9 @@ function BalanceSheet({ store }: { store: FactStore }) {
 /* ================================================================
    Cash Flow
    ================================================================ */
-function CashFlowStatement({ store }: { store: FactStore }) {
-  const periods = store.periodsIS();
+function CashFlowStatement({ store, viewMode }: { store: FactStore; viewMode: "quarterly" | "annual" }) {
+  const periods = (viewMode === "annual" ? store.periodsIS().filter((p) => /^FY\d+$/.test(p)) : store.periodsIS().filter((p) => /^Q\d_FY\d+$/.test(p)));
+  const ticker = store.company?.ticker;
   const rows: TableRow[] = [];
   for (const [stmt, label, order] of [
     ["cash_flow_operating", "OPERATING ACTIVITIES", CF_OPERATING_ORDER],
@@ -418,7 +460,7 @@ function CashFlowStatement({ store }: { store: FactStore }) {
     if (!metrics.length) continue;
     rows.push({ type: "section", label });
     for (const key of metrics) {
-      rows.push({ type: "data", key, label: labelFor(key, store.currency), vals: store.valMap(stmt, key) });
+      rows.push({ type: "data", key, label: labelFor(key, store.currency, ticker), vals: store.valMap(stmt, key), notes: store.noteMap(stmt, key) });
     }
   }
   // Summary items
@@ -426,7 +468,7 @@ function CashFlowStatement({ store }: { store: FactStore }) {
   if (summaryMetrics.length) {
     rows.push({ type: "section", label: "SUMMARY" });
     for (const key of summaryMetrics) {
-      rows.push({ type: "data", key, label: labelFor(key, store.currency), vals: store.valMap("cash_flow_summary", key) });
+      rows.push({ type: "data", key, label: labelFor(key, store.currency, ticker), vals: store.valMap("cash_flow_summary", key), notes: store.noteMap("cash_flow_summary", key) });
     }
   }
   return <DataTable periods={periods} rows={rows} store={store} />;
@@ -435,11 +477,12 @@ function CashFlowStatement({ store }: { store: FactStore }) {
 /* ================================================================
    Ratios Panel
    ================================================================ */
-function RatiosPanel({ store }: { store: FactStore }) {
+function RatiosPanel({ store, viewMode }: { store: FactStore; viewMode: "quarterly" | "annual" }) {
+  const ticker = store.company?.ticker;
   // financial_ratios covers most metrics; effective_tax_rate falls back to income_statement
   const ratioMetrics = store.metrics("financial_ratios");
   const isMetrics = store.metrics("income_statement");
-  const periods = store.periodsIS();
+  const periods = (viewMode === "annual" ? store.periodsIS().filter((p) => /^FY\d+$/.test(p)) : store.periodsIS().filter((p) => /^Q\d_FY\d+$/.test(p)));
 
   // Lookup: financial_ratios first, then income_statement fallback
   const ratioVal = (key: string, p: string): number | null => {
@@ -479,7 +522,7 @@ function RatiosPanel({ store }: { store: FactStore }) {
   const chartData = {
     labels: periods,
     datasets: selArr.map((key, i) => ({
-      label: labelFor(key, store.currency),
+      label: labelFor(key, store.currency, ticker),
       data: periods.map((p) => ratioVal(key, p)),
       borderColor: CHART_COLORS[i % CHART_COLORS.length],
       backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + "22",
@@ -503,7 +546,7 @@ function RatiosPanel({ store }: { store: FactStore }) {
                       : "border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text)] hover:border-[#2a6da8] hover:text-[#2a6da8]"
                   }`}
                 >
-                  {labelFor(key, store.currency)}
+                  {labelFor(key, store.currency, ticker)}
                 </button>
               ))}
             </div>
@@ -561,7 +604,7 @@ function RatiosPanel({ store }: { store: FactStore }) {
                   return (
                     <tr key={key}>
                       <td className={`group sticky left-0 z-[10] border border-[var(--border)] px-3 py-1.5 text-left font-medium ${bgBase} relative cursor-help`}>
-                        {labelFor(key, store.currency)}
+                        {labelFor(key, store.currency, ticker)}
                         {def && <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded bg-[#2c3e50] px-2.5 py-1.5 text-[11px] font-normal text-white shadow-lg group-hover:block">{def}</span>}
                       </td>
                       {periods.map((p) => {
@@ -590,43 +633,66 @@ function RatiosPanel({ store }: { store: FactStore }) {
    ================================================================ */
 const SEG_LABELS: Record<string, string> = {
   revenue_by_business: "By Business",
+  profit_by_business: "By Business Profit",
   revenue_by_product: "By Product",
   revenue_by_geography: "By Geography",
 };
 
-function SegmentPanel({ store, viewMode }: { store: FactStore; viewMode: "quarterly" | "annual" }) {
-  const categories = store.segmentCategories();
-  const segOptions = categories.filter((c) => store.dimensions("segments", c).length > 0);
+const ALL_SEGMENTS_KEY = "__all__";
 
-  const [segType, setSegType] = useState(segOptions[0] ?? "");
-  const [growthMode, setGrowthMode] = useState<GrowthMode>("value");
-  useEffect(() => { if (viewMode === "annual" && growthMode === "qoq") setGrowthMode("value"); }, [viewMode]);
+function segmentLabel(key: string) {
+  if (SEG_LABELS[key]) return SEG_LABELS[key];
+  return key
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
-  if (!segOptions.length)
-    return <div className="p-10 text-center text-sm text-[#7f8c8d]">No segment data available for this ticker.</div>;
-
-  const segData = store.segmentData(segType); // dimension → period → value
+function buildSegmentCategoryVals(
+  store: FactStore,
+  category: string,
+  viewMode: "quarterly" | "annual",
+) {
+  const segData = store.segmentData(category);
   const names = Object.keys(segData);
-  const allPeriods = store.segmentPeriods(segType);
+  const allPeriods = store.segmentPeriods(category);
+  const quarterlyPeriods = sortPeriods(allPeriods.filter((p) => /^Q\d_FY\d+$/.test(p)));
+  const annualDirectPeriods = sortPeriods(allPeriods.filter((p) => /^FY\d+$/.test(p)));
   const periods = viewMode === "annual"
-    ? sortPeriods([...new Set(allPeriods.map((p) => { const m = p.match(/Q\d_FY(\d+)/); return m ? `FY${m[1]}` : p; }))])
-    : allPeriods;
+    ? sortPeriods([...new Set([
+        ...annualDirectPeriods,
+        ...quarterlyPeriods.map((p) => {
+          const m = p.match(/Q\d_FY(\d+)/);
+          return m ? `FY${m[1]}` : p;
+        }),
+      ])])
+    : quarterlyPeriods;
 
-  // Build segVals: name → period → value (with annual aggregation if needed)
   const segVals: Record<string, Record<string, number | null>> = {};
   for (const name of names) {
     segVals[name] = {};
     if (viewMode === "annual") {
-      // Aggregate quarterly to annual
       const fyMap: Record<string, number[]> = {};
+      const directAnnual: Record<string, number> = {};
       for (const [p, v] of Object.entries(segData[name])) {
+        if (v == null) continue;
+        const direct = p.match(/^FY(\d+)$/);
+        if (direct) {
+          directAnnual[`FY${direct[1]}`] = v;
+          continue;
+        }
         const m = p.match(/Q\d_FY(\d+)/);
-        if (!m || v == null) continue;
+        if (!m) continue;
         const fy = `FY${m[1]}`;
         if (!fyMap[fy]) fyMap[fy] = [];
         fyMap[fy].push(v);
       }
       for (const fy of periods) {
+        if (directAnnual[fy] != null) {
+          segVals[name][fy] = directAnnual[fy];
+          continue;
+        }
         const vals = fyMap[fy];
         segVals[name][fy] = vals?.length ? vals.reduce((a, b) => a + b, 0) : null;
       }
@@ -635,15 +701,50 @@ function SegmentPanel({ store, viewMode }: { store: FactStore; viewMode: "quarte
     }
   }
 
+  return { names, periods, segVals };
+}
+
+function SegmentCategorySection({
+  store,
+  viewMode,
+  category,
+  growthMode,
+  showTitle = true,
+}: {
+  store: FactStore;
+  viewMode: "quarterly" | "annual";
+  category: string;
+  growthMode: GrowthMode;
+  showTitle?: boolean;
+}) {
+  const { names, periods, segVals } = buildSegmentCategoryVals(store, category, viewMode);
+  const allPeriods = store.segmentPeriods(category);
+  const samplePeriod = allPeriods[0] ?? "";
+  const sampleName = names[0] ?? "";
+  const segmentUnit = samplePeriod && sampleName ? store.unit("segments", category, samplePeriod, sampleName) : null;
+
+  const formatSegmentValue = (value: number) => {
+    if (segmentUnit === "TWD_thousands") return `NT$ ${value.toLocaleString("en-US")} 千元`;
+    if (segmentUnit === "USD_thousands") return `$ ${value.toLocaleString("en-US")}k`;
+    return value.toLocaleString("en-US");
+  };
+
+  const segmentTickLabel = (value: number | string) => {
+    const n = typeof value === "number" ? value : Number(value);
+    if (Number.isNaN(n)) return String(value);
+    if (segmentUnit === "TWD_thousands") return n.toLocaleString("en-US");
+    if (segmentUnit === "USD_thousands") return `$${n.toLocaleString("en-US")}k`;
+    return n.toLocaleString("en-US");
+  };
   const isGrowth = growthMode !== "value";
   const gPrevFn = growthMode === "qoq" ? prevQoQ : prevYoY;
 
-  // Compute total row
   const totalVals: Record<string, number | null> = {};
   for (const p of periods) {
     const vals = names.map((n) => segVals[n][p]).filter((v): v is number => v != null);
     totalVals[p] = vals.length ? vals.reduce((a, b) => a + b, 0) : null;
   }
+  const pieEligiblePeriods = periods.filter((p) => names.every((n) => (segVals[n]?.[p] ?? 0) >= 0));
 
   const chartData = {
     labels: periods,
@@ -691,38 +792,29 @@ function SegmentPanel({ store, viewMode }: { store: FactStore; viewMode: "quarte
   };
 
   return (
-    <>
-      <div className="mb-3 flex items-center gap-4">
-        <div className="flex gap-1">
-          {segOptions.map((key) => (
-            <button key={key} onClick={() => setSegType(key)}
-              className={`rounded border px-3 py-1.5 text-xs font-semibold transition-all select-none ${
-                segType === key ? "border-[var(--primary)] bg-[var(--primary)] text-white" : "border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-muted)] hover:border-[var(--primary)]"
-              }`}
-            >{SEG_LABELS[key] || key}</button>
-          ))}
-        </div>
-        <GrowthToggle mode={growthMode} setMode={setGrowthMode} showQoQ={viewMode === "quarterly"} />
-      </div>
+    <section className="rounded-md bg-[var(--bg-card)] p-4 shadow-sm">
+      {showTitle && <h3 className="mb-3 text-sm font-bold text-[var(--text)]">{segmentLabel(category)}</h3>}
 
-      <div className="mb-4 rounded-md bg-[var(--bg-card)] p-4 shadow-sm">
+      <div className="mb-4 rounded-md bg-[var(--bg-card)]">
         <div className="relative h-[320px]">
           <Line data={chartData} options={{
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: "index" as const, intersect: false },
             plugins: {
-              tooltip: { callbacks: { label: (ctx: any) => isGrowth ? `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}%` : `${ctx.dataset.label}: $${ctx.parsed.y}M` } },
+              tooltip: { callbacks: { label: (ctx: any) => isGrowth ? `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}%` : `${ctx.dataset.label}: ${formatSegmentValue(ctx.parsed.y ?? 0)}` } },
               legend: { position: "bottom" as const, labels: { boxWidth: 12, font: { size: 11 } } },
             },
             scales: {
               x: { ticks: { font: { size: 10 }, maxRotation: 45 } },
-              y: { ticks: { font: { size: 10 }, callback: (v: any) => isGrowth ? `${v}%` : `$${v}M` } },
+              y: { ticks: { font: { size: 10 }, callback: (v: any) => isGrowth ? `${v}%` : segmentTickLabel(v) } },
             },
           }} />
         </div>
       </div>
 
-      <SegmentPieChart segVals={segVals} periods={periods} />
+      {pieEligiblePeriods.length > 0 && (
+        <SegmentPieChart segVals={segVals} periods={pieEligiblePeriods} formatValue={formatSegmentValue} />
+      )}
 
       <div className="overflow-x-auto rounded-md shadow-sm">
         <table className="w-full border-collapse bg-[var(--bg-card)] text-xs">
@@ -740,7 +832,191 @@ function SegmentPanel({ store, viewMode }: { store: FactStore; viewMode: "quarte
           </tbody>
         </table>
       </div>
-      <div className="mt-2 text-right text-[10px] text-[var(--text-faint)]">Source: NotebookLM / SEC EDGAR · Unit: $M</div>
+      <div className="mt-2 text-right text-[10px] text-[var(--text-faint)]">
+        Source: NotebookLM / SEC EDGAR · Unit: {segmentUnit === "TWD_thousands" ? "TWD thousands" : segmentUnit === "USD_thousands" ? "USD thousands" : "reported value"}
+      </div>
+    </section>
+  );
+}
+
+function BusinessPnLSection({
+  store,
+  viewMode,
+}: {
+  store: FactStore;
+  viewMode: "quarterly" | "annual";
+}) {
+  const revenue = buildSegmentCategoryVals(store, "revenue_by_business", viewMode);
+  const profit = buildSegmentCategoryVals(store, "profit_by_business", viewMode);
+  if (!revenue.names.length || !profit.names.length) return null;
+
+  const periods = revenue.periods.filter((p) => profit.periods.includes(p));
+  const names = revenue.names.filter((name) => profit.names.includes(name));
+  if (!periods.length || !names.length) return null;
+
+  const samplePeriod = periods[0] ?? "";
+  const sampleName = names[0] ?? "";
+  const unit = samplePeriod && sampleName ? store.unit("segments", "revenue_by_business", samplePeriod, sampleName) : null;
+
+  const formatMoney = (value: number | null) => {
+    if (value == null) return "—";
+    if (unit === "TWD_thousands") return value.toLocaleString("en-US");
+    return value.toLocaleString("en-US");
+  };
+
+  const formatMargin = (value: number | null) => {
+    if (value == null) return "—";
+    return `${(value * 100).toFixed(1)}%`;
+  };
+
+  return (
+    <section className="rounded-md bg-[var(--bg-card)] p-4 shadow-sm">
+      <h3 className="mb-3 text-sm font-bold text-[var(--text)]">Business P&amp;L</h3>
+      <div className="grid gap-4 md:grid-cols-2">
+        {names.map((name) => {
+          const revenueVals = revenue.segVals[name];
+          const profitVals = profit.segVals[name];
+          const costVals: Record<string, number | null> = {};
+          const marginVals: Record<string, number | null> = {};
+          for (const period of periods) {
+            const rev = revenueVals?.[period] ?? null;
+            const prof = profitVals?.[period] ?? null;
+            costVals[period] = rev != null && prof != null ? rev - prof : null;
+            marginVals[period] = rev != null && rev !== 0 && prof != null ? prof / rev : null;
+          }
+
+          const rows = [
+            { label: "Revenue", values: revenueVals, formatter: formatMoney },
+            { label: "Cost", values: costVals, formatter: formatMoney },
+            { label: "Profit", values: profitVals, formatter: formatMoney },
+            { label: "Margin", values: marginVals, formatter: formatMargin },
+          ];
+
+          return (
+            <div key={name} className="overflow-x-auto rounded-md border border-[var(--border)]">
+              <table className="w-full border-collapse bg-[var(--bg-card)] text-xs">
+                <thead>
+                  <tr>
+                    <th colSpan={periods.length + 1} className="border border-[var(--border)] bg-[#1f4e79] px-3 py-2 text-left font-semibold text-white">
+                      {name}
+                    </th>
+                  </tr>
+                  <tr>
+                    <th className="sticky left-0 z-[11] min-w-[110px] border border-[var(--border)] bg-[#d6e4f0] px-3 py-1.5 text-left font-semibold text-[#1f4e79]">Metric</th>
+                    {periods.map((period) => (
+                      <th key={period} className="border border-[var(--border)] bg-[#d6e4f0] px-3 py-1.5 text-center font-semibold text-[#1f4e79] whitespace-nowrap">
+                        {period}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, idx) => {
+                    const bgBase = idx % 2 === 0 ? "bg-[var(--bg-subtle)]" : "bg-[var(--bg-card)]";
+                    return (
+                      <tr key={row.label}>
+                        <td className={`sticky left-0 z-[5] border border-[var(--border)] px-3 py-1.5 text-left font-medium ${bgBase}`}>
+                          {row.label}
+                        </td>
+                        {periods.map((period) => {
+                          const value = row.values?.[period] ?? null;
+                          const negative = value != null && value < 0;
+                          return (
+                            <td
+                              key={period}
+                              className={`border border-[var(--border)] px-3 py-1.5 text-right tabular-nums ${bgBase} ${negative ? "text-[#c0392b]" : ""}`}
+                            >
+                              {row.formatter(value)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 text-right text-[10px] text-[var(--text-faint)]">
+        Revenue / Profit come from segment notes. Cost and Margin are derived from Revenue and Profit.
+      </div>
+    </section>
+  );
+}
+
+function SegmentPanel({ store, viewMode }: { store: FactStore; viewMode: "quarterly" | "annual" }) {
+  const categories = store.segmentCategories();
+  const segOptions = categories.filter((c) => store.dimensions("segments", c).length > 0);
+
+  const [segType, setSegType] = useState(segOptions.length > 1 ? ALL_SEGMENTS_KEY : (segOptions[0] ?? ""));
+  const [growthMode, setGrowthMode] = useState<GrowthMode>("value");
+  useEffect(() => { if (viewMode === "annual" && growthMode === "qoq") setGrowthMode("value"); }, [viewMode]);
+  useEffect(() => {
+    if (!segOptions.length) {
+      setSegType("");
+      return;
+    }
+    if (segType === ALL_SEGMENTS_KEY && segOptions.length > 1) return;
+    if (!segOptions.includes(segType)) {
+      setSegType(segOptions.length > 1 ? ALL_SEGMENTS_KEY : segOptions[0]);
+    }
+  }, [segOptions, segType]);
+
+  if (!segOptions.length)
+    return <div className="p-10 text-center text-sm text-[#7f8c8d]">No segment data available for this ticker.</div>;
+
+  return (
+    <>
+      <div className="mb-3 flex items-center gap-4">
+        <div className="flex gap-1">
+          {segOptions.length > 1 && (
+            <button key={ALL_SEGMENTS_KEY} onClick={() => setSegType(ALL_SEGMENTS_KEY)}
+              className={`rounded border px-3 py-1.5 text-xs font-semibold transition-all select-none ${
+                segType === ALL_SEGMENTS_KEY ? "border-[var(--primary)] bg-[var(--primary)] text-white" : "border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-muted)] hover:border-[var(--primary)]"
+              }`}
+            >全部比較</button>
+          )}
+          {segOptions.map((key) => (
+            <button key={key} onClick={() => setSegType(key)}
+              className={`rounded border px-3 py-1.5 text-xs font-semibold transition-all select-none ${
+                segType === key ? "border-[var(--primary)] bg-[var(--primary)] text-white" : "border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-muted)] hover:border-[var(--primary)]"
+              }`}
+            >{segmentLabel(key)}</button>
+          ))}
+        </div>
+        <GrowthToggle mode={growthMode} setMode={setGrowthMode} showQoQ={viewMode === "quarterly"} />
+      </div>
+
+      {segType === ALL_SEGMENTS_KEY ? (
+        <div className="space-y-6">
+          <div className="rounded-md border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3 text-xs text-[var(--text-muted)]">
+            目前以「全部比較」模式顯示所有 Segment metric，方便直接上下對照，不用逐個切換。
+          </div>
+          {segOptions.map((key) => (
+            <SegmentCategorySection
+              key={key}
+              store={store}
+              viewMode={viewMode}
+              category={key}
+              growthMode={growthMode}
+            />
+          ))}
+          <BusinessPnLSection store={store} viewMode={viewMode} />
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <SegmentCategorySection
+            store={store}
+            viewMode={viewMode}
+            category={segType}
+            growthMode={growthMode}
+            showTitle={false}
+          />
+          <BusinessPnLSection store={store} viewMode={viewMode} />
+        </div>
+      )}
     </>
   );
 }
@@ -843,6 +1119,7 @@ const TABS = [
   { id: "bs", label: "Balance Sheet" },
   { id: "cf", label: "Cash Flow" },
   { id: "ratios", label: "Financial Ratios" },
+  { id: "valuation", label: "Valuation" },
   { id: "segments", label: "Segments" },
   { id: "non-gaap", label: "Non-GAAP" },
 ];
@@ -884,15 +1161,17 @@ export default function Viewer() {
             <option key={t} value={t}>{TICKER_LABELS[t] ? `${t} ${TICKER_LABELS[t]}` : t}</option>
           ))}
         </select>
-        <div className="ml-4 flex">
-          {(["quarterly", "annual"] as const).map((m) => (
-            <button key={m} onClick={() => setViewMode(m)}
-              className={`cursor-pointer border border-white/30 px-3.5 py-1 text-xs font-semibold transition-all first:rounded-l last:rounded-r last:border-l-0 ${
-                viewMode === m ? "bg-white/20 text-white" : "text-white/70"
-              }`}
-            >{m === "quarterly" ? "Quarterly" : "Annual"}</button>
-          ))}
-        </div>
+        {tab !== "valuation" && (
+          <div className="ml-4 flex">
+            {(["quarterly", "annual"] as const).map((m) => (
+              <button key={m} onClick={() => setViewMode(m)}
+                className={`cursor-pointer border border-white/30 px-3.5 py-1 text-xs font-semibold transition-all first:rounded-l last:rounded-r last:border-l-0 ${
+                  viewMode === m ? "bg-white/20 text-white" : "text-white/70"
+                }`}
+              >{m === "quarterly" ? "Quarterly" : "Annual"}</button>
+            ))}
+          </div>
+        )}
         <ThemeToggle />
         {meta && (
           <div className="ml-auto text-xs text-white/70">
@@ -913,13 +1192,19 @@ export default function Viewer() {
 
       <div className="mx-auto max-w-full overflow-x-auto p-4 px-6">
         {loading && <div className="py-16 text-center text-sm text-[#7f8c8d]">Loading...</div>}
-        {!loading && !store && <div className="py-16 text-center text-sm text-[#7f8c8d]">Select a ticker to view financial statements.</div>}
-        {!loading && store && (
+        {!loading && !ticker && <div className="py-16 text-center text-sm text-[#7f8c8d]">Select a ticker to view financial statements.</div>}
+        {!loading && !!ticker && tab === "valuation" && (
+          <ValuationChart ticker={ticker} />
+        )}
+        {!loading && !!ticker && tab !== "valuation" && !store && (
+          <div className="py-16 text-center text-sm text-[#7f8c8d]">Financial statement data is unavailable for this ticker.</div>
+        )}
+        {!loading && store && tab !== "valuation" && (
           <>
             {tab === "is" && <IncomeStatement store={store} viewMode={viewMode} />}
-            {tab === "bs" && <BalanceSheet store={store} />}
-            {tab === "cf" && <CashFlowStatement store={store} />}
-            {tab === "ratios" && <RatiosPanel store={store} />}
+            {tab === "bs" && <BalanceSheet store={store} viewMode={viewMode} />}
+            {tab === "cf" && <CashFlowStatement store={store} viewMode={viewMode} />}
+            {tab === "ratios" && <RatiosPanel store={store} viewMode={viewMode} />}
             {tab === "segments" && <SegmentPanel store={store} viewMode={viewMode} />}
             {tab === "non-gaap" && <NonGaapPanel store={store} viewMode={viewMode} />}
           </>

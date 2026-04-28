@@ -4,7 +4,59 @@ export type ValMap = Record<string, number | null>;
 export type FinData = any;
 
 export const TICKER_LABELS: Record<string, string> = {
+  "2308": "台達電",
   "2454": "聯發科",
+  "7769": "鴻勁",
+};
+
+export const TICKER_LABEL_OVERRIDES: Record<string, Record<string, string>> = {
+  "7769": {
+    // Balance Sheet
+    accounts_receivable: "應收票據及帳款",
+    cash_and_equivalents: "現金及約當現金",
+    deferred_tax_assets: "遞延所得稅資產",
+    financial_assets_ac_current: "按攤銷後成本衡量之金融資產",
+    financial_assets_fvoci_nc: "透過其他綜合損益按公允價值衡量之金融資產",
+    financial_assets_fvtpl_current: "透過損益按公允價值衡量之金融資產",
+    inventories: "存貨",
+    other_current_assets: "其他流動資產",
+    other_noncurrent_assets: "其他非流動資產",
+    ppe_net: "不動產、廠房及設備",
+    right_of_use_assets: "使用權資產",
+    total_assets: "資產總計",
+    total_current_assets: "流動資產總計",
+    total_noncurrent_assets: "非流動資產總計",
+    accounts_payable: "應付帳款",
+    contract_liabilities_current: "合約負債",
+    current_tax_liabilities: "本期所得稅負債",
+    deferred_tax_liabilities: "遞延所得稅負債",
+    lease_liabilities_current: "租賃負債",
+    lease_liabilities_noncurrent: "租賃負債",
+    other_current_liabilities: "其他流動負債",
+    other_noncurrent_liabilities: "其他非流動負債",
+    other_payables: "其他應付款",
+    short_term_borrowings: "短期借款",
+    total_current_liabilities: "流動負債總計",
+    total_liabilities: "負債總計",
+    total_noncurrent_liabilities: "非流動負債總計",
+    capital_surplus: "資本公積",
+    common_stock: "普通股股本",
+    equity_attributable_to_parent: "歸屬於本公司業主之權益",
+    other_equity: "其他權益",
+    total_equity: "權益總計",
+    treasury_shares: "庫藏股票",
+    // Cash Flow
+    amortization_expense: "攤銷費用",
+    depreciation_expense: "折舊費用",
+    operating_cash_flow: "營業活動之淨現金流入（出）",
+    capex: "取得不動產、廠房及設備",
+    investing_cash_flow: "投資活動之淨現金流入（出）",
+    dividends_paid: "發放現金股利",
+    financing_cash_flow: "籌資活動之淨現金流入（出）",
+    beginning_cash: "期初／年初現金及約當現金餘額",
+    ending_cash: "期末／年底現金及約當現金餘額",
+    net_change_in_cash: "現金及約當現金淨（減少）增加數",
+  },
 };
 
 export const LABEL_MAP: Record<string, string> = {
@@ -496,7 +548,10 @@ export function fmtVal(val: number | null | undefined, key: string, currency?: s
 
 const hasChinese = (s: string) => /[\u4e00-\u9fa5（）]/.test(s);
 
-export function labelFor(key: string, currency?: string) {
+export function labelFor(key: string, currency?: string, ticker?: string) {
+  if (ticker && TICKER_LABEL_OVERRIDES[ticker]?.[key]) {
+    return TICKER_LABEL_OVERRIDES[ticker][key];
+  }
   const label = LABEL_MAP[key];
   if (label) {
     // 非 TWD（美股）時，中文 label 改走英文 fallback

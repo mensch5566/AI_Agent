@@ -1,3 +1,8 @@
+---
+name: supplement-financials
+description: Supplement non-XBRL financial metrics from NotebookLM, including segments, non-GAAP metrics, and earnings-call guidance, then write them to the correct Supabase tables. Use when the user asks to enrich filing data with NotebookLM-derived financial details.
+---
+
 # supplement-financials — 從 NotebookLM 補足非 XBRL 財務指標
 
 在 XBRL 官方管道跑完後，從 NotebookLM 提取 Segments、Non-GAAP 等數據，寫入對應的 Supabase 表。

@@ -1,6 +1,18 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
 
+function decodeAnnualDirectMetric(encoded: string): { statement: string; metric: string } | null {
+  const prefix = "annual_direct__";
+  if (!encoded.startsWith(prefix)) return null;
+  const body = encoded.slice(prefix.length);
+  const sep = body.indexOf("__");
+  if (sep === -1) return null;
+  return {
+    statement: body.slice(0, sep),
+    metric: body.slice(sep + 2),
+  };
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ ticker: string }> }
@@ -49,6 +61,21 @@ export async function GET(
 
   // financial_metrics → inject as statement="financial_ratios"
   for (const row of metricsRes.data ?? []) {
+    if (row.source === "ANNUAL_DIRECT_XBRL_TWSE") {
+      const decoded = decodeAnnualDirectMetric(row.metric);
+      if (!decoded) continue;
+      facts.push({
+        period: row.period,
+        period_end: row.period_end ?? null,
+        statement: decoded.statement,
+        metric: decoded.metric,
+        dimension: "",
+        value: row.value,
+        unit: null,
+        source: row.source,
+      });
+      continue;
+    }
     facts.push({
       period:     row.period,
       period_end: row.period_end ?? null,
@@ -80,11 +107,19 @@ export async function GET(
     // geography / segment → inject as statement="segments"
     if (!["geography", "segment"].includes(row.category)) continue;
     if (!row.dimension) continue;  // 必須有維度
+    const normalizedMetric =
+      row.category === "segment"
+        ? row.metric.includes("_profit")
+          ? "profit_by_business"
+          : "revenue_by_business"
+        : row.category === "geography"
+          ? "revenue_by_geography"
+          : row.metric;
     facts.push({
       period:     row.period,
       period_end: row.period_end ?? null,
       statement:  "segments",
-      metric:     row.metric,
+      metric:     normalizedMetric,
       dimension:  row.dimension,
       value:      row.value,
       unit:       row.unit ?? null,

@@ -1,3 +1,8 @@
+---
+name: parse-sec-filing
+description: Parse SEC 10-Q and 10-K filings for US-listed companies, extract key financial metrics, and validate them against Supabase. Use when the user mentions a US stock ticker together with SEC, 10-Q, 10-K, 財報, filing, or asks to verify filing-based financial data.
+---
+
 # parse-sec-filing — 美股 SEC 10-Q/10-K 財務數據解析
 
 用於解析美股上市公司的 SEC 10-Q (季報) 和 10-K (年報) 財務表單，自動提取關鍵指標並與 Supabase 驗證。

@@ -1,0 +1,55 @@
+{
+  "reportDate": "2026-04-13",
+  "reportWeek": "2026-W16",
+  "ticker": "2454",
+  "company": "聯發科技",
+  "market": "tw",
+  "technical": {
+    "close": null,
+    "weekChangePct": null,
+    "volume": null,
+    "date": "2026-04-11",
+    "ma": {},
+    "macd": {},
+    "bollinger": {},
+    "weeklyLabels": [],
+    "weeklyClose": []
+  },
+  "chips": {
+    "market": "tw",
+    "tw": {
+      "institutional": {
+        "date": "",
+        "foreign_net": null,
+        "trust_net": null,
+        "dealer_net": null,
+        "foreign_5d_net": null
+      },
+      "margin": {
+        "date": "",
+        "margin_balance": null,
+        "short_balance": null,
+        "margin_change": null,
+        "short_change": null
+      }
+    },
+    "us": {
+      "shortInterest": null,
+      "institutionalOwnership": null,
+      "images": []
+    }
+  },
+  "news": [
+    {
+      "date": "2026-04-11",
+      "headline": "聯發科攜手 NVIDIA 推出 Dimensity Auto 平台，擴大智慧座艙與車用 AI 佈局",
+      "summary": "Yahoo 報導，聯發科與 NVIDIA 合作推進 Dimensity Auto 汽車平台，結合 AI 運算、高速連網與智慧座艙能力，顯示公司持續把業務延伸到車用與邊緣 AI 應用。",
+      "link": "https://news.google.com/articles/CBMiowFBVV95cUxPR1BPaWx6QW1udmJsd0J4QnVZTHVqTk5SV2loR2x6dnUzVUZVdVd6ZlZaTV9WLUhhbG9CNlp6QnlqcnZnNVhPUkQwMnJ2Z3FXN2M3dWtnTFVVMGpkRnF4TnhNVjdJRVlRNTgxTUhLc1VmZnR5Nm5VQUttcHc5SEpCSlZkQ2JlX2kycUhYd3I3b1B2TFV5SzJQam5FT19MdkdnX25oRWZ0V1M5U0htNFB6Q2kxYzQ",
+      "ticker": "2454",
+      "sentiment": "bullish",
+      "analysis": "這代表聯發科不只看手機 SoC，也在持續擴張車用與 AI 邊緣運算版圖。雖然短期未必立刻反映在財報，但對中長期產品組合升級屬正面進展。"
+    }
+  ],
+  "newsAnalysis": [],
+  "debug": {}
+}

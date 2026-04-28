@@ -28,6 +28,7 @@ export interface CompanyInfo {
 }
 
 export type ValMap = Record<string, number | null>;
+export type NoteMap = Record<string, string | null>;
 
 /* ================================================================
    FactStore — indexed wrapper around flat fact rows
@@ -42,6 +43,8 @@ export class FactStore {
   private periodEnds: Map<string, string> = new Map();
   // source cache: statement → metric → dimension → period → source
   private sourceIdx: Map<string, Map<string, Map<string, Map<string, string>>>> = new Map();
+  // unit cache: statement → metric → dimension → period → unit
+  private unitIdx: Map<string, Map<string, Map<string, Map<string, string>>>> = new Map();
 
   constructor(facts: FactRow[], company: CompanyInfo | null) {
     this.facts = facts;
@@ -75,6 +78,16 @@ export class FactStore {
         if (!sDim) { sDim = new Map(); sMetric.set(f.dimension, sDim); }
         sDim.set(f.period, f.source);
       }
+
+      if (f.unit) {
+        let uStmt = this.unitIdx.get(f.statement);
+        if (!uStmt) { uStmt = new Map(); this.unitIdx.set(f.statement, uStmt); }
+        let uMetric = uStmt.get(f.metric);
+        if (!uMetric) { uMetric = new Map(); uStmt.set(f.metric, uMetric); }
+        let uDim = uMetric.get(f.dimension);
+        if (!uDim) { uDim = new Map(); uMetric.set(f.dimension, uDim); }
+        uDim.set(f.period, f.unit);
+      }
     }
   }
 
@@ -95,6 +108,38 @@ export class FactStore {
   /** Get source string */
   source(statement: string, metric: string, period: string, dimension = ""): string | null {
     return this.sourceIdx.get(statement)?.get(metric)?.get(dimension)?.get(period) ?? null;
+  }
+
+  noteFromSource(source: string | null): string | null {
+    if (!source) return null;
+    switch (source) {
+      case "DERIVED_Q4_EPS_FROM_FY_MINUS_9M_CUMULATIVE_EPS":
+        return "由 FY - 9M cumulative EPS 推回 Q4 單季 EPS，請留意。";
+      case "DERIVED_Q4_EPS_FROM_FY_MINUS_Q1_Q2_Q3":
+        return "由 FY - (Q1 + Q2 + Q3) 推回 Q4 單季 EPS，請留意。";
+      case "ANNUAL_DIRECT_XBRL_TWSE":
+        return "舊版 annual-direct 資料列，建議重新解析後以 facts 中的 FY row 為準。";
+      default:
+        return null;
+    }
+  }
+
+  note(statement: string, metric: string, period: string, dimension = ""): string | null {
+    return this.noteFromSource(this.source(statement, metric, period, dimension));
+  }
+
+  noteMap(statement: string, metric: string, dimension = ""): NoteMap {
+    const vals = this.valMap(statement, metric, dimension);
+    const result: NoteMap = {};
+    for (const period of Object.keys(vals)) {
+      result[period] = this.note(statement, metric, period, dimension);
+    }
+    return result;
+  }
+
+  /** Get unit string */
+  unit(statement: string, metric: string, period: string, dimension = ""): string | null {
+    return this.unitIdx.get(statement)?.get(metric)?.get(dimension)?.get(period) ?? null;
   }
 
   /** Get period_end for a period */
@@ -202,10 +247,11 @@ export class FactStore {
 
   /** Create a new FactStore with quarterly data aggregated to annual */
   toAnnual(): FactStore {
+    const isTaiwan = this.company?.exchange === "TWSE" || this.company?.currency === "TWD";
     const SUM_EXCLUDE = new Set([
       // 美股舊格式
       "eps_basic", "eps_diluted",
-      // 台股 XBRL 格式（Q4 已是全年值，直接用 Q4，不累加）
+      // 台股 XBRL 格式：annual EPS 由四季單季 EPS 手動回填，不走一般累加
       "basic_eps", "diluted_eps",
       "shares_basic", "shares_diluted", "shares_basic_millions", "shares_diluted_millions",
       "weighted_avg_shares_basic", "weighted_avg_shares_diluted",
@@ -215,6 +261,28 @@ export class FactStore {
     ]);
     const AVG_KEYS = new Set(["shares_basic", "shares_diluted", "shares_basic_millions", "shares_diluted_millions", "weighted_avg_shares_basic", "weighted_avg_shares_diluted"]);
     const LAST_STATEMENTS = new Set(["balance_sheet_assets", "balance_sheet_liabilities", "balance_sheet_equity"]);
+    const DIRECT_FY_ONLY_STATEMENTS = new Set([
+      "income_statement",
+      "cash_flow_operating",
+      "cash_flow_investing",
+      "cash_flow_financing",
+      "cash_flow_summary",
+      "segments",
+      "non_gaap",
+    ]);
+
+    // Preserve direct FY disclosures first; annual mode should prefer them over aggregated quarterly fallbacks.
+    const annualFacts: FactRow[] = this.facts
+      .filter((f) => /^FY\d+$/.test(f.period))
+      .map((f) => ({ ...f }));
+
+    const hasDirectAnnual = (statement: string, metric: string, dimension: string, fy: string) =>
+      annualFacts.some((f) =>
+        f.statement === statement &&
+        f.metric === metric &&
+        f.dimension === dimension &&
+        f.period === fy
+      );
 
     // Group periods by FY
     const fyMap: Record<string, string[]> = {};
@@ -228,8 +296,6 @@ export class FactStore {
       fyMap[fy].push(p);
     }
 
-    const annualFacts: FactRow[] = [];
-
     for (const [stmt, metricMap] of this.idx) {
       if (stmt === "financial_ratios") continue; // ratios will be recomputed
 
@@ -240,6 +306,8 @@ export class FactStore {
           const isSkipSum = SUM_EXCLUDE.has(metric);
 
           for (const [fy, quarters] of Object.entries(fyMap)) {
+            if (hasDirectAnnual(stmt, metric, dim, fy)) continue;
+            if (isTaiwan && DIRECT_FY_ONLY_STATEMENTS.has(stmt)) continue;
             const vals = quarters.map(q => periodMap.get(q)).filter((v): v is number => v != null);
             if (!vals.length) continue;
 
@@ -273,21 +341,29 @@ export class FactStore {
       }
     }
 
-    // Annual EPS：優先用 Q4 值（Q4 XBRL 本就是全年 EPS）
-    // 若無 Q4，回退到 net_income / shares 計算
+    // Annual EPS：優先用四季單季 EPS 相加；若缺值，再回退到 net_income / shares
     for (const epsKey of ["basic_eps", "diluted_eps", "eps_basic", "eps_diluted"]) {
       for (const fy of Object.keys(fyMap)) {
-        // 已被 SUM_EXCLUDE 跳過，annualFacts 裡沒有這個 metric，需手動補
-        const q4 = `Q4_FY${fy.replace("FY", "")}`;
-        const q4Val = this.idx.get("income_statement")?.get(epsKey)?.get("")?.get(q4);
-        if (q4Val != null) {
+        const alreadyExists = annualFacts.find(
+          (f) => f.statement === "income_statement" && f.metric === epsKey && f.period === fy,
+        );
+        if (alreadyExists) continue;
+        if (isTaiwan) continue;
+
+        const quarters = fyMap[fy] ?? [];
+        const quarterVals = quarters
+          .filter((q) => /^Q[1-4]_/.test(q))
+          .map((q) => this.idx.get("income_statement")?.get(epsKey)?.get("")?.get(q))
+          .filter((v): v is number => v != null);
+        if (quarterVals.length === 4) {
           annualFacts.push({
             period: fy, period_end: null,
             statement: "income_statement", metric: epsKey,
-            dimension: "", value: q4Val, unit: null, source: null,
+            dimension: "", value: Math.round(quarterVals.reduce((a, b) => a + b, 0) * 100) / 100, unit: null, source: null,
           });
           continue;
         }
+
         // 回退：美股用 net_income / shares 計算
         const sharesKey = (epsKey === "eps_basic" || epsKey === "basic_eps") ? "shares_basic" : "shares_diluted";
         const ni = annualFacts.find(f => f.statement === "income_statement" && f.metric === "net_income" && f.period === fy);

@@ -17,19 +17,20 @@ import {
   type GrowthMode, prevQoQ, prevYoY, growthPct, fmtGrowth, skipGrowthForKey,
 } from "./constants";
 import { useFinancialData } from "./useFinancialData";
-import { FactStore, type ValMap } from "./FactStore";
+import { FactStore, type NoteMap, type ValMap } from "./FactStore";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
 type TableRow =
   | { type: "section"; label: string }
-  | { type: "data"; key: string; label: string; vals: ValMap };
+  | { type: "data"; key: string; label: string; vals: ValMap; notes?: NoteMap };
 
 function buildRows(store: FactStore, statement: string): TableRow[] {
   if (statement === "income_statement") {
     return store.metrics("income_statement").map((key) => ({
       type: "data" as const, key, label: labelFor(key),
       vals: store.valMap("income_statement", key),
+      notes: store.noteMap("income_statement", key),
     }));
   }
   if (statement === "balance_sheet") {
@@ -42,7 +43,7 @@ function buildRows(store: FactStore, statement: string): TableRow[] {
       const metrics = store.metrics(stmt);
       if (!metrics.length) continue;
       rows.push({ type: "section", label });
-      for (const key of metrics) rows.push({ type: "data", key, label: labelFor(key), vals: store.valMap(stmt, key) });
+      for (const key of metrics) rows.push({ type: "data", key, label: labelFor(key), vals: store.valMap(stmt, key), notes: store.noteMap(stmt, key) });
     }
     return rows;
   }
@@ -56,21 +57,23 @@ function buildRows(store: FactStore, statement: string): TableRow[] {
       const metrics = store.metrics(stmt);
       if (!metrics.length) continue;
       rows.push({ type: "section", label });
-      for (const key of metrics) rows.push({ type: "data", key, label: labelFor(key), vals: store.valMap(stmt, key) });
+      for (const key of metrics) rows.push({ type: "data", key, label: labelFor(key), vals: store.valMap(stmt, key), notes: store.noteMap(stmt, key) });
     }
     const summary = store.metrics("cash_flow_summary");
     if (summary.length) {
       rows.push({ type: "section", label: "SUMMARY" });
-      for (const key of summary) rows.push({ type: "data", key, label: labelFor(key), vals: store.valMap("cash_flow_summary", key) });
+      for (const key of summary) rows.push({ type: "data", key, label: labelFor(key), vals: store.valMap("cash_flow_summary", key), notes: store.noteMap("cash_flow_summary", key) });
     }
     return rows;
   }
   return [];
 }
 
-function getPeriods(store: FactStore, statement: string): string[] {
-  if (statement === "balance_sheet") return store.periodsBS();
-  return store.periodsIS();
+function getPeriods(store: FactStore, statement: string, viewMode: "quarterly" | "annual"): string[] {
+  const periods = statement === "balance_sheet" ? store.periodsBS() : store.periodsIS();
+  return viewMode === "annual"
+    ? periods.filter((p) => /^FY\d+$/.test(p))
+    : periods.filter((p) => /^Q\d_FY\d+$/.test(p));
 }
 
 function GrowthToggle({ mode, setMode, isAnnual }: { mode: GrowthMode; setMode: (m: GrowthMode) => void; isAnnual: boolean }) {
@@ -91,6 +94,17 @@ function GrowthToggle({ mode, setMode, isAnnual }: { mode: GrowthMode; setMode: 
         >{label}</button>
       ))}
     </div>
+  );
+}
+
+function CellNoteMarker({ note }: { note: string }) {
+  return (
+    <span className="group relative ml-1 inline-flex cursor-help items-center align-super">
+      <span className="text-[10px] font-semibold text-sky-600">†</span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden w-56 -translate-x-1/2 rounded bg-[#2c3e50] px-2 py-1.5 text-left text-[11px] font-normal leading-snug text-white shadow-lg group-hover:block">
+        {note}
+      </span>
+    </span>
   );
 }
 
@@ -138,7 +152,7 @@ export default function FinancialTable({
     allRows = cleaned;
   }
 
-  let periods = getPeriods(store, statement);
+  let periods = getPeriods(store, statement, viewMode);
   if (maxPeriods && maxPeriods > 0 && periods.length > maxPeriods) periods = periods.slice(-maxPeriods);
   if (!allRows.length) return <div className="py-6 text-center text-sm text-[var(--text-faint)]">無數據</div>;
 
@@ -247,11 +261,11 @@ export default function FinancialTable({
                         </td>
                       );
                     }
-                    const v = row.vals?.[p]; const f = fmtVal(v, row.key, store.currency);
+                    const v = row.vals?.[p]; const f = fmtVal(v, row.key, store.currency); const note = row.notes?.[p] ?? null;
                     return (
-                      <td key={p} className={`border border-[var(--border)] px-3 py-1.5 tabular-nums ${bgBase} ${textCls} ${
+                      <td key={p} title={note ?? undefined} className={`border border-[var(--border)] px-3 py-1.5 tabular-nums ${bgBase} ${textCls} ${
                         f.cls === "negative" ? "text-right text-[#c0392b]" : f.cls === "null-val" ? "text-center text-[#7f8c8d]" : "text-right"
-                      }`}>{f.text}</td>
+                      }`}>{f.text}{note && f.cls !== "null-val" && <CellNoteMarker note={note} />}</td>
                     );
                   })}
                 </tr>

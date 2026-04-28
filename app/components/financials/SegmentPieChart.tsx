@@ -16,9 +16,10 @@ interface SegmentPieChartProps {
   /** segment name → period → value */
   segVals: Record<string, Record<string, number | null>>;
   periods: string[];
+  formatValue: (value: number) => string;
 }
 
-export default function SegmentPieChart({ segVals, periods }: SegmentPieChartProps) {
+export default function SegmentPieChart({ segVals, periods, formatValue }: SegmentPieChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState(periods[periods.length - 1] || "");
 
   if (!periods.length) return null;
@@ -70,7 +71,7 @@ export default function SegmentPieChart({ segVals, periods }: SegmentPieChartPro
                   label: (ctx) => {
                     const v = ctx.parsed;
                     const pct = total > 0 ? ((v / total) * 100).toFixed(1) : "0.0";
-                    return `${ctx.label}: $${v.toLocaleString()}M (${pct}%)`;
+                    return `${ctx.label}: ${formatValue(v)} (${pct}%)`;
                   },
                 },
               },
