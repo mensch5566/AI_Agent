@@ -93,10 +93,17 @@
    - 必看：Known Limitations、CHANGELOG（裡面記錄了踩過的坑）
 
 2. **讀表結構清單**
+   - `docs/financials-architecture.md` ← v0.4 架構（dual-key + long-tail bucket + Non-GAAP reconciliation metadata + SEC 合規）
+   - `docs/financials-core-checklist.md` ← v4 核心 metric 清單
    - `docs/financials-view-schema.md`
    - `docs/financials-data-rules.md`
    - 確認要動的指標在哪張表、是否已確認、有無待處理項目
-   - **未確認的指標不得寫入、計算或前端讀取**
+   - **每筆 cell 的 schema 紀律**：
+     - `uni_account` 必須屬於：(1) 核心 universal key（在 schema 已確認），或 (2) 12 個 long-tail bucket（`{section}_long_tail`）+ `misc_long_tail` catch-all
+     - 每筆 cell 必須有 `weight`（XBRL calculation weight，+1/-1）
+     - Long-tail cell 額外帶 `long_tail_metadata`（is_recurring / last_occurrence_date / rolls_up_to）
+   - **不允許自由創造新的 uni_account 名稱**（未認得的科目 → LLM 判定 section → 配對應 bucket）
+   - 升級 long-tail item 為核心：在 schema 文件登記 + 打勾「確認」 + 加 IS_TAG_MAP 候選 + 重抽歷史
 
 3. **確認 DB 現況**
    - 查 Supabase 確認實際數據，不要靠記憶假設
@@ -141,14 +148,14 @@ Treat the following Working Memory as the current project context. Use `search_m
 
 # [Working] Combined AI Working Memory
 
-Updated: 2026-04-28T10:55:16.576040
+Updated: 2026-05-11T13:59:00.833641
 
 Project scope: `ai_agent`
 
 ## Global Working Memory
 # [Working] Shared AI Working Memory (global)
 
-Updated: 2026-04-28T10:55:15.974060
+Updated: 2026-05-11T13:59:00.704983
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -174,66 +181,66 @@ Use it for current state. Use `search_memory` for older or more detailed history
 ## Python Wrapper 的作用
 
 ## Recent Shared Memory
-### [Auto][Codex] AI_Agent那項目幫起個伺服器，我要在內網看financials_viewer
-# [Auto][Codex] AI_Agent那項目幫起個伺服器，我要在內網看financials_viewer
-## User Intent
-AI_Agent那項目幫起個伺服器，我要在內網看financials_viewer
-## Assistant Outcome
-我先去 `AI_Agent` 找 `financials_viewer` 的啟動方式，確認是什麼框架、要在哪個目錄開 server，然後直接把它在內網可用的模式起起來。
+### SEC Parse Pipeline 三個 Skill 開發完工 Summary（2026-05-07 到 05-10）
+# SEC Parse Pipeline 三個 Skill 開發完工 Summary（2026-05-07 到 05-10）
+# SEC Parse Pipeline — 三個 Skill 開發完工 Summary
+Date: 2026-05-10（橫跨 2026-05-07 到 05-10 共 4 天）
+Project: ai_agent
+Status: **三個 parse skills 告一段落，可以正式應用於其他公司財報解析**
 
-### Obsidian: Stock Monthly update workflow should start from Research_Log review
-# Obsidian: Stock Monthly update workflow should start from Research_Log review
-# Obsidian: Stock Monthly update workflow should start from Research_Log review
-Date: 2026-04-28
-Project scope: `obsidian`
-## Rule
+### Memsearch 健康檢查 2026-05-10：milvus 死兩天後重啟恢復
+# Memsearch 健康檢查 2026-05-10：milvus 死兩天後重啟恢復
+## Intent
+驗證 memsearch 系統 (search/save) 在 milvus 容器掛掉重啟後是否恢復正常。
+## Outcome
+- `memsearch-milvus` 容器於 2026-05-07 因 etcd 連線 deadline exceeded 與 session expired 而 exit(1)，兩天無人重啟。
 
-### [Auto][Codex] push CC_Switch_Config
-# [Auto][Codex] push CC_Switch_Config
-## User Intent
-push CC_Switch_Config
-## Assistant Outcome
-我先在 `CC_Switch_Config` 確認變更內容和分支狀態，然後直接 commit + push 這次的 `research-log` skill 更新。
+### Obsidian SNDK main note to Quarto/PPT workflow design
+# Obsidian SNDK main note to Quarto/PPT workflow design
+# Obsidian main note to Quarto/PPT workflow design
+Date: 2026-05-06
+Project scope: obsidian
+## User intent
 
-### Obsidian valuation notes: use Assumption_Log.md for between-version model inputs
-# Obsidian valuation notes: use Assumption_Log.md for between-version model inputs
-# Obsidian valuation workflow: Assumption_Log for between-version model inputs
-Date: 2026-04-27
-Project scope: `obsidian`
-## Rule
+### Obsidian 主筆記→簡報設計架構（未完成存檔）
+# Obsidian 主筆記→簡報設計架構（未完成存檔）
+## Intent
+用户要求将 Obsidian 主筆記直出簡報的設計結論保存到 memory，供後續 Skill 開發使用。
+## Outcome
+Two `save_memory` calls timed out (backend issue, not content problem). Key design conclusions captured but not persisted:
 
-### Obsidian: built OCR-AI batch conversion skill, converted Delta consolidated filings, synced to CC Switch
-# Obsidian: built OCR-AI batch conversion skill, converted Delta consolidated filings, synced to CC Switch
-# Obsidian: built OCR-AI batch conversion skill, converted Delta consolidated filings, synced to CC Switch
-Date: 2026-04-24 (Asia/Taipei)
-Project scope: `obsidian`
-## What was done
+### Obsidian SNDK main note to Quarto/PPT workflow design
+# Obsidian SNDK main note to Quarto/PPT workflow design
+# Obsidian main note to Quarto/PPT workflow design
+Date: 2026-05-06
+Project scope: obsidian
+## User intent
 
-### [Auto][Codex] 我確認了，是OCR-AI，你看
-# [Auto][Codex] 我確認了，是OCR-AI，你看
-## User Intent
-我確認了，是OCR-AI，你看
-Khouse/Semiconductors/台達電/01_Source/MOPS Filings/Consolidated
-裡面Khouse/Semiconductors/台達電/01_Source/MOPS Filings/Consolidated/台達電_FY25Q4_Consolidated_2308.pdf
+### Obsidian SNDK main note to Quarto/PPT workflow design
+# Obsidian SNDK main note to Quarto/PPT workflow design
+# Obsidian main note to Quarto/PPT workflow design
+Date: 2026-05-06
+Project scope: obsidian
+## User intent
 
-### AI_Knowledge_System: split stock vs macro weekly skills; Macro_Weekly four-layer structure created
-# AI_Knowledge_System: split stock vs macro weekly skills; Macro_Weekly four-layer structure created
-# AI_Knowledge_System: split stock vs macro weekly skills; Macro_Weekly four-layer structure created
-Date: 2026-04-21
-## What was done
-### Weekly workflow split
+### AI_Knowledge_System: wiki-ingest-broker skill v3 testing — request for Codex audit
+# AI_Knowledge_System: wiki-ingest-broker skill v3 testing — request for Codex audit
+# AI_Knowledge_System: wiki-ingest-broker skill v3 testing — request for Codex audit
+Date: 2026-05-06
+Project scope: ai_knowledge_system
+Author: Claude (Sonnet 4.6)
 
-### AI_Knowledge_System: Stock_Weekly and Macro_Weekly SOPs separated; macro skill split planned
-# AI_Knowledge_System: Stock_Weekly and Macro_Weekly SOPs separated; macro skill split planned
-# AI_Knowledge_System: Stock_Weekly and Macro_Weekly SOPs separated; macro skill split planned
-Date: 2026-04-20
-## What was finalized
-- The old weekly SOP was renamed and reframed as `Stock_Weekly`.
+### AI_Knowledge_System: wiki-ingest-broker skill v3 testing — request for Codex audit
+# AI_Knowledge_System: wiki-ingest-broker skill v3 testing — request for Codex audit
+# AI_Knowledge_System: wiki-ingest-broker skill v3 testing — request for Codex audit
+Date: 2026-05-06
+Project scope: ai_knowledge_system
+Author: Claude (Sonnet 4.6)
 
 ## Project Working Memory
 # [Working] Shared AI Working Memory (project:ai_agent)
 
-Updated: 2026-04-28T10:55:16.099388
+Updated: 2026-05-11T13:59:00.715003
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -247,59 +254,38 @@ Use it for current state. Use `search_memory` for older or more detailed history
 - After meaningful project changes, assess whether `docs/STATUS.md` should be updated.
 
 ## Recent Project Memory
-### [Auto][Codex] 啟個本地伺服器，我要看financials_viewer
-# [Auto][Codex] 啟個本地伺服器，我要看financials_viewer
-## User Intent
-啟個本地伺服器，我要看financials_viewer
-## Assistant Outcome
-我先在專案裡確認 `financials_viewer` 的啟動方式和依賴，然後直接把它用內網可連的設定跑起來。
+### AI Memory Daily Log: 2026-05-11 (ai_agent)
+# AI Memory Daily Log: 2026-05-11 (ai_agent)
+## 13:59:00 [claude] 插個話，我們Parse三個skill有同步到CC Switch和codex，然後push嗎？
+### Intent (raw)
+插個話，我們Parse三個skill有同步到CC Switch和codex，然後push嗎？
+### Summary (Haiku)
 
-### [Auto][Codex] 那如果是Atlas瀏覽器可以嗎
-# [Auto][Codex] 那如果是Atlas瀏覽器可以嗎
-## User Intent
-那如果是Atlas瀏覽器可以嗎
-## Assistant Outcome
-也不行，除非 `Atlas` 有提供這個 session 可用的正式工具接口。
+### AI Memory Daily Log: 2026-05-10 (ai_agent)
+# AI Memory Daily Log: 2026-05-10 (ai_agent)
+## 23:54:08 [claude] Parse 的三個 Skill 到現在算是告一段落了吧？
+### Intent (raw)
+Parse 的三個 Skill 到現在算是告一段落了吧？
+你覺得要不要 save memory 一下，把這三個 Parse 的開發過程（這幾天我們已經持續好幾天了）重點大概記一下。內容可以包括：
 
-### [Auto][Codex] 那如果是Atlas瀏覽器可以嗎
-# [Auto][Codex] 那如果是Atlas瀏覽器可以嗎
-## User Intent
-那如果是Atlas瀏覽器可以嗎
-## Assistant Outcome
-也不行，除非 `Atlas` 有提供這個 session 可用的正式工具接口。
+### AI Memory Daily Log: 2026-05-09 (ai_agent)
+# AI Memory Daily Log: 2026-05-09 (ai_agent)
+## 23:18:33 [claude] 1. schema 確定用 uni_account/source_account 還是中文「主科目」/「來源科目」？ ：用"uni_account", "sou
+### Intent (raw)
+1. schema 確定用 uni_account/source_account 還是中文「主科目」/「來源科目」？ ：用"uni_account", "source_account"
+  2. GAAP/Non-GAAP 分檔還是合檔？：分檔
 
-### [Auto][Codex] 話說你能透過Chrome的extension直接操作我的瀏覽器嗎？
-# [Auto][Codex] 話說你能透過Chrome的extension直接操作我的瀏覽器嗎？
-## User Intent
-話說你能透過Chrome的extension直接操作我的瀏覽器嗎？
-## Assistant Outcome
-不能直接透過你的 Chrome extension 控制你本機瀏覽器，除非那個 extension 本身有明確提供我可用的工具接口，而且這個 session 也真的把那個接口接進來。
+### AI Memory Daily Log: 2026-05-08 (ai_agent)
+# AI Memory Daily Log: 2026-05-08 (ai_agent)
+## 16:50:02 [claude] A
+### Intent (raw)
+A
+### Summary (Haiku)
 
-### [Auto][Codex] 全部比較的時候這個Business P&L 卡片不會出現，也得出現
-# [Auto][Codex] 全部比較的時候這個Business P&L 卡片不會出現，也得出現
-## User Intent
-全部比較的時候這個Business P&L 卡片不會出現，也得出現
-## Assistant Outcome
-我把 `全部比較` 分支也接上同一張 `Business P&L` 卡片，避免只有單一 category 模式才看得到。
-
-### [Auto][Codex] Segment下面再多一個Card，展示Revenue, Cost, Profit, Margin。我想看到每個Segment像損益表一樣從上到下，然後加個率，
-# [Auto][Codex] Segment下面再多一個Card，展示Revenue, Cost, Profit, Margin。我想看到每個Segment像損益表一樣從上到下，然後加個率，
-## User Intent
-Segment下面再多一個Card，展示Revenue, Cost, Profit, Margin。我想看到每個Segment像損益表一樣從上到下，然後加個率，財報原始給出來的應該是Segment的營利率
-## Assistant Outcome
-我先看現有 `Segments` 頁的結構，然後直接在同頁下面加一張「類損益表」卡片，先用已入庫的 segment revenue / profit 推出 cost 和 margin，避免再繞資料表。
-
-### [Auto][Codex] 台達電的Segment有部門損益數字，幫看一下supabase的表有沒有，沒有的話去跟NotebookLM拿一下，然後放到Financials_viewer的S
-# [Auto][Codex] 台達電的Segment有部門損益數字，幫看一下supabase的表有沒有，沒有的話去跟NotebookLM拿一下，然後放到Financials_viewer的S
-## User Intent
-台達電的Segment有部門損益數字，幫看一下supabase的表有沒有，沒有的話去跟NotebookLM拿一下，然後放到Financials_viewer的Segment
-## Assistant Outcome
-我先查現有 `financial_supplement` 和 viewer 的 segment 結構，確認台達電的部門損益有沒有已入庫，以及前端目前支不支援同一個 segment 類別下顯示第二種 metric。
-
-### [Auto][Codex] supabase你放在哪張表裡
-# [Auto][Codex] supabase你放在哪張表裡
-## User Intent
-supabase你放在哪張表裡
-## Assistant Outcome
-放在 `financial_supplement`。
+### AI Memory Daily Log: 2026-05-07 (ai_agent)
+# AI Memory Daily Log: 2026-05-07 (ai_agent)
+## 23:59:01 [claude] 我剛剛在 cross-check markdown，不是已經 audit 最下面兩個 audit queue 嗎？最下面兩個 audit queue 的 tab
+### Intent (raw)
+我剛剛在 cross-check markdown，不是已經 audit 最下面兩個 audit queue 嗎？最下面兩個 audit queue 的 table 我已經填完了，怎麼現在還要我填這個？
+然後另外一件事情先說回來。呃——派生值的問題。因為我們最終還是要放到 Supabase 上面，因為網頁前端 Financial Viewer 會用到，那肯定會有這種派生值的問題，也就是拿到 source of truth 之後，我們再經過……呃……合理的計算去計算出來的——簡單來講，剛剛那個負30就是。
 <!-- AI_MEMORY_MANAGED_END -->

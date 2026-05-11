@@ -35,3 +35,7 @@ tsconfig.tsbuildinfo
 AI_Agent.code-workspace
 UI_Templates/
 .vercel
+.next-dev*.log
+.next-dev*.pid
+dist/
+tmp/

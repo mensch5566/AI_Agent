@@ -207,12 +207,20 @@
 | IS    | `r_and_d_expenses`               | R&D Expenses            | `us-gaap:ResearchAndDevelopmentExpense`                       | ⬜   |     |
 | IS    | `selling_general_admin_expenses` | SG&A                    | `us-gaap:SellingGeneralAndAdministrativeExpense`              | ⬜   |     |
 | IS    | `operating_income`               | Operating Income        | `us-gaap:OperatingIncomeLoss`                                 | ⬜   |     |
+| IS    | `restructuring_charges`          | Restructuring Charges   | `us-gaap:RestructuringCharges`                                | ⬜   |     |
+| IS    | `amortization_of_intangible_assets` | Amortization of Intangibles | `us-gaap:AmortizationOfIntangibleAssets`                  | ⬜   |     |
+| IS    | `gain_loss_on_equity_investments` | Gains (Losses) on Equity Investments, net | `us-gaap:EquitySecuritiesFvNiGainLoss` / similar | ⬜   |     |
+| IS    | `interest_income`                | Interest Income         | `us-gaap:InvestmentIncomeInterest` / similar                  | ⬜   |     |
 | IS    | `interest_expense`               | Interest Expense        | `us-gaap:InterestExpense`                                     | ⬜   |     |
+| IS    | `other_nonoperating_income_expense` | Other Non-operating Income/Expense | `us-gaap:OtherNonoperatingIncomeExpense` / similar | ⬜   |     |
 | IS    | `income_before_taxes`            | Income Before Tax       | `us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxes` | ⬜   |     |
 | IS    | `income_tax_expense`             | Income Tax Expense      | `us-gaap:IncomeTaxExpenseBenefit`                             | ⬜   |     |
 | IS    | `net_income`                     | Net Income              | `us-gaap:NetIncomeLoss`                                       | ⬜   |     |
+| IS    | `net_income_nci`                 | Net Income Attributable to Non-controlling Interests | `us-gaap:NetIncomeLossAttributableToNoncontrollingInterest` | ⬜   |     |
 | IS    | `basic_eps`                      | Basic EPS               | `us-gaap:EarningsPerShareBasic`                               | ⬜   |     |
 | IS    | `diluted_eps`                    | Diluted EPS             | `us-gaap:EarningsPerShareDiluted`                             | ⬜   |     |
+| IS    | `shares_basic_millions`          | Weighted Average Basic Shares (Millions) | `us-gaap:WeightedAverageNumberOfSharesOutstandingBasic` | ⬜   |     |
+| IS    | `shares_diluted_millions`        | Weighted Average Diluted Shares (Millions) | `us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding` | ⬜   |     |
 
 ### 資產負債表（BS）— 資產
 

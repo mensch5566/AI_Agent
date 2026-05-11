@@ -1,6 +1,6 @@
 # AI_Agent Status
 
-Updated: 2026-04-22
+Updated: 2026-05-06
 
 ## Current Focus
 - Portal remains the main entrypoint for internal tools.
@@ -33,6 +33,12 @@ Updated: 2026-04-22
 - Prefer adding new portal-facing features behind an existing module/page when possible, instead of creating duplicate entrypoints.
 
 ## Latest Changes
+- Renamed the US SEC skill to `parse-sec-filing` so it now mirrors `parse-twse-ixbrl` naming.
+- Replaced the US SEC skill's old export-oriented workflow with a direct Supabase ingestion flow via `Tools/research-tools/parse-sec-filing/batch_parse.py`.
+- `parse-sec-filing` now canonicalizes US XBRL output into `Financials Viewer` schema keys and writes directly to `financial_companies`, `financial_facts`, and `financial_metrics`, with JSON retained only as an audit artifact.
+- Live-smoke-tested the new `parse-sec-filing` ingestion on `INTC`; Supabase now contains canonical `INTC` rows in all three tables.
+- Supplemented `INTC` business-segment revenue and operating income rows in `financial_supplement` from NotebookLM (`INTC - Intel Corporation - Official Materials`) for `Q1_FY2024` to `Q3_FY2025`, direct `FY2024` / `FY2025` annual values, and `Q1_FY2026`, storing only non-overlapping leaf business segments (`CCG`, `DCAI`, `Intel Foundry`, `All Other`) so `Financials Viewer` segment totals remain meaningful.
+- Expanded the US SEC ingestion/display path so filing-native Intel income-statement rows such as restructuring charges, intangible amortization, gains/losses on equity investments, non-controlling-interest income, and weighted-average shares can flow through `parse-sec-filing` into `Financials Viewer`; `INTC` also now uses ticker-specific filing-style income-statement labels plus synthetic display rows for `Operating expenses` and total `Net income (loss)`.
 - Taiwan direct `FY` annual period-based values are now stored as direct `FYyyyy` rows in `financial_facts` with annual-direct provenance, while quarterly views stay clean by filtering periods instead of hiding those rows in a side path.
 - Fixed `Financials Viewer` annual aggregation so direct `FYxxxx` disclosures are preserved and preferred over quarterly fallback aggregation, which restores correct annual segment / geography display for Taiwan supplement data such as `2308 台達電`.
 - Re-parsed `2454 聯發科` local TWSE MOPS iXBRL files so stale `Q4_FY2025` annual EPS values in quarterly storage were replaced with reconstructed single-quarter EPS. Taiwan `Q4 EPS` now prefers `FY - 9M cumulative EPS`, and only falls back to `FY - (Q1 + Q2 + Q3)` if cumulative EPS is unavailable.
