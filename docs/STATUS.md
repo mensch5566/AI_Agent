@@ -1,6 +1,6 @@
 # AI_Agent Status
 
-Updated: 2026-05-06
+Updated: 2026-05-12
 
 ## Current Focus
 - Portal remains the main entrypoint for internal tools.
@@ -33,6 +33,13 @@ Updated: 2026-05-06
 - Prefer adding new portal-facing features behind an existing module/page when possible, instead of creating duplicate entrypoints.
 
 ## Latest Changes
+- Parsed `AAOI` (Applied Optoelectronics, CIK 0001158114) from `Q1_FY2023` to `Q1_FY2026` end-to-end. GAAP via `parse-10QK-gaap` (IS 273 rows / BS 357 / CF 220), cross-check via `parse-sec-cross-check` against NotebookLM at 215 ✅ + 18 sign-flipped / 0 ❌ / 0 N/A, Non-GAAP via `parse-8k-nongaap` (6 spine metrics × 10 periods = 55 rows including `adjusted_ebitda`).
+- Small-cap parse support hardened in three SEC skills (exposed by AAOI, which prints in thousands and disaggregates SG&A):
+  - `parse-10QK-gaap` now auto-detects per-ticker USD reporting scale (`infer_usd_scale`: max revenue ≥ $1B → `USD_millions`, else `USD_thousands`). Each row carries its own `unit` field; downstream consumers should never assume a default scale.
+  - `parse-10QK-gaap` SG&A composite fallback: when filer has no `SellingGeneralAndAdministrativeExpense` tag, sum the standard us-gaap sub-tags into the core key AND preserve sub-values as `operating_expense_long_tail` rows (`rolls_up_to=selling_general_administrative`) so granularity isn't lost.
+  - `parse-sec-cross-check` reconciles NLM ↔ SEC scales using the SEC row's `unit` (AAOI thousands ↔ thousands and INTC millions ↔ millions both compare 1:1). Adds Basic/Diluted disambig by unit and aggregates `Sales and Marketing` + `General and Administrative` for composite SG&A comparison.
+  - `parse-8k-nongaap` adds `adjusted_ebitda` to the canonical Non-GAAP metric keys (small-cap spine metric).
+- INTC regression validated (95 ✅ / 0 ❌ / 0 N/A unchanged after structural fixes).
 - Renamed the US SEC skill to `parse-sec-filing` so it now mirrors `parse-twse-ixbrl` naming.
 - Replaced the US SEC skill's old export-oriented workflow with a direct Supabase ingestion flow via `Tools/research-tools/parse-sec-filing/batch_parse.py`.
 - `parse-sec-filing` now canonicalizes US XBRL output into `Financials Viewer` schema keys and writes directly to `financial_companies`, `financial_facts`, and `financial_metrics`, with JSON retained only as an audit artifact.
