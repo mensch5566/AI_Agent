@@ -241,6 +241,15 @@ const IS_SUB_ITEMS: Record<string, string[]> = {
   // 其他綜合損益兩大類 toggle（IFRS 通用，適用所有台股）
   oci_not_reclassified: ["oci_fvoci_equity"],          // 8310 不重分類至損益之項目
   oci_reclassified:     ["oci_fx_translation"],         // 8360 後續可能重分類至損益之項目
+  // 美股 filing-style subtotal
+  operating_expenses: [
+    "research_and_development",
+    "selling_general_administrative",
+    "selling_general_and_administrative",
+    "restructuring_charges",
+    "amortization_of_intangible_assets",
+    "other_operating_income_expense_net",
+  ],
   // 非營業收支（美股舊格式）
   other_nonoperating_income_expense: ["equity_method_investments", "equity_in_net_income_of_investees"],
 };
@@ -273,11 +282,53 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
   const IS_SUB_SET = new Set(Object.values(IS_SUB_ITEMS).flat());
   const ticker = store.company?.ticker;
   const metricOrder = store.currency === "TWD" ? IS_METRIC_ORDER : US_IS_METRIC_ORDER;
+  // Synthetic total: sources are [metric, sign] pairs — sign handles stored-positive expenses
+  const syntheticSum = (sources: [string, number][]): Record<string, number | null> => {
+    const present = sources.filter(([m]) => isMetrics.includes(m));
+    const result: Record<string, number | null> = {};
+    for (const p of periods) {
+      let total: number | null = null;
+      for (const [m, sign] of present) {
+        const v = store.val("income_statement", m, p);
+        if (v !== null) total = (total ?? 0) + sign * v;
+      }
+      result[p] = total;
+    }
+    return result;
+  };
+  const syntheticMetricKeys: string[] = [];
+  if (
+    store.currency !== "TWD" &&
+    !isMetrics.includes("operating_expenses") &&
+    [
+      "research_and_development",
+      "selling_general_administrative",
+      "selling_general_and_administrative",
+      "restructuring_charges",
+      "amortization_of_intangible_assets",
+      "other_operating_income_expense_net",
+    ].some((m) => isMetrics.includes(m))
+  ) {
+    syntheticMetricKeys.push("operating_expenses");
+  }
+  if (
+    store.currency !== "TWD" &&
+    !isMetrics.includes("net_income_total") &&
+    isMetrics.includes("net_income") &&
+    isMetrics.includes("net_income_nci")
+  ) {
+    syntheticMetricKeys.push("net_income_total");
+  }
+
   const metrics = sortMetrics(
     isMetrics.filter((m) => !IS_PCT_EXCLUDE.has(m) && !IS_HIDDEN.has(m) && !IS_SUB_SET.has(m)),
     metricOrder,
   );
-  const rows: TableRow[] = metrics.map((key) => {
+  const displayMetrics = sortMetrics(
+    [...new Set([...metrics, ...syntheticMetricKeys])],
+    metricOrder,
+  );
+  const rows: TableRow[] = displayMetrics.map((key) => {
     const subKeys = (IS_SUB_ITEMS[key] ?? []).filter((m) => isMetrics.includes(m));
     const hasSubItems = subKeys.length > 0;
     const isExpanded = expandedSubs.has(key);
@@ -293,7 +344,22 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
     const IS_ANNUAL_ONLY_METRICS = new Set([
       "weighted_avg_shares_basic", "weighted_avg_shares_diluted",
     ]);
-    const rawVals = store.valMap("income_statement", key);
+    const rawVals =
+      key === "operating_expenses"
+        ? syntheticSum([
+            ["research_and_development", 1],
+            ["selling_general_administrative", 1],
+            ["selling_general_and_administrative", 1],
+            ["restructuring_charges", 1],
+            ["amortization_of_intangible_assets", 1],
+            ["other_operating_income_expense_net", 1],
+          ])
+        : key === "net_income_total"
+          ? syntheticSum([
+              ["net_income", 1],
+              ["net_income_nci", 1],
+            ])
+          : store.valMap("income_statement", key);
     const derivedPeriods = new Set<string>();
     const vals = IS_ANNUAL_ONLY_METRICS.has(key) && viewMode === "quarterly"
       ? Object.fromEntries(periods.map((p) => {
@@ -346,22 +412,6 @@ function IncomeStatement({ store, viewMode }: { store: FactStore; viewMode: "qua
 
     rows.splice(parentIdx + 1, 0, ...toInsert);
   }
-
-  // Synthetic total: sources are [metric, sign] pairs — sign handles stored-positive expenses
-  const syntheticSum = (sources: [string, number][]): Record<string, number | null> => {
-    const present = sources.filter(([m]) => isMetrics.includes(m));
-    const result: Record<string, number | null> = {};
-    for (const p of periods) {
-      let total: number | null = null;
-      for (const [m, sign] of present) {
-        const v = store.val("income_statement", m, p);
-        if (v !== null) total = (total ?? 0) + sign * v;
-      }
-      result[p] = total;
-    }
-    return result;
-  };
-
 
   const isGrowth = growthMode !== "value";
   const prevFn = growthMode === "qoq" ? prevQoQ : prevYoY;

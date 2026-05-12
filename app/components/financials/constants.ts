@@ -4,12 +4,33 @@ export type ValMap = Record<string, number | null>;
 export type FinData = any;
 
 export const TICKER_LABELS: Record<string, string> = {
+  "INTC": "Intel",
   "2308": "台達電",
   "2454": "聯發科",
   "7769": "鴻勁",
 };
 
 export const TICKER_LABEL_OVERRIDES: Record<string, Record<string, string>> = {
+  "INTC": {
+    operating_revenue: "Net revenue",
+    cost_of_revenue: "Cost of sales",
+    gross_profit: "Gross profit",
+    r_and_d_expenses: "Research and development",
+    selling_general_admin_expenses: "Marketing, general, and administrative",
+    restructuring_charges: "Restructuring and other charges",
+    operating_expenses: "Operating expenses",
+    operating_income: "Operating income (loss)",
+    gain_loss_on_equity_investments: "Gains (losses) on equity investments, net",
+    income_before_taxes: "Income (loss) before taxes",
+    income_tax_expense: "Provision for (benefit from) taxes",
+    net_income_total: "Net income (loss)",
+    net_income_nci: "Less: net income (loss) attributable to non-controlling interests",
+    net_income: "Net income (loss) attributable to Intel",
+    basic_eps: "Earnings (loss) per share attributable to Intel—basic",
+    diluted_eps: "Earnings (loss) per share attributable to Intel—diluted",
+    shares_basic_millions: "Basic",
+    shares_diluted_millions: "Diluted",
+  },
   "7769": {
     // Balance Sheet
     accounts_receivable: "應收票據及帳款",
@@ -143,6 +164,7 @@ export const LABEL_MAP: Record<string, string> = {
   selling_general_administrative: "SG&A Expense",
   selling_general_and_administrative: "SG&A Expense",
   restructuring_charges: "Restructuring Charges",
+  gain_loss_on_equity_investments: "Gains (Losses) on Equity Investments, net",
   advanced_technology_costs: "Advanced Technology Costs",
   equity_related_compensation: "Equity-related Compensation",
   amortization_of_intangible_assets: "Amortization of Intangibles",
@@ -156,7 +178,9 @@ export const LABEL_MAP: Record<string, string> = {
   income_tax_provision: "Income Tax Provision",
   effective_tax_rate: "  Effective Tax Rate",
   equity_in_net_income_of_investees: "Equity in Investees",
+  net_income_total: "Net Income (Loss)",
   net_margin_pct: "  Net Margin %",
+  net_income_nci: "Net Income (Loss) Attributable to Non-controlling Interests",
   eps_basic: "EPS — Basic",
   eps_diluted: "EPS — Diluted",
   shares_basic_millions: "Shares Basic (M)",
@@ -306,15 +330,20 @@ export const IS_METRIC_ORDER = [
 
 /** 美股 IS 科目順序（revenue 在最上面） */
 export const US_IS_METRIC_ORDER = [
+  "operating_revenue",
   "revenue",
+  "cost_of_revenue",
   "cost_of_goods_sold", "cost_of_goods_and_services_sold",
   "gross_profit", "gross_margin", "gross_margin_pct",
+  "r_and_d_expenses",
   "research_and_development",
+  "selling_general_admin_expenses",
   "selling_general_administrative", "selling_general_and_administrative",
   "restructuring_charges", "advanced_technology_costs", "equity_related_compensation",
   "amortization_of_intangible_assets", "other_operating_income_expense_net",
-  "total_operating_expenses",
+  "operating_expenses", "total_operating_expenses",
   "operating_income", "operating_margin_pct",
+  "gain_loss_on_equity_investments",
   "interest_income", "interest_income_net", "investment_income",
   "interest_expense",
   "other_nonoperating_income_expense",
@@ -322,9 +351,11 @@ export const US_IS_METRIC_ORDER = [
   "nonoperating_income_expense_total",
   "income_before_taxes",
   "income_tax_expense", "income_tax_provision",
-  "net_income", "net_income_parent", "net_income_nci",
+  "net_income_total", "net_income_nci", "net_income", "net_income_parent",
   "net_margin_pct",
+  "basic_eps", "diluted_eps",
   "eps_basic", "eps_diluted",
+  "weighted_avg_shares_basic", "weighted_avg_shares_diluted",
   "shares_basic_millions", "shares_diluted_millions",
 ];
 
@@ -342,12 +373,17 @@ export const BS_ASSETS_ORDER = [
   "total_noncurrent_assets",
   "total_assets",
   // ── 美股 / 舊格式 ──
+  "cash_and_equivalents",
   "cash_and_cash_equivalents", "short_term_investments",
   "accounts_receivable", "inventories",
   "other_current_assets",
+  "total_current_assets",
+  "ppe_net",
   "property_plant_equipment_net",
   "goodwill", "intangible_assets",
   "operating_lease_rou_asset",
+  "other_noncurrent_assets",
+  "total_assets",
 ];
 
 export const BS_LIABILITIES_ORDER = [
@@ -363,10 +399,15 @@ export const BS_LIABILITIES_ORDER = [
   "total_noncurrent_liabilities",
   "total_liabilities",
   // ── 美股 / 舊格式 ──
+  "short_term_debt",
   "current_debt",
   "accrued_liabilities", "deferred_revenue",
+  "other_current_liabilities",
+  "total_current_liabilities",
   "long_term_debt",
   "operating_lease_noncurrent",
+  "other_noncurrent_liabilities",
+  "total_liabilities",
 ];
 
 export const BS_EQUITY_ORDER = [
@@ -386,8 +427,9 @@ export const CF_OPERATING_ORDER = [
   "depreciation_expense", "amortization_expense",
   // ── 美股 / 舊格式 ──
   "net_income",
+  "stock_based_compensation",
   "depreciation_and_amortization", "depreciation", "amortization",
-  "stock_based_compensation", "equity_related_compensation",
+  "equity_related_compensation",
   "deferred_income_taxes",
   "changes_in_working_capital", "changes_in_accounts_receivable",
   "changes_in_inventories", "changes_in_accounts_payable",
@@ -467,7 +509,7 @@ export const TOTAL_KEYS = new Set([
 export const RATIO_CATEGORIES: { label: string; metrics: string[] }[] = [
   {
     label: "Profitability",
-    metrics: ["gross_margin_pct", "operating_margin_pct", "net_margin_pct", "fcf_margin_pct", "roe", "roa"],
+    metrics: ["gross_margin_pct", "operating_margin_pct", "net_margin_pct", "fcf_margin", "fcf_margin_pct", "roe", "roa"],
   },
   {
     label: "Liquidity",
@@ -494,6 +536,7 @@ export const RATIO_DEFINITIONS: Record<string, string> = {
   gross_margin_pct: "Gross Profit ÷ Revenue",
   operating_margin_pct: "Operating Income ÷ Revenue",
   net_margin_pct: "Net Income ÷ Revenue",
+  fcf_margin: "Free Cash Flow ÷ Revenue",
   fcf_margin_pct: "Free Cash Flow ÷ Revenue",
   roe: "Net Income ÷ Total Equity (quarterly, not annualized)",
   roa: "Net Income ÷ Total Assets (quarterly, not annualized)",
