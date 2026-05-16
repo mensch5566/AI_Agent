@@ -133,6 +133,48 @@ export const NONGAAP_SPOTLIGHT_METRICS = new Set([
   "adjusted_ebitda",
 ]);
 
+// Chart defaults per statement — the metrics auto-selected when the user
+// switches to a new view. Capped at `CHART_MAX_SELECTION` in the toggle
+// handler; entries past the cap are ignored.
+export const CHART_DEFAULT_KEYS: Record<Statement, string[]> = {
+  IS: ["revenue", "gross_profit", "net_income"],
+  BS: ["cash_and_cash_equivalents", "total_assets", "total_equity"],
+  CF: ["net_cash_from_operating", "capital_expenditures", "net_change_in_cash"],
+  RATIO: ["gross_margin_pct", "operating_margin_pct", "net_margin_pct"],
+};
+
+// Maximum simultaneous metrics on the line chart. Clicking a fourth row in
+// the table evicts the oldest selection (FIFO).
+export const CHART_MAX_SELECTION = 3;
+
+// Line colors cycled for chart datasets. Mid-saturation palette that reads
+// well on both light and dark backgrounds.
+export const CHART_COLORS = [
+  "#3b82f6", // blue
+  "#ef4444", // red
+  "#10b981", // emerald
+  "#f59e0b", // amber
+  "#8b5cf6", // violet
+  "#ec4899", // pink
+  "#14b8a6", // teal
+  "#f97316", // orange
+];
+
+// Group units so the chart can lock chips to compatible measurement types.
+// Mixing $ and % on one axis is misleading; mixing $ and shares is also
+// misleading. Per-share lives in its own group too because absolute EPS
+// doesn't compare against revenue dollars.
+export type UnitGroup = "monetary" | "pct" | "per_share" | "shares" | "other";
+
+export function unitGroupOf(unit: string | null | undefined): UnitGroup {
+  if (!unit) return "other";
+  if (unit === "USD_thousands" || unit === "USD_millions") return "monetary";
+  if (unit === "Pure" || unit === "percent" || unit === "pct") return "pct";
+  if (unit === "USD_per_share") return "per_share";
+  if (unit === "millions_shares" || unit === "thousands_shares") return "shares";
+  return "other";
+}
+
 // Long-tail rollup hints: when a long-tail bucket child carries one of these
 // XBRL tags AND the target core uni_account row already has a populated cell
 // for the same (statement, version, period), suppress the child from the

@@ -2,13 +2,20 @@
 
 import type { Cell, CellStatus } from "./types";
 import type { Matrix } from "./useFinancialMatrix";
-import { NONGAAP_SPOTLIGHT_METRICS, comparePeriods, fmtValue } from "./constants";
+import { CHART_COLORS, NONGAAP_SPOTLIGHT_METRICS, comparePeriods, fmtValue } from "./constants";
 
 type Props = {
   gaap: Matrix;
   nongaap?: Matrix;
   showNongaapColumn?: boolean;
   signFlipConcepts?: string[];
+  /** Ordered list of uni_account keys currently plotted in the chart above. */
+  selectedKeys?: string[];
+  /** Click handler — fires when the user clicks a row to toggle its chart selection. */
+  onToggleRow?: (key: string) => void;
+  /** Keys of rows with at least one populated cell. Rows not in this set
+   *  render as non-clickable (no chart data to plot). */
+  rowsWithData?: Set<string>;
 };
 
 function statusPresentation(status: CellStatus): { className: string } {
@@ -63,8 +70,14 @@ export function StatementMatrix({
   nongaap,
   showNongaapColumn = false,
   signFlipConcepts = [],
+  selectedKeys = [],
+  onToggleRow,
+  rowsWithData,
 }: Props) {
   const flipSet = new Set(signFlipConcepts);
+  // Selection order → color index (matches MatrixChart's CHART_COLORS cycle).
+  const selectionIndex = new Map<string, number>();
+  selectedKeys.forEach((k, i) => selectionIndex.set(k, i));
   // Union of GAAP and Non-GAAP periods — Non-GAAP 8-K data may carry quarters
   // (e.g. Q4) that the GAAP feed hasn't derived yet, and we still want those
   // columns visible. GAAP-only cells show "—" in the Non-GAAP slot and vice
@@ -127,23 +140,52 @@ export function StatementMatrix({
               showNongaapColumn && NONGAAP_SPOTLIGHT_METRICS.has(row.key);
             const indentPx = (row.indent ?? 0) * 12;
             const rowBg = isSubtotal ? "var(--muted)" : "var(--card)";
+            const selIdx = selectionIndex.get(row.key);
+            const isSelected = selIdx !== undefined;
+            const selColor = isSelected ? CHART_COLORS[selIdx % CHART_COLORS.length] : null;
+            const hasData = rowsWithData ? rowsWithData.has(row.key) : true;
+            const clickable = !!onToggleRow && hasData;
             return (
               <tr
                 key={row.key}
                 className={
                   "border-b border-border " +
                   (isSubtotal ? "font-semibold " : "") +
-                  (isDerivedRow ? "italic " : "")
+                  (isDerivedRow ? "italic " : "") +
+                  (clickable ? "cursor-pointer hover:bg-accent/40 " : "") +
+                  (isSelected ? "bg-accent/30 " : "")
                 }
-                style={{ background: rowBg }}
+                style={{
+                  background: isSelected ? undefined : rowBg,
+                  boxShadow: selColor ? `inset 3px 0 0 ${selColor}` : undefined,
+                }}
+                onClick={clickable ? () => onToggleRow!(row.key) : undefined}
+                title={
+                  clickable
+                    ? isSelected
+                      ? `Click to remove "${row.label}" from chart`
+                      : `Click to plot "${row.label}"`
+                    : hasData
+                      ? undefined
+                      : "no data to plot"
+                }
               >
                 <td
                   className={
                     "px-3 py-1.5 sticky left-0 z-10 " +
                     (isLongTail ? "italic text-muted-foreground" : "text-foreground")
                   }
-                  style={{ paddingLeft: 12 + indentPx, background: rowBg }}
+                  style={{
+                    paddingLeft: 12 + indentPx,
+                    background: isSelected ? "transparent" : rowBg,
+                  }}
                 >
+                  {selColor && (
+                    <span
+                      className="inline-block w-2 h-2 rounded-full align-middle mr-1.5"
+                      style={{ background: selColor }}
+                    />
+                  )}
                   {row.label}
                 </td>
                 {periods.flatMap((p) => {

@@ -1,10 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFinancialData, buildMatrix, type Frequency } from "@/app/components/financials-v2/useFinancialMatrix";
 import { StatementMatrix } from "@/app/components/financials-v2/StatementMatrix";
+import { MatrixChart } from "@/app/components/financials-v2/MatrixChart";
 import { SegmentDashboard } from "@/app/components/financials-v2/SegmentDashboard";
 import { TickerPicker } from "@/app/components/financials-v2/TickerPicker";
+import {
+  CHART_DEFAULT_KEYS,
+  CHART_MAX_SELECTION,
+  unitGroupOf,
+} from "@/app/components/financials-v2/constants";
 import type { Statement } from "@/app/components/financials-v2/types";
 import ThemeToggle from "@/app/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -41,6 +47,94 @@ export default function Viewer({ ticker }: { ticker: string }) {
   );
 
   const showNongaapCol = showNonGaap && view === "IS";
+
+  // ---- Chart selection state (shared between MatrixChart and StatementMatrix) ----
+  //
+  // selectedKeys is an ordered list (FIFO): clicking a 4th row evicts the
+  // oldest. Clicking a row with an incompatible unit group (e.g. % when the
+  // current selection is $) resets the list — keeps the chart's single axis
+  // honest without surfacing a modal.
+  //
+  // rowsWithData drives which rows are clickable; rows that are all-PENDING
+  // in the matrix can't contribute a line.
+  // Lazy init with the IS preset so the chart shows something on the very
+  // first paint (before useEffect[statement] runs). The slice() guards
+  // against future preset lists outgrowing CHART_MAX_SELECTION.
+  const [selectedKeys, setSelectedKeys] = useState<string[]>(() =>
+    (CHART_DEFAULT_KEYS.IS ?? []).slice(0, CHART_MAX_SELECTION),
+  );
+
+  const rowsWithData = useMemo(() => {
+    const out = new Set<string>();
+    for (const row of gaapMatrix.rows) {
+      for (const p of gaapMatrix.periods) {
+        if (gaapMatrix.cells[row.key]?.[p]?.cell) {
+          out.add(row.key);
+          break;
+        }
+      }
+    }
+    if (showNongaapCol) {
+      for (const row of nongaapMatrix.rows) {
+        if (out.has(row.key)) continue;
+        for (const p of nongaapMatrix.periods) {
+          if (nongaapMatrix.cells[row.key]?.[p]?.cell) {
+            out.add(row.key);
+            break;
+          }
+        }
+      }
+    }
+    return out;
+  }, [gaapMatrix, nongaapMatrix, showNongaapCol]);
+
+  // Reset chart selection when the statement changes: apply that
+  // statement's preset. We don't filter by rowsWithData here — keys that
+  // lack data render as empty lines but stay selectable; the issuer-
+  // specific gaps are usually obvious to the analyst.
+  useEffect(() => {
+    setSelectedKeys((CHART_DEFAULT_KEYS[statement] ?? []).slice(0, CHART_MAX_SELECTION));
+  }, [statement]);
+
+  // Look up a row's unit by peeking the first populated cell in the GAAP
+  // matrix (falls back to Non-GAAP if GAAP has no value yet — e.g. Q4 from
+  // 8-K only).
+  const unitOfRow = useCallback(
+    (key: string): string => {
+      for (const p of gaapMatrix.periods) {
+        const c = gaapMatrix.cells[key]?.[p]?.cell;
+        if (c) return c.unit;
+      }
+      for (const p of nongaapMatrix.periods) {
+        const c = nongaapMatrix.cells[key]?.[p]?.cell;
+        if (c) return c.unit;
+      }
+      return "";
+    },
+    [gaapMatrix, nongaapMatrix],
+  );
+
+  const handleToggleRow = useCallback(
+    (key: string) => {
+      setSelectedKeys((prev) => {
+        if (prev.includes(key)) {
+          return prev.filter((k) => k !== key);
+        }
+        const newGroup = unitGroupOf(unitOfRow(key));
+        const currentGroup = prev.length > 0 ? unitGroupOf(unitOfRow(prev[0])) : null;
+        if (currentGroup && newGroup !== currentGroup) {
+          // Different unit group → swap modes, keep only the new row.
+          return [key];
+        }
+        if (prev.length >= CHART_MAX_SELECTION) {
+          // FIFO evict oldest.
+          return [...prev.slice(1), key];
+        }
+        return [...prev, key];
+      });
+    },
+    [unitOfRow],
+  );
 
   return (
     <main className="max-w-screen-2xl mx-auto p-6 text-foreground">
@@ -120,12 +214,23 @@ export default function Viewer({ ticker }: { ticker: string }) {
           {view === "SEGMENT" ? (
             <SegmentDashboard dimensional={dimensional} />
           ) : (
-            <StatementMatrix
-              gaap={gaapMatrix}
-              nongaap={nongaapMatrix}
-              showNongaapColumn={showNongaapCol}
-              signFlipConcepts={signFlip}
-            />
+            <>
+              <MatrixChart
+                gaap={gaapMatrix}
+                nongaap={nongaapMatrix}
+                selectedKeys={selectedKeys}
+                showNongaapColumn={showNongaapCol}
+              />
+              <StatementMatrix
+                gaap={gaapMatrix}
+                nongaap={nongaapMatrix}
+                showNongaapColumn={showNongaapCol}
+                signFlipConcepts={signFlip}
+                selectedKeys={selectedKeys}
+                onToggleRow={handleToggleRow}
+                rowsWithData={rowsWithData}
+              />
+            </>
           )}
 
           <div className="mt-6 text-xs text-muted-foreground space-y-1">
