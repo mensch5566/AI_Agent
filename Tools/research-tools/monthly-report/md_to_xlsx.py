@@ -16,7 +16,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 # ── 路徑 ──────────────────────────────────────────────
-OBSIDIAN_BASE = Path.home() / "Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian/Khouse/Semiconductors"
+OBSIDIAN_BASE = Path.home() / "Obsidian/Khouse/Semiconductors"
 OUTPUT_DIR = Path.home() / "Library/Mobile Documents/com~apple~CloudDocs/Assembla/trunk/喬大地產/Stock_Monthly"
 
 # 標的 → Obsidian 資料夾名

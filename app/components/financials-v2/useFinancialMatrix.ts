@@ -1,0 +1,208 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import type { ApiResponse, Cell, MatrixCell, PeriodKind, Statement, Version } from "./types";
+import { LONG_TAIL_ROLLUP_HINTS, ROWS_BY_STATEMENT, comparePeriods } from "./constants";
+
+/**
+ * useFinancialMatrix(ticker)
+ *
+ * Fetches /api/financials/[ticker] and builds a pivot matrix per (statement × version).
+ *
+ * Matrix shape:
+ *   rows: uni_account in metric dictionary order
+ *   cols: periods sorted oldest → newest
+ *   cell: {cell?, status} — status='PENDING' if no DB row found
+ *
+ * Statement-aware period filtering (per docs/financials-data-rules.md §SEC v2):
+ *   IS/CF/RATIO + quarterly: quarter_duration ∪ derived_q4
+ *   IS/CF/RATIO + annual:    fy_annual_duration
+ *   BS + quarterly:          instant_period_end (period = Qx_FYyyyy)
+ *   BS + annual:             instant_period_end (period = FYyyyy)
+ */
+
+export type Frequency = "quarterly" | "annual";
+
+export type Matrix = {
+  periods: string[];                       // column headers, sorted
+  rows: { key: string; label: string; kind: string; indent: number }[];
+  cells: Record<string, Record<string, MatrixCell>>;  // [uni_account][period] -> MatrixCell
+};
+
+export type UseFinancialMatrixState = {
+  loading: boolean;
+  error: string | null;
+  data: ApiResponse | null;
+};
+
+export function useFinancialData(ticker: string): UseFinancialMatrixState {
+  const [state, setState] = useState<UseFinancialMatrixState>({
+    loading: true,
+    error: null,
+    data: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ loading: true, error: null, data: null });
+    fetch(`/api/financials/${encodeURIComponent(ticker)}`, { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error || `HTTP ${r.status}`);
+        }
+        return r.json() as Promise<ApiResponse>;
+      })
+      .then((d) => {
+        if (!cancelled) setState({ loading: false, error: null, data: d });
+      })
+      .catch((e) => {
+        if (!cancelled) setState({ loading: false, error: String(e?.message ?? e), data: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ticker]);
+
+  return state;
+}
+
+const QUARTERLY_PKINDS_IS_CF: PeriodKind[] = ["quarter_duration", "derived_q4"];
+const ANNUAL_PKINDS_IS_CF: PeriodKind[] = ["fy_annual_duration"];
+const BS_PKINDS: PeriodKind[] = ["instant_period_end"];
+
+function isFyPeriod(p: string): boolean {
+  return /^FY\d{4}$/.test(p);
+}
+function isQuarterPeriod(p: string): boolean {
+  return /^Q\d_FY\d{4}$/.test(p);
+}
+
+export function buildMatrix(
+  cells: Cell[],
+  statement: Statement,
+  version: Version,
+  frequency: Frequency,
+): Matrix {
+  const rows = ROWS_BY_STATEMENT[statement];
+
+  // Filter cells by statement + version + period_kind/period
+  const filtered = cells.filter((c) => {
+    if (c.statement !== statement) return false;
+    if (c.version !== version) return false;
+    if (statement === "BS") {
+      if (!BS_PKINDS.includes(c.period_kind)) return false;
+      return frequency === "quarterly" ? isQuarterPeriod(c.period) : isFyPeriod(c.period);
+    }
+    // IS / CF / RATIO
+    const allowed = frequency === "quarterly" ? QUARTERLY_PKINDS_IS_CF : ANNUAL_PKINDS_IS_CF;
+    return allowed.includes(c.period_kind);
+  });
+
+  // Collect periods
+  const periodSet = new Set<string>(filtered.map((c) => c.period));
+  const periods = Array.from(periodSet).sort(comparePeriods);
+
+  // Long-tail bucket rows by design hold many source_accounts under the same
+  // uni_account (e.g. operating_expense_long_tail = G&A + S&M when SG&A
+  // sub-accounts are split by the issuer). Detect those so we sum across
+  // children rather than last-write-wins.
+  const longTailKeys = new Set(rows.filter((r) => r.kind === "long_tail_bucket").map((r) => r.key));
+
+  // Pivot
+  const cellMap: Record<string, Record<string, MatrixCell>> = {};
+  for (const row of rows) {
+    cellMap[row.key] = {};
+    for (const p of periods) {
+      cellMap[row.key][p] = { status: "PENDING" };
+    }
+  }
+  // Buffer for long-tail aggregation: [uni_account][period] -> list of children
+  const longTailBuf: Record<string, Record<string, Cell[]>> = {};
+  for (const c of filtered) {
+    if (!cellMap[c.uni_account]) {
+      // Not in dictionary — skip (parser produced an unknown uni_account)
+      continue;
+    }
+    if (!cellMap[c.uni_account][c.period]) continue;
+    if (longTailKeys.has(c.uni_account)) {
+      (longTailBuf[c.uni_account] ??= {})[c.period] ??= [];
+      longTailBuf[c.uni_account][c.period].push(c);
+    } else {
+      cellMap[c.uni_account][c.period] = { cell: c, status: c.status };
+    }
+  }
+  // Aggregate long-tail buckets: sum value * weight; keep child list in provenance.
+  // Suppress children whose xbrl_tag rolls up into a core row that already has a
+  // populated cell for the same period (double-display avoidance — see
+  // `LONG_TAIL_ROLLUP_HINTS` in constants.ts and the SG&A long-tail design note).
+  for (const k of longTailKeys) {
+    const byPeriod = longTailBuf[k];
+    if (!byPeriod) continue;
+    for (const p of Object.keys(byPeriod)) {
+      const rawChildren = byPeriod[p];
+      const suppressed: Cell[] = [];
+      const children = rawChildren.filter((c) => {
+        const hintTarget =
+          ((c.long_tail_metadata as Record<string, unknown> | null)?.rolls_up_to as
+            | string
+            | undefined) ?? LONG_TAIL_ROLLUP_HINTS[c.xbrl_tag ?? ""];
+        if (!hintTarget) return true;
+        const coreCell = cellMap[hintTarget]?.[p];
+        const corePopulated = !!(coreCell && coreCell.cell && coreCell.status !== "PENDING");
+        if (corePopulated) {
+          suppressed.push(c);
+          return false;
+        }
+        return true;
+      });
+      if (children.length === 0) {
+        // All children rolled up into populated core rows; leave the bucket
+        // cell as PENDING ("—") to avoid visually duplicating the core row.
+        continue;
+      }
+      const summed = children.reduce((s, c) => s + c.value * (c.weight ?? 1), 0);
+      // Use first child as template for shape; override value + tag + provenance.
+      const base = children[0];
+      const synthetic: Cell = {
+        ...base,
+        uni_account: k,
+        source_account: children.length === 1 ? base.source_account : "SUM(long_tail)",
+        xbrl_tag: null,
+        value: summed,
+        weight: 1,
+        provenance: {
+          aggregation: "long_tail_sum",
+          children_count: children.length,
+          suppressed_count: suppressed.length,
+          children: children.map((c) => ({
+            source_account: c.source_account,
+            xbrl_tag: c.xbrl_tag,
+            value: c.value,
+            weight: c.weight,
+            rolls_up_to:
+              ((c.long_tail_metadata as Record<string, unknown> | null)?.rolls_up_to as
+                | string
+                | undefined) ?? null,
+          })),
+          suppressed: suppressed.map((c) => ({
+            source_account: c.source_account,
+            xbrl_tag: c.xbrl_tag,
+            value: c.value,
+            rolls_up_to:
+              ((c.long_tail_metadata as Record<string, unknown> | null)?.rolls_up_to as
+                | string
+                | undefined) ?? LONG_TAIL_ROLLUP_HINTS[c.xbrl_tag ?? ""] ?? null,
+          })),
+        },
+      };
+      cellMap[k][p] = { cell: synthetic, status: "SOURCE_OF_TRUTH" };
+    }
+  }
+
+  return {
+    periods,
+    rows: rows.map((r) => ({ key: r.key, label: r.label, kind: r.kind, indent: r.indent ?? 0 })),
+    cells: cellMap,
+  };
+}

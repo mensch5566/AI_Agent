@@ -1,6 +1,6 @@
 # AI_Agent Status
 
-Updated: 2026-05-12
+Updated: 2026-05-14
 
 ## Current Focus
 - Portal remains the main entrypoint for internal tools.
@@ -33,6 +33,10 @@ Updated: 2026-05-12
 - Prefer adding new portal-facing features behind an existing module/page when possible, instead of creating duplicate entrypoints.
 
 ## Latest Changes
+- **Phase 3 vendor-grade SEC parse pipeline merged to production** (CC_Switch_Config `0e2d9ef`). `parse-10QK-gaap` and `parse-SEC-supplement` now produce vendor-grade separated outputs using all four XBRL linkbases (cal / pre / lab / def) plus the raw instance document, alongside the existing inline `{T}_gaap.json` (which `parse-sec-cross-check` still reads).
+  - `parse-10QK-gaap` adds three scripts: `full_linkbase.py` (fetches `_cal.xml` / `_pre.xml` / `_lab.xml`, emits `_gaap_edges_cal.json` / `_gaap_edges_pre.json` / `_gaap_labels.json` / `_sign_flip_concepts.json`), `build_separated.py` (orchestrates inline → separated facts + injects long-tail roll-up edges into cal), `cal_sum_sanity.py` (validates Σ(child × weight) = parent against companyfacts API, per-role to avoid duplicate-role double-count).
+  - `parse-SEC-supplement` switches default flow from NLM-primary to XBRL-primary: `parse_def_xml.py` (Definition Linkbase → canonical axis / domain / member hierarchy per filing role), `parse_instance_xbrl.py` (instance doc → raw dimensional facts, period-filtered to single quarter 60-100d or FY 350-380d, prior-year / YTD discarded), `extract_supplement_v3.py` (def + instance + parse-10QK-gaap labels + legacy NLM validator → facts_v3 + edges_v3 + validation.md). NLM-only fallback workflow retained for cases XBRL lacks dimensional tags (small filers, carve-out periods).
+  - End-to-end verified on INTC (5 periods) / AAOI (13) / SNDK (4): cross-check 22/22 ticker-periods 100% pass (393 rows, 0 ❌, 0 ⚠), cal sum sanity 204 ✅ / 0 ❌ / 86 partial / 26 skipped, AAOI XBRL ↔ NLM 3 ✅ / 0 ❌ / 106 XBRL-only (XBRL is more complete than NLM-derived).
 - Parsed `AAOI` (Applied Optoelectronics, CIK 0001158114) from `Q1_FY2023` to `Q1_FY2026` end-to-end. GAAP via `parse-10QK-gaap` (IS 273 rows / BS 357 / CF 220), cross-check via `parse-sec-cross-check` against NotebookLM at 215 ✅ + 18 sign-flipped / 0 ❌ / 0 N/A, Non-GAAP via `parse-8k-nongaap` (6 spine metrics × 10 periods = 55 rows including `adjusted_ebitda`).
 - Small-cap parse support hardened in three SEC skills (exposed by AAOI, which prints in thousands and disaggregates SG&A):
   - `parse-10QK-gaap` now auto-detects per-ticker USD reporting scale (`infer_usd_scale`: max revenue ≥ $1B → `USD_millions`, else `USD_thousands`). Each row carries its own `unit` field; downstream consumers should never assume a default scale.

@@ -1,135 +1,154 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
 
-function decodeAnnualDirectMetric(encoded: string): { statement: string; metric: string } | null {
-  const prefix = "annual_direct__";
-  if (!encoded.startsWith(prefix)) return null;
-  const body = encoded.slice(prefix.length);
-  const sep = body.indexOf("__");
-  if (sep === -1) return null;
-  return {
-    statement: body.slice(0, sep),
-    metric: body.slice(sep + 2),
-  };
+/**
+ * SEC Financials v2 API
+ *
+ * Returns unified cells for one ticker, combining:
+ *   - sec_financial_facts (direct disclosed: GAAP + NON_GAAP, statement IS/BS/CF/RATIO)
+ *   - sec_financial_metrics (derived: Q4 reconstruction, margin ratios, ...)
+ *   - sec_financial_dimensional_facts (segment / geography / customer)
+ *
+ * Frontend pivots cells by (statement, version, uni_account, period).
+ *
+ * Spec: tmp/financials-viewer-redesign-plan.md §16.2 + §20 + docs/financials-data-rules.md
+ */
+
+type Cell = {
+  ticker: string;
+  period: string;
+  period_end: string;
+  period_kind: string;
+  statement: string;
+  version: string;
+  uni_account: string;
+  source_account: string | null;
+  xbrl_tag: string | null;
+  value: number;
+  weight: number | null;
+  unit: string;
+  status: string;
+  ordinal: number | null;
+  long_tail_metadata: Record<string, unknown> | null;
+  provenance: Record<string, unknown>;
+  source_table: "facts" | "metrics";
+};
+
+type DimCell = {
+  ticker: string;
+  period: string;
+  period_end: string;
+  period_kind: string;
+  axis: string;
+  axis_key: string;
+  member: string;
+  member_key: string;
+  uni_account: string;
+  value: number;
+  unit: string;
+  decimals: number | null;
+  other_dimensions: unknown[] | null;
+  provenance: Record<string, unknown>;
+};
+
+const PAGE = 1000;
+
+type PageResult<T> = { data: T[] | null; error: unknown };
+
+async function fetchAllPages<T>(
+  fetcher: (from: number) => PromiseLike<PageResult<T>>,
+): Promise<T[]> {
+  const out: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await fetcher(from);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    out.push(...data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return out;
 }
 
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ ticker: string }> }
+  { params }: { params: Promise<{ ticker: string }> },
 ) {
   const { ticker } = await params;
   const t = ticker.toUpperCase();
   const supabase = createServerClient();
 
-  const PAGE = 1000;
-  const factsPage = (from: number) =>
+  // Run independent queries in parallel
+  const [companyRes, factsRaw, metricsRaw, dimRaw] = await Promise.all([
     supabase
-      .from("financial_facts")
-      .select("period, period_end, statement, metric, dimension, value, unit, source")
+      .from("sec_financial_companies")
+      .select("*")
       .eq("ticker", t)
-      .range(from, from + PAGE - 1);
-
-  const [p0, p1, p2, p3, metricsRes, supplementRes, companyRes] = await Promise.all([
-    factsPage(0),
-    factsPage(1000),
-    factsPage(2000),
-    factsPage(3000),
-    // financial_metrics → 轉成 statement="financial_ratios"
-    supabase
-      .from("financial_metrics")
-      .select("period, period_end, metric, value, source")
-      .eq("ticker", t),
-    // financial_supplement → category=geography/segment 轉成 statement="segments"
-    supabase
-      .from("financial_supplement")
-      .select("period, period_end, category, metric, dimension, value, unit, source")
-      .eq("ticker", t),
-    supabase.from("financial_companies").select("*").eq("ticker", t).single(),
+      .maybeSingle(),
+    fetchAllPages<Omit<Cell, "source_table">>((from) =>
+      supabase
+        .from("sec_financial_facts")
+        .select(
+          "ticker, period, period_end, period_kind, statement, version, uni_account, source_account, xbrl_tag, value, weight, unit, status, ordinal, long_tail_metadata, provenance",
+        )
+        .eq("ticker", t)
+        .range(from, from + PAGE - 1),
+    ),
+    fetchAllPages<Omit<Cell, "source_table" | "source_account" | "xbrl_tag" | "weight" | "ordinal" | "long_tail_metadata">>(
+      (from) =>
+        supabase
+          .from("sec_financial_metrics")
+          .select(
+            "ticker, period, period_end, period_kind, statement, version, uni_account, value, unit, status, provenance",
+          )
+          .eq("ticker", t)
+          .range(from, from + PAGE - 1),
+    ),
+    fetchAllPages<DimCell>((from) =>
+      supabase
+        .from("sec_financial_dimensional_facts")
+        .select(
+          "ticker, period, period_end, period_kind, axis, axis_key, member, member_key, uni_account, value, unit, decimals, other_dimensions, provenance",
+        )
+        .eq("ticker", t)
+        .range(from, from + PAGE - 1),
+    ),
   ]);
 
-  if (p0.error) {
-    return NextResponse.json({ error: p0.error.message }, { status: 500 });
+  if (companyRes.error) {
+    return NextResponse.json({ error: companyRes.error.message }, { status: 500 });
+  }
+  if (!companyRes.data) {
+    return NextResponse.json({ error: `Ticker ${t} not found` }, { status: 404 });
   }
 
-  // Raw facts
-  const facts = [
-    ...(p0.data ?? []),
-    ...(p1.data ?? []),
-    ...(p2.data ?? []),
-    ...(p3.data ?? []),
-  ];
-
-  // financial_metrics → inject as statement="financial_ratios"
-  for (const row of metricsRes.data ?? []) {
-    if (row.source === "ANNUAL_DIRECT_XBRL_TWSE") {
-      const decoded = decodeAnnualDirectMetric(row.metric);
-      if (!decoded) continue;
-      facts.push({
-        period: row.period,
-        period_end: row.period_end ?? null,
-        statement: decoded.statement,
-        metric: decoded.metric,
-        dimension: "",
-        value: row.value,
-        unit: null,
-        source: row.source,
-      });
-      continue;
-    }
-    facts.push({
-      period:     row.period,
-      period_end: row.period_end ?? null,
-      statement:  "financial_ratios",
-      metric:     row.metric,
-      dimension:  "",
-      value:      row.value,
-      unit:       null,
-      source:     row.source,
-    });
+  // Tag cells with source_table; metrics rows fill the gaps that facts left.
+  const cells: Cell[] = [];
+  for (const f of factsRaw) {
+    cells.push({ ...f, source_table: "facts" });
   }
-
-  // financial_supplement → inject by category
-  for (const row of supplementRes.data ?? []) {
-    // shares → inject as income_statement rows (displayed at bottom of IS)
-    if (row.category === "shares") {
-      facts.push({
-        period:     row.period,
-        period_end: row.period_end ?? null,
-        statement:  "income_statement",
-        metric:     row.metric,
-        dimension:  row.dimension ?? "",
-        value:      row.value,
-        unit:       row.unit ?? null,
-        source:     row.source,
-      });
-      continue;
-    }
-    // geography / segment → inject as statement="segments"
-    if (!["geography", "segment"].includes(row.category)) continue;
-    if (!row.dimension) continue;  // 必須有維度
-    const normalizedMetric =
-      row.category === "segment"
-        ? row.metric.includes("_profit")
-          ? "profit_by_business"
-          : "revenue_by_business"
-        : row.category === "geography"
-          ? "revenue_by_geography"
-          : row.metric;
-    facts.push({
-      period:     row.period,
-      period_end: row.period_end ?? null,
-      statement:  "segments",
-      metric:     normalizedMetric,
-      dimension:  row.dimension,
-      value:      row.value,
-      unit:       row.unit ?? null,
-      source:     row.source,
+  for (const m of metricsRaw) {
+    cells.push({
+      ...m,
+      source_account: null,
+      xbrl_tag: null,
+      weight: null,
+      ordinal: null,
+      long_tail_metadata: null,
+      source_table: "metrics",
     });
   }
 
   return NextResponse.json({
     ticker: t,
-    company: companyRes.data ?? null,
-    facts,
+    company: companyRes.data,
+    cells,
+    dimensional: dimRaw,
+    counts: {
+      facts: factsRaw.length,
+      metrics: metricsRaw.length,
+      dimensional: dimRaw.length,
+    },
   });
 }

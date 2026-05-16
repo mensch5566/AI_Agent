@@ -155,7 +155,7 @@ DERIVED_METRICS = [
 def find_local_xbrl_files(ticker: str) -> dict:
     search_dirs = [
         Path.home() / "Downloads",
-        Path.home() / "Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian/Khouse/Semiconductors",
+        Path.home() / "Obsidian/Khouse/Semiconductors",
     ]
     pattern = f"tifrs-fr1-m1-ci-cr-{ticker}-*.html"
     files_by_period = {}

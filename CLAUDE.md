@@ -152,14 +152,14 @@ Treat the following Working Memory as the current project context. Use `search_m
 
 # [Working] Combined AI Working Memory
 
-Updated: 2026-05-12T16:57:06.342216
+Updated: 2026-05-17T04:38:32.530464
 
 Project scope: `ai_agent`
 
 ## Global Working Memory
 # [Working] Shared AI Working Memory (global)
 
-Updated: 2026-05-12T16:57:06.208322
+Updated: 2026-05-17T04:38:32.374802
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -185,66 +185,64 @@ Use it for current state. Use `search_memory` for older or more detailed history
 ## Python Wrapper 的作用
 
 ## Recent Shared Memory
-### AI_Knowledge_System: Wiki governance clarifications + Industry folder setup + wiki-ingest-sec-10k incremental ingest gap (2026-05-12)
-# AI_Knowledge_System: Wiki governance clarifications + Industry folder setup + wiki-ingest-sec-10k incremental ingest gap (2026-05-12)
-# AI_Knowledge_System: Wiki governance clarifications + Industry folder setup + wiki-ingest-sec-10k incremental ingest gap
-Date: 2026-05-12
-Project scope: ai_knowledge_system
-Status: 討論完成，下次 session 繼續實作 wiki-ingest-sec-10k 增量改造
-
-### SEC Parse Pipeline 三個 Skill 開發完工 Summary（2026-05-07 到 05-10）
-# SEC Parse Pipeline 三個 Skill 開發完工 Summary（2026-05-07 到 05-10）
-# SEC Parse Pipeline — 三個 Skill 開發完工 Summary
-Date: 2026-05-10（橫跨 2026-05-07 到 05-10 共 4 天）
+### Financials Viewer v2 — 3 frontend bugs fixed (column alignment / long-tail double display / Q4 union) 2026-05-17
+# Financials Viewer v2 — 3 frontend bugs fixed (column alignment / long-tail double display / Q4 union) 2026-05-17
+# Financials Viewer v2 — 3 frontend bugs fixed
+Date: 2026-05-17
 Project: ai_agent
-Status: **三個 parse skills 告一段落，可以正式應用於其他公司財報解析**
+Status: 已 ship 到 working tree（未 commit），dev server 驗證通過、無 console error
 
-### Memsearch 健康檢查 2026-05-10：milvus 死兩天後重啟恢復
-# Memsearch 健康檢查 2026-05-10：milvus 死兩天後重啟恢復
-## Intent
-驗證 memsearch 系統 (search/save) 在 milvus 容器掛掉重啟後是否恢復正常。
-## Outcome
-- `memsearch-milvus` 容器於 2026-05-07 因 etcd 連線 deadline exceeded 與 session expired 而 exit(1)，兩天無人重啟。
+### Phase 6 清理：72 小時冷卻後刪除舊 iCloud Vault & ~/Documents/AI_Memory_Local
+# Phase 6：舊 iCloud Vault & Milvus 資料目錄清理 Checklist
+**最早執行日**：2026-05-19（搬遷後 72 小時冷卻期結束）
+**Context**：2026-05-15 把 Obsidian vault 從 iCloud 搬到 `~/Obsidian/`、Milvus 資料從 `~/Documents/AI_Memory_Local/` 搬到 `~/AI_Memory_Local/`。冷卻期是為了確認所有 hardcoded path 都改對、沒有漏網之魚。三天無問題後即可清掉舊副本。
+## 步驟 1 — 健康確認（執行前必跑）
+確認以下全部 ✅ 才可進入步驟 2：
 
-### Obsidian SNDK main note to Quarto/PPT workflow design
-# Obsidian SNDK main note to Quarto/PPT workflow design
-# Obsidian main note to Quarto/PPT workflow design
-Date: 2026-05-06
-Project scope: obsidian
-## User intent
+### migration watch test
+# Migration Watch Test
+Direct host write to test the inotify-based watch pipeline on the new vault path.
+Sentinel: **MIGRATION-WATCH-TEST-CALIPER-2026**
 
-### Obsidian 主筆記→簡報設計架構（未完成存檔）
-# Obsidian 主筆記→簡報設計架構（未完成存檔）
-## Intent
-用户要求将 Obsidian 主筆記直出簡報的設計結論保存到 memory，供後續 Skill 開發使用。
-## Outcome
-Two `save_memory` calls timed out (backend issue, not content problem). Key design conclusions captured but not persisted:
+### Khouse 財務圖表工作流：Tracker .qmd 作為 source of truth，主筆記 .qmd 直接共用 chunk
+# Khouse 財務圖表工作流：Tracker .qmd 作為 source of truth，主筆記 .qmd 直接共用 chunk
+# Khouse 財務圖表工作流：Tracker .qmd 作為 source of truth，主筆記 .qmd 直接共用 chunk
+Date: 2026-05-14
+Project scope: obsidian / Khouse research
+Context: AAOI Financials.md tracker 開發過程確立的 pattern
 
-### Obsidian SNDK main note to Quarto/PPT workflow design
-# Obsidian SNDK main note to Quarto/PPT workflow design
-# Obsidian main note to Quarto/PPT workflow design
-Date: 2026-05-06
-Project scope: obsidian
-## User intent
+### Phase 3 separated schema tmp prototype 完工 — XBRL Calc Linkbase 跨 3 ticker 0 ❌（INTC/AAOI/SNDK）2026-05-14
+# Phase 3 separated schema tmp prototype 完工 — XBRL Calc Linkbase 跨 3 ticker 0 ❌（INTC/AAOI/SNDK）2026-05-14
+# Phase 3 separated schema tmp prototype 完工
+Date: 2026-05-14
+Project: ai_agent
+Status: **完整 tmp 實作完成，未 deploy 到 production**。等 user 跑更多 ticker / 更多期測試後再決定要不要合進 CC_Switch_Config。
 
-### Obsidian SNDK main note to Quarto/PPT workflow design
-# Obsidian SNDK main note to Quarto/PPT workflow design
-# Obsidian main note to Quarto/PPT workflow design
-Date: 2026-05-06
-Project scope: obsidian
-## User intent
+### SEC 4 個 parse skill 的 schema 路線圖：三表/Non-GAAP inline → 未來升級 separated (Phase 3, before compose/derive)
+# SEC 4 個 parse skill 的 schema 路線圖：三表/Non-GAAP inline → 未來升級 separated (Phase 3, before compose/derive)
+# SEC 4 個 parse skill 的 schema 路線圖
+Date: 2026-05-13
+Project: ai_agent
+Status: parse-SEC-supplement 已 separated 上線；三表 GAAP + 8-K Non-GAAP 暫保 inline，未來 Phase 3 升級
 
-### AI_Knowledge_System: wiki-ingest-broker skill v3 testing — request for Codex audit
-# AI_Knowledge_System: wiki-ingest-broker skill v3 testing — request for Codex audit
-# AI_Knowledge_System: wiki-ingest-broker skill v3 testing — request for Codex audit
-Date: 2026-05-06
+### wiki-ingest-sec-10k redesign pending: split OCR'd MD prose from XBRL JSON numbers (2026-05-13)
+# wiki-ingest-sec-10k redesign pending: split OCR'd MD prose from XBRL JSON numbers (2026-05-13)
+# wiki-ingest-sec-10k redesign pending: split OCR'd MD prose from XBRL JSON numbers
+Date: 2026-05-13
 Project scope: ai_knowledge_system
-Author: Claude (Sonnet 4.6)
+Status: **設計討論完成、改 skill 工作交給下個 session**。下個 session 直接看這份就能接手，不必重推。
+
+### AAOI parse 完工 + SEC 三 skill 結構性修正（小公司支援）2026-05-12
+# AAOI parse 完工 + SEC 三 skill 結構性修正（小公司支援）2026-05-12
+# AAOI parse 完工 + SEC 三 skill 結構性修正（小公司支援）
+Date: 2026-05-12
+Project: ai_agent
+Status: 已 commit + push（CC_Switch_Config `679b457` / AI_Agent `aa133f2`）
 
 ## Project Working Memory
 # [Working] Shared AI Working Memory (project:ai_agent)
 
-Updated: 2026-05-12T16:57:06.219281
+Updated: 2026-05-17T04:38:32.392740
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -258,12 +256,47 @@ Use it for current state. Use `search_memory` for older or more detailed history
 - After meaningful project changes, assess whether `docs/STATUS.md` should be updated.
 
 ## Recent Project Memory
+### AI Memory Daily Log: 2026-05-17 (ai_agent)
+# AI Memory Daily Log: 2026-05-17 (ai_agent)
+## 04:38:32 [claude] 前端瀏覽器這個你先不管。你剛剛說有 Bug，你先修一修吧。
+### Intent (raw)
+前端瀏覽器這個你先不管。你剛剛說有 Bug，你先修一修吧。
+然後這邊剛啟動的伺服器，你修完 Bug 之後幫我殺掉PID 87704，我要讓 Claude 去啟動一個新的伺服器。
+
+### AI Memory Daily Log: 2026-05-16 (ai_agent)
+# AI Memory Daily Log: 2026-05-16 (ai_agent)
+## 23:53:18 [claude] 1. sec_financial_*
+### Intent (raw)
+1. sec_financial_*
+2./financials
+
+### AI Memory Daily Log: 2026-05-15 (ai_agent)
+# AI Memory Daily Log: 2026-05-15 (ai_agent)
+## 01:21:45 [claude] '/Users/mensch5566/AI_Agent/tmp/financials-viewer-redesign-plan.md'
+### Intent (raw)
+'/Users/mensch5566/AI_Agent/tmp/financials-viewer-redesign-plan.md'
+• 已補上去，追加在 tmp/financials-viewer-redesign-plan.md:2525 的 §19. GPT-5.5 Review of Plan v5 — 開工前 v5.1 小
+
+### AI Memory Daily Log: 2026-05-14 (ai_agent)
+# AI Memory Daily Log: 2026-05-14 (ai_agent)
+## 17:15:53 [claude] 直接動工改 v3 寫回 tmp/financials-viewer-redesign-plan.md
+### Intent (raw)
+直接動工改 v3 寫回 tmp/financials-viewer-redesign-plan.md
+### Outcome (raw)
+
+### AI Memory Daily Log: 2026-05-13 (ai_agent)
+# AI Memory Daily Log: 2026-05-13 (ai_agent)
+## 23:57:07 [claude] 現在直接做 Phase 3 吧。
+### Intent (raw)
+現在直接做 Phase 3 吧。
+反正我們 Skill 在 Git 上面都有版本，在 CC Switch 上面也都有版本。現在直接做，然後測試一樣在 temp 目錄這邊做；做完直接跟過去，我不想再討論這個問題，馬上改過去就行。
+
 ### AI Memory Daily Log: 2026-05-12 (ai_agent)
 # AI Memory Daily Log: 2026-05-12 (ai_agent)
-## 16:57:06 [claude] 都commit帶上去就行，沒什麼影響
+## 23:39:47 [claude] /Users/mensch5566/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian
 ### Intent (raw)
-都commit帶上去就行，沒什麼影響
-### Summary (Haiku)
+/Users/mensch5566/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian/Khouse/Semiconductors/AAOI/01_Source/SEC Filings/Skill_Output/parse-8k-nongaap/2026-05-12-1030_NONGAAP_FY23Q4-FY26Q1/AAOI_pending_classification.md
+確認一下這個檔案是幹嘛用的？
 
 ### AI Memory Daily Log: 2026-05-11 (ai_agent)
 # AI Memory Daily Log: 2026-05-11 (ai_agent)
@@ -278,25 +311,4 @@ Q2做A，兩個都存。
 ### Intent (raw)
 Parse 的三個 Skill 到現在算是告一段落了吧？
 你覺得要不要 save memory 一下，把這三個 Parse 的開發過程（這幾天我們已經持續好幾天了）重點大概記一下。內容可以包括：
-
-### AI Memory Daily Log: 2026-05-09 (ai_agent)
-# AI Memory Daily Log: 2026-05-09 (ai_agent)
-## 23:18:33 [claude] 1. schema 確定用 uni_account/source_account 還是中文「主科目」/「來源科目」？ ：用"uni_account", "sou
-### Intent (raw)
-1. schema 確定用 uni_account/source_account 還是中文「主科目」/「來源科目」？ ：用"uni_account", "source_account"
-  2. GAAP/Non-GAAP 分檔還是合檔？：分檔
-
-### AI Memory Daily Log: 2026-05-08 (ai_agent)
-# AI Memory Daily Log: 2026-05-08 (ai_agent)
-## 16:50:02 [claude] A
-### Intent (raw)
-A
-### Summary (Haiku)
-
-### AI Memory Daily Log: 2026-05-07 (ai_agent)
-# AI Memory Daily Log: 2026-05-07 (ai_agent)
-## 23:59:01 [claude] 我剛剛在 cross-check markdown，不是已經 audit 最下面兩個 audit queue 嗎？最下面兩個 audit queue 的 tab
-### Intent (raw)
-我剛剛在 cross-check markdown，不是已經 audit 最下面兩個 audit queue 嗎？最下面兩個 audit queue 的 table 我已經填完了，怎麼現在還要我填這個？
-然後另外一件事情先說回來。呃——派生值的問題。因為我們最終還是要放到 Supabase 上面，因為網頁前端 Financial Viewer 會用到，那肯定會有這種派生值的問題，也就是拿到 source of truth 之後，我們再經過……呃……合理的計算去計算出來的——簡單來講，剛剛那個負30就是。
 <!-- AI_MEMORY_MANAGED_END -->

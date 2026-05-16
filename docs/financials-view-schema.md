@@ -17,7 +17,45 @@
 > 
 > **圖例**：✅ 已抽取入庫　⬜ XBRL 有，尚未抽取　❌ XBRL 無，需補充
 
-最後更新：2026-04-09
+最後更新：2026-05-16
+
+---
+
+# 美股（SEC / US-GAAP）— v2 (`sec_financial_*` tables)
+
+**Authority dictionary**: [`docs/sec-financials-v2-schema.md`](./sec-financials-v2-schema.md)
+
+這份 v2 dictionary 取代過去的「US section」。對應 Supabase 表：
+
+| 表 | 用途 |
+|---|---|
+| `sec_financial_companies` | 公司 metadata + filings index + sign_flip_concepts |
+| `sec_financial_facts` | direct disclosed facts only（GAAP + NON_GAAP，含 statement=IS/BS/CF/RATIO） |
+| `sec_financial_metrics` | derived 值（Q4 single quarter / GM% / OM% / ROE / ...） |
+| `sec_financial_dimensional_facts` | segment / geography / customer concentration 等多軸 facts |
+| `sec_financial_edges` | calc / presentation / def_linkbase edges（audit + future use） |
+
+**v2 紀律重點**（細節見 [`financials-data-rules.md`](./financials-data-rules.md) §SEC v2）：
+
+- **disclosed ratio**（8-K 揭露的 GM% 等）→ `sec_financial_facts(statement='RATIO', status='SOURCE_OF_TRUTH')`
+- **derived ratio**（pipeline 計算）→ `sec_financial_metrics(statement='RATIO', status='DERIVED_FROM_DISCLOSED')`
+- **derive-analytics 不可覆寫 facts 同 key**（先 SELECT 確認不存在再寫）
+- **dimensional dedupe** 用 `member_key`（qname or normalized label）；`Data Center` ↔ `Datacenter` 自動合併
+- **pct value 一律存小數**（DB 0.392；UI fmtPct → 39.2%）
+- **unit canonical**：`USD_thousands` / `USD_millions` / `USD_per_share` / `millions_shares` / `Pure` 五種
+- **period_kind**：`quarter_duration` / `fy_annual_duration` / `ytd_duration` / `instant_period_end` / `derived_q4`（後者 metrics-only）
+- **BS 一律 `instant_period_end`**；IS/CF/RATIO 一律 duration
+- **uni_account 新增 / 改名 / 刪除**：先在 `sec-financials-v2-schema.md` 登記並打勾，未確認不可入庫
+
+v2 完整 uni_account 清單見 [`sec-financials-v2-schema.md`](./sec-financials-v2-schema.md)。
+
+### v2 ingest 進度
+
+| Ticker | IS | BS | CF | RATIO | SEGMENT | last update |
+|---|---|---|---|---|---|---|
+| AAOI | ⬜ schema ready | ⬜ | ⬜ | ⬜ | ⬜ | ingest pending |
+| INTC | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | pending |
+| SNDK | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | pending |
 
 ---
 

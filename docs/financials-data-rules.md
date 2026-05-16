@@ -1,6 +1,6 @@
 # Financials Data Rules
 
-Updated: 2026-04-22
+Updated: 2026-05-16
 
 This file is the authority for how `Financials Viewer` should interpret, store, derive, and display financial-statement data.
 
@@ -15,12 +15,120 @@ Rule of split:
 
 ## Scope
 
-- Applies to:
-  - `financial_facts`
-  - `financial_metrics`
-- `financial_supplement`
+This file covers two parallel rule sets:
+
+- **§ TWSE (legacy)** — applies to existing `financial_facts` / `financial_metrics` / `financial_supplement` (TWSE iXBRL pipeline)
+- **§ SEC v2** — applies to new `sec_financial_*` tables (US SEC pipeline). 美股已從舊三表完全切換到 v2；舊三表在 v2 migration 後 drop。
+
 - `Financials Viewer` display logic
 - Applies especially to mixed-frequency data where some values are quarter-only, some are annual-only, and some are derived.
+
+---
+
+## SEC v2 Rules (`sec_financial_*` tables)
+
+Authority dictionary: [`docs/sec-financials-v2-schema.md`](./sec-financials-v2-schema.md)
+Design rationale: `tmp/financials-viewer-redesign-plan.md` §20 (v5.1)
+
+### Table Boundaries (SEC v2)
+
+#### `sec_financial_facts`
+
+- Only direct disclosed facts (GAAP from XBRL primary; NON_GAAP from 8-K management disclosure).
+- `status` constrained to `SOURCE_OF_TRUTH`. No derived values.
+- `version IN ('GAAP', 'NON_GAAP')`.
+- `statement IN ('IS', 'BS', 'CF', 'RATIO')` — RATIO 用於 8-K 直接揭露的 GM% / OM% 等。
+- Q4 single-quarter IS / CF 不寫進這張表（要 derive → 走 metrics）。
+- Q4 BS 寫進這張表（point-in-time direct fact）。
+
+#### `sec_financial_metrics`
+
+- All derived values：Q4 single-quarter IS / CF（`derived_q4`）、margin ratios、TTM、average balances...
+- `status IN ('DERIVED_FROM_DISCLOSED', 'EXCLUDED_FROM_NONGAAP')`.
+- `provenance.formula` 必填，`provenance.inputs` 帶 cell_id 回指 facts。
+- **`NOT_DISCLOSED` 不寫進 DB**：由 API/read model 補 PENDING 給前端顯示 `—`。
+
+#### `sec_financial_dimensional_facts`
+
+- segment / geography / customer_concentration / business_segment 多軸 facts。
+- grain 跟 consolidated facts 不同，不混。
+- `member_key` = `member_qname` or `normalize_member_label(member)`；identity / hash / dedupe 全用 `member_key`。
+
+#### `sec_financial_edges`
+
+- calc / presentation / def_linkbase edges（XBRL structural knowledge）。
+- 不參與 Viewer 顯示；給 anchor audit / future wiki ingest 用。
+
+### Derive Discipline (SEC v2)
+
+1. **derive-analytics 不可覆寫 facts 同 key**：upsert 前先 SELECT facts，存在就 skip 不寫 metrics（disclosed 優先於 derived）。
+2. **公式必須存進 `provenance.formula`**：例如 `FY2025 - Q1_FY2025 - Q2_FY2025 - Q3_FY2025`。
+3. **inputs cell_id 必須回指**：方便 audit trail。
+4. **NOT_DISCLOSED 不寫 DB**：避免「pipeline 未跑」/「derive 失敗」/「公司未揭露」三種狀態混淆。
+
+### Disclosed Ratio Routing (SEC v2)
+
+Non-GAAP IS array 中 `uni_account` 命中 `RATIO_UNI_ACCOUNTS` allowlist（見 `sec-financials-v2-schema.md` §4.1）→ route 到 `statement='RATIO'`，不是 `IS`。
+
+Safety net：`unit ∈ PCT_UNITS` 且 `uni_account.endswith('_pct')` 或 `'margin' in uni_account` → 也 route RATIO。
+
+### Pct Value Scale (SEC v2)
+
+- DB 一律存小數（0~1）。例如 39.2% 存 `0.392`、35.1% 存 `0.351`。
+- adapter 對 `unit='Pure'` row 跑 `normalize_pct_value()`：`abs(value) > 1` 時 `value/100`，否則保留。
+- UI 顯示一律 `fmtPct(decimal) → "${(decimal*100).toFixed(1)}%"`。
+
+### Unit Canonicalization (SEC v2)
+
+adapter 必須將 raw unit 映射到下列五種之一（其他 → validation error）：
+
+| canonical | raw 涵蓋 |
+|---|---|
+| `USD_thousands` | `USD_thousands` / `thousands of USD` / `USD`+decimals=-3 |
+| `USD_millions` | `USD_millions` / `millions of USD` / `USD`+decimals=-6 |
+| `USD_per_share` | `USD_per_share` / `USD/share` / EPS context 的 `USD` |
+| `millions_shares` | `millions_shares` |
+| `Pure` | `Pure` / `percent` / `Percent` |
+
+### Dimensional Dedupe (SEC v2)
+
+- `member_key` 取 `member_qname or normalize_member_label(member)`，已知 alias 進 `MEMBER_ALIAS_MAP`（`Tools/research-tools/_shared/dimensional_aliases.py`）。
+- 同 dedupe key 多 source（10-Q vs 8-K）value 一致 → dedupe 成一筆，`provenance.sources[]` 保留 multi-source raw label。
+- value 不一致 → 整個 dimensional batch fail，寫 `validation_conflicts.md`，等人工拍板。
+
+### Display Rules (SEC v2 statement-aware)
+
+| view | statement | 撈 period_kind |
+|---|---|---|
+| quarterly IS / CF / RATIO | IS / CF / RATIO | `quarter_duration` ∪ `derived_q4` |
+| quarterly BS | BS | `instant_period_end`（period = Qx_FYyyyy） |
+| annual IS / CF / RATIO | IS / CF / RATIO | `fy_annual_duration` |
+| annual BS | BS | `instant_period_end`（period = FY year-end） |
+
+Status-aware render：
+
+| status | UI |
+|---|---|
+| `SOURCE_OF_TRUTH` | 黑字 |
+| `DERIVED_FROM_DISCLOSED` | 灰字 + tooltip 顯示 `provenance.formula` |
+| `EXCLUDED_FROM_NONGAAP` | 空白 + tag "excluded" |
+| row 不存在 | `—` + tag "pending" |
+
+### Non-GAAP UI (SEC compliance)
+
+- GAAP 主表優先或同等顯著。
+- Non-GAAP 不做 version toggle（不切換成完整 Non-GAAP P&L）。
+- 6 個 spotlight metric（revenue / gross_profit / operating_income / net_income / eps_diluted / adjusted_ebitda）顯示為 **GAAP 旁的並列欄**。
+- ReconciliationPanel（adjustment detail）為 Phase 2，需 `parse-8k-nongaap` 擴充抽 adjustments + 新表 `sec_nongaap_adjustments`。
+
+### Sign-Flip Display
+
+- `sec_financial_companies.sign_flip_concepts jsonb` 列出該 ticker 有 `negatedLabel` role 的 XBRL concept。
+- 前端 render facts 時：`if (fact.xbrl_tag in sign_flip_concepts) → 顯示時加括號表示為負`。
+
+---
+
+## TWSE (Legacy) Rules — applies to old `financial_facts` / `financial_metrics` / `financial_supplement`
 
 ## Table Boundaries
 

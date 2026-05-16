@@ -156,7 +156,7 @@ XBRL 未提供的細分維度資料，從 NotebookLM 對應筆記本補值：
 ## 檔案搜尋路徑
 
 1. `~/Downloads/tifrs-fr1-m1-ci-cr-{ticker}-*.html`
-2. `~/Library/Mobile Documents/iCloud~md~obsidian/.../Semiconductors/{ticker}/MOPS Filings/XML/`
+2. `~/Obsidian/.../Semiconductors/{ticker}/MOPS Filings/XML/`
 
 ## 已知限制（Known Limitations）
 

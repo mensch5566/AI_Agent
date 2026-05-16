@@ -6,9 +6,17 @@ import dynamic from "next/dynamic";
 import ThemeToggle from "@/app/components/ThemeToggle";
 import TodoPanel from "@/app/components/TodoPanel";
 
-const RatioChart = dynamic(() => import("@/app/components/financials/RatioChart"), { ssr: false });
-const FinancialTable = dynamic(() => import("@/app/components/financials/FinancialTable"), { ssr: false });
-const SegmentTable = dynamic(() => import("@/app/components/financials/SegmentTable"), { ssr: false });
+// SEC v2 migration: legacy embedded financial blocks stubbed. Follow-up task
+// will port these to the SEC v2 cells / dimensional API.
+const RatioChart = dynamic(() => import("@/app/components/financials-v2/EquityResearchStubs"), { ssr: false });
+const FinancialTable = dynamic(
+  () => import("@/app/components/financials-v2/EquityResearchStubs").then((m) => ({ default: m.FinancialTable })),
+  { ssr: false },
+);
+const SegmentTable = dynamic(
+  () => import("@/app/components/financials-v2/EquityResearchStubs").then((m) => ({ default: m.SegmentTable })),
+  { ssr: false },
+);
 const StaticChart = dynamic(() => import("./static-chart"), { ssr: false });
 
 /* ================================================================

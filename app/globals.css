@@ -1,5 +1,19 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
+/* Bind Tailwind `dark:` variant to the project's data-theme attribute strategy
+ * so it stays in sync with CSS variables in [data-theme="dark"] below.
+ * Without this, `dark:` defaults to prefers-color-scheme and gets out of sync
+ * with the manual theme toggle. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ──────────────────────────────────────────────────────────────────
+ * K-House design tokens (LIGHT) — the primary palette of the app.
+ * shadcn tokens (--background, --primary, --border, …) are mapped
+ * to these K-House tokens further down so shadcn components inherit
+ * the K-House look without duplicating colors.
+ * ────────────────────────────────────────────────────────────────── */
 :root {
   --bg-page: #f8f4f4;
   --bg-card: #ffffff;
@@ -13,9 +27,41 @@
   --tag-bg: #fde8ea;
   --bg-subtle: #f5f0f0;
   --bg-highlight: #FDE7E7;
-  --radius: 10px;
+  --radius: 0.625rem;
+
+  /* shadcn token mapping → K-House semantic tokens */
+  --background: var(--bg-page);
+  --foreground: var(--text);
+  --card: var(--bg-card);
+  --card-foreground: var(--text);
+  --popover: var(--bg-card);
+  --popover-foreground: var(--text);
+  --primary-foreground: #ffffff;
+  --secondary: var(--bg-subtle);
+  --secondary-foreground: var(--text);
+  --muted: var(--bg-subtle);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--bg-highlight);
+  --accent-foreground: var(--text);
+  --destructive: var(--primary);
+  --input: var(--border);
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--primary-lt);
+  --chart-3: var(--primary-dk);
+  --chart-4: var(--text-muted);
+  --chart-5: var(--text-faint);
+  --sidebar: var(--bg-card);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--bg-highlight);
+  --sidebar-accent-foreground: var(--text);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
 }
 
+/* DARK overrides — K-House tokens flip; shadcn tokens inherit via var(). */
 [data-theme="dark"] {
   --bg-page: #1a1214;
   --bg-card: #241a1c;
@@ -39,6 +85,9 @@
     color: var(--text);
     line-height: 1.6;
   }
+  html {
+    @apply font-sans;
+  }
 }
 
 @keyframes breathe {
@@ -53,4 +102,47 @@
 
 .animate-marquee {
   animation: marquee 30s linear infinite;
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
