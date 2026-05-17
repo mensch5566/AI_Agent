@@ -80,9 +80,12 @@ def load_facts(sources: dict[str, Path | None]) -> list[FactRow]:
     if gaap_facts is None or not gaap_facts.exists():
         raise FileNotFoundError(f"gaap_facts json missing: {gaap_facts}")
     gaap_json = json.loads(gaap_facts.read_text())
-    pe_map = build_period_end_map(gaap_json.get("metadata", {}))
-    gaap_rows, _ = adapt_gaap_facts(gaap_json, pe_map)
-    rows.extend(gaap_rows)
+    # Short-circuit: if facts list is empty, skip adapter (avoids KeyError on
+    # minimal metadata stubs that omit ticker / filings).
+    if gaap_json.get("facts"):
+        pe_map = build_period_end_map(gaap_json.get("metadata", {}))
+        gaap_rows, _ = adapt_gaap_facts(gaap_json, pe_map)
+        rows.extend(gaap_rows)
     ng = sources["nongaap"]
     if ng is not None and ng.exists():
         ng_json = json.loads(ng.read_text())
