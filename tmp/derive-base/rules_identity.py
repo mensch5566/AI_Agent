@@ -185,3 +185,26 @@ def apply_identity_rules(
     return out
 
 
+def build_qname_to_uni(inline_json: dict) -> dict[str, str]:
+    """Read source_account values from the inline {TICKER}_gaap.json long-format
+    rows and build a qname → uni_account lookup.
+
+    parse-10QK-gaap stores `source_account` as the bare XBRL local name (e.g.
+    `GrossProfit`); calc edges store qname with `us-gaap:` prefix. We assume
+    us-gaap namespace; ticker extensions (rare in three-statement core) are
+    skipped — the rule simply won't fire for them.
+    """
+    m: dict[str, str] = {}
+    for stmt_key in ("income_statement", "balance_sheet", "cash_flow_statement"):
+        for row in inline_json.get(stmt_key, []):
+            uni = row.get("uni_account")
+            tag = row.get("source_account")
+            if not (uni and tag):
+                continue
+            if ":" in tag:
+                m[tag] = uni
+            else:
+                m[f"us-gaap:{tag}"] = uni
+    return m
+
+

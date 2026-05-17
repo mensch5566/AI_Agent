@@ -154,3 +154,24 @@ def test_allowlist_skips_when_parent_present():
     cands = apply_static_allowlist(facts, version="GAAP")
     # gross_profit is direct, so allowlist shouldn't propose another one.
     assert [c for c in cands if c.uni_account == "gross_profit"] == []
+
+
+from rules_identity import build_qname_to_uni
+
+
+def test_build_qname_to_uni_from_inline_metadata():
+    inline = {
+        "metadata": {},
+        "income_statement": [
+            {"uni_account": "revenue",      "source_account": "RevenueFromContractWithCustomerExcludingAssessedTax"},
+            {"uni_account": "gross_profit", "source_account": "GrossProfit"},
+        ],
+        "balance_sheet": [
+            {"uni_account": "total_assets", "source_account": "Assets"},
+        ],
+        "cash_flow_statement": [],
+    }
+    m = build_qname_to_uni(inline)
+    assert m["us-gaap:GrossProfit"] == "gross_profit"
+    assert m["us-gaap:Assets"] == "total_assets"
+    assert m["us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax"] == "revenue"
