@@ -38,3 +38,32 @@ def test_q4_only_for_is_cf_gaap(sample_gaap_revenue_facts):
         f.statement = "BS"
     cands = q4_candidates(sample_gaap_revenue_facts)
     assert cands == []
+
+
+def test_q4_skipped_when_units_mismatch(sample_gaap_revenue_facts):
+    """If FY is in USD_millions but YTD/quarters are in USD_thousands,
+    _units_match() should drop the candidate silently — derive must never
+    mix units."""
+    for f in sample_gaap_revenue_facts:
+        if f.period == "FY2024":
+            f.unit = "USD_millions"   # mismatch vs other periods (USD_thousands)
+    cands = q4_candidates(sample_gaap_revenue_facts)
+    assert [c for c in cands if c.period == "Q4_FY2024"] == []
+
+
+def test_q4_skipped_when_q4_already_direct(sample_gaap_revenue_facts):
+    """If Q4 is already a direct fact, derive must NOT emit a candidate
+    (facts always win — disclosed > derived)."""
+    from _shared.sec_json_adapter import FactRow
+    direct_q4 = FactRow(
+        cell_id="q4_direct", ticker="AAOI", period="Q4_FY2024",
+        period_end="2024-12-31", period_kind="quarter_duration",
+        statement="IS", version="GAAP", uni_account="revenue",
+        source_account="us-gaap:Revenues", xbrl_tag="Revenues",
+        value=101050.0, weight=1, unit="USD_thousands",
+        status="SOURCE_OF_TRUTH", ordinal=None, long_tail_metadata=None,
+        provenance={},
+    )
+    facts = list(sample_gaap_revenue_facts) + [direct_q4]
+    cands = q4_candidates(facts)
+    assert [c for c in cands if c.period == "Q4_FY2024"] == []

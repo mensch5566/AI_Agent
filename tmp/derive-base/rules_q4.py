@@ -12,10 +12,14 @@ Scope (design §3.1):
     for each (uni_account, FY) whose inputs are present)
 """
 from __future__ import annotations
-from typing import Iterable
+from collections.abc import Iterable
+from typing import TYPE_CHECKING
 import re
 
 from derive_types import Candidate
+
+if TYPE_CHECKING:
+    from _shared.sec_json_adapter import FactRow  # noqa: F401
 
 _FY_RE = re.compile(r"^FY(\d{4})$")
 
@@ -25,7 +29,7 @@ def _fy_year(period: str) -> str | None:
     return m.group(1) if m else None
 
 
-def q4_candidates(facts: Iterable) -> list[Candidate]:
+def q4_candidates(facts: Iterable["FactRow"]) -> list[Candidate]:
     """Emit Q4 candidates for every (uni_account, fy) where inputs are sufficient."""
     by_key: dict[tuple, dict[str, object]] = {}
     for f in facts:
