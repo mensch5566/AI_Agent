@@ -113,3 +113,44 @@ def test_calc_identity_skips_when_parent_already_direct():
     cands = apply_identity_rules(facts, calc_rules, qname_to_uni)
     # gross_profit is direct — no candidate should be emitted
     assert [c for c in cands if c.uni_account == "gross_profit"] == []
+
+
+from rules_identity import apply_static_allowlist
+
+
+def test_static_allowlist_gaap_gross_profit_fallback():
+    # No calc edges, Revenue + COGS present, parent missing → GP derived.
+    facts = [
+        _f(uni_account="revenue", value=100.0),
+        _f(uni_account="cost_of_goods_sold", value=60.0, cell_id="cogs"),
+    ]
+    cands = apply_static_allowlist(facts, version="GAAP")
+    gp = [c for c in cands if c.uni_account == "gross_profit"]
+    assert len(gp) == 1
+    assert gp[0].value == 40.0
+    assert gp[0].rule_id == "STATIC_ALLOWLIST"
+    assert gp[0].rule_priority == 4
+
+
+def test_nongaap_allowlist_cogs_from_rev_minus_gp():
+    facts = [
+        _f(uni_account="revenue",      value=100.0, version="NON_GAAP"),
+        _f(uni_account="gross_profit", value=40.0,  version="NON_GAAP", cell_id="gp"),
+    ]
+    cands = apply_static_allowlist(facts, version="NON_GAAP")
+    cogs = [c for c in cands if c.uni_account == "cost_of_goods_sold"]
+    assert len(cogs) == 1
+    assert cogs[0].value == 60.0
+    assert cogs[0].rule_id == "NG_ALLOWLIST"
+    assert cogs[0].rule_priority == 5
+
+
+def test_allowlist_skips_when_parent_present():
+    facts = [
+        _f(uni_account="revenue",            value=100.0),
+        _f(uni_account="cost_of_goods_sold", value=60.0, cell_id="c"),
+        _f(uni_account="gross_profit",       value=39.0, cell_id="g"),   # direct disclosed
+    ]
+    cands = apply_static_allowlist(facts, version="GAAP")
+    # gross_profit is direct, so allowlist shouldn't propose another one.
+    assert [c for c in cands if c.uni_account == "gross_profit"] == []

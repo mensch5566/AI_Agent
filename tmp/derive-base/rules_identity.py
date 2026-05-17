@@ -42,6 +42,81 @@ def calc_rules_from_edges(edges: list[dict]) -> dict[tuple, list[dict]]:
 from derive_types import Candidate, input_dict_from_fact
 
 
+# (output, requires, formula_fn, rule_id, rule_priority)
+# formula_fn receives a dict {uni_account: fact_value} and returns float.
+STATIC_ALLOWLIST_GAAP = [
+    # output, requires, fn, rule_id, priority
+    ("gross_profit",              ("revenue", "cost_of_goods_sold"),
+        lambda v: v["revenue"] - v["cost_of_goods_sold"],
+        "STATIC_ALLOWLIST", 4),
+    ("cost_of_goods_sold",        ("revenue", "gross_profit"),
+        lambda v: v["revenue"] - v["gross_profit"],
+        "STATIC_ALLOWLIST", 4),
+    ("total_operating_expenses",  ("gross_profit", "operating_income"),
+        lambda v: v["gross_profit"] - v["operating_income"],
+        "STATIC_ALLOWLIST", 4),
+    ("operating_income",          ("gross_profit", "total_operating_expenses"),
+        lambda v: v["gross_profit"] - v["total_operating_expenses"],
+        "STATIC_ALLOWLIST", 4),
+]
+
+STATIC_ALLOWLIST_NONGAAP = [
+    ("cost_of_goods_sold",        ("revenue", "gross_profit"),
+        lambda v: v["revenue"] - v["gross_profit"],
+        "NG_ALLOWLIST", 5),
+    ("gross_profit",              ("revenue", "cost_of_goods_sold"),
+        lambda v: v["revenue"] - v["cost_of_goods_sold"],
+        "NG_ALLOWLIST", 5),
+    ("total_operating_expenses",  ("gross_profit", "operating_income"),
+        lambda v: v["gross_profit"] - v["operating_income"],
+        "NG_ALLOWLIST", 5),
+    ("operating_income",          ("gross_profit", "total_operating_expenses"),
+        lambda v: v["gross_profit"] - v["total_operating_expenses"],
+        "NG_ALLOWLIST", 5),
+]
+
+
+def apply_static_allowlist(facts: list["FactRow"], version: str) -> list[Candidate]:
+    """Apply static identity allowlist rules for sparse GAAP fallback and Non-GAAP.
+
+    For each (period, statement, version, unit), try each allowlist rule.
+    Skips if output uni_account already direct.
+    Skips if any required input is missing.
+    """
+    allowlist = STATIC_ALLOWLIST_GAAP if version == "GAAP" else STATIC_ALLOWLIST_NONGAAP
+
+    # Group: (period, statement, version, unit) → uni_account → fact
+    grouped: dict[tuple, dict[str, object]] = defaultdict(dict)
+    for f in facts:
+        if f.version != version:
+            continue
+        grouped[(f.period, f.statement, f.version, f.unit)][f.uni_account] = f
+
+    out: list[Candidate] = []
+    for (period, stmt, ver, unit), uni_map in grouped.items():
+        for output_uni, requires, fn, rule_id, priority in allowlist:
+            if output_uni in uni_map:
+                continue  # parent already direct
+            if not all(r in uni_map for r in requires):
+                continue
+            try:
+                value = fn({r: uni_map[r].value for r in requires})
+            except Exception:
+                continue
+            template = uni_map[requires[0]]
+            out.append(Candidate(
+                ticker=template.ticker, period=period, period_kind=template.period_kind,
+                period_start=None, period_end=template.period_end,
+                statement=stmt, version=ver, uni_account=output_uni,
+                value=value, unit=unit,
+                rule_id=rule_id, rule_priority=priority,
+                chain_depth=1, chained=False,
+                inputs=[input_dict_from_fact(uni_map[r]) for r in requires],
+                extras={"formula": " - ".join(requires)},
+            ))
+    return out
+
+
 def apply_identity_rules(
     facts: list["FactRow"],
     calc_rules: dict[tuple, list[dict]],
