@@ -88,3 +88,28 @@ def test_calc_identity_skips_when_child_missing():
         "us-gaap:GrossProfit":               "gross_profit",
     }
     assert apply_identity_rules(facts, calc_rules, qname_to_uni) == []
+
+
+def test_calc_identity_skips_when_parent_already_direct():
+    """If gross_profit is already a direct fact, calc rule must NOT emit a
+    Candidate even when both children (Revenues + COGS) are present —
+    facts always win."""
+    facts = [
+        _f(cell_id="r",  uni_account="revenue",            xbrl_tag="us-gaap:Revenues",                value=100.0),
+        _f(cell_id="c",  uni_account="cost_of_goods_sold", xbrl_tag="us-gaap:CostOfGoodsAndServicesSold", value=60.0),
+        _f(cell_id="gp", uni_account="gross_profit",       xbrl_tag="us-gaap:GrossProfit",              value=42.0),
+    ]
+    calc_rules = {
+        ("stmt-is", "us-gaap:GrossProfit"): [
+            {"child_qname": "us-gaap:Revenues",                "weight": 1,  "source": None},
+            {"child_qname": "us-gaap:CostOfGoodsAndServicesSold","weight": -1, "source": None},
+        ],
+    }
+    qname_to_uni = {
+        "us-gaap:Revenues":                  "revenue",
+        "us-gaap:CostOfGoodsAndServicesSold":"cost_of_goods_sold",
+        "us-gaap:GrossProfit":               "gross_profit",
+    }
+    cands = apply_identity_rules(facts, calc_rules, qname_to_uni)
+    # gross_profit is direct — no candidate should be emitted
+    assert [c for c in cands if c.uni_account == "gross_profit"] == []

@@ -7,7 +7,10 @@ turned into DerivedMetricRow.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from _shared.sec_json_adapter import FactRow  # noqa: F401
 
 
 @dataclass
@@ -46,3 +49,15 @@ class Candidate:
     chained: bool
     inputs: list[dict]         # [{cell_id, uni_account, period, value, status}, ...]
     extras: dict = field(default_factory=dict)   # role_uri, formula text, etc.
+
+
+def input_dict_from_fact(f: "FactRow") -> dict:
+    """Compact dict of a FactRow's identity + value, suitable for storing
+    in Candidate.inputs / DerivedMetricRow.provenance.inputs."""
+    return {
+        "cell_id": f.cell_id,
+        "uni_account": f.uni_account,
+        "period": f.period,
+        "value": f.value,
+        "status": f.status,
+    }

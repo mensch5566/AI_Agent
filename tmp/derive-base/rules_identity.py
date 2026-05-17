@@ -10,6 +10,10 @@ Both produce Candidate rows via apply_identity_rules() (Task 8).
 """
 from __future__ import annotations
 from collections import defaultdict
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from _shared.sec_json_adapter import FactRow  # noqa: F401
 
 
 def calc_rules_from_edges(edges: list[dict]) -> dict[tuple, list[dict]]:
@@ -35,11 +39,11 @@ def calc_rules_from_edges(edges: list[dict]) -> dict[tuple, list[dict]]:
     return dict(out)
 
 
-from derive_types import Candidate
+from derive_types import Candidate, input_dict_from_fact
 
 
 def apply_identity_rules(
-    facts,
+    facts: list["FactRow"],
     calc_rules: dict[tuple, list[dict]],
     qname_to_uni: dict[str, str],
 ) -> list[Candidate]:
@@ -88,7 +92,7 @@ def apply_identity_rules(
             period_end = child_facts[0][0].period_end
             period_start = None
             ticker = child_facts[0][0].ticker
-            inputs = [_input_dict_from_fact(cf) for cf, _ in child_facts]
+            inputs = [input_dict_from_fact(cf) for cf, _ in child_facts]
             formula = " + ".join(
                 f"{w:+d} * {qname_to_uni.get(ch['child_qname'], ch['child_qname'])}"
                 for ch, (_, w) in zip(children, child_facts)
@@ -106,8 +110,3 @@ def apply_identity_rules(
     return out
 
 
-def _input_dict_from_fact(f) -> dict:
-    return {
-        "cell_id": f.cell_id, "uni_account": f.uni_account,
-        "period": f.period, "value": f.value, "status": f.status,
-    }

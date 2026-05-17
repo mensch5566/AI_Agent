@@ -16,7 +16,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING
 import re
 
-from derive_types import Candidate
+from derive_types import Candidate, input_dict_from_fact
 
 if TYPE_CHECKING:
     from _shared.sec_json_adapter import FactRow  # noqa: F401
@@ -69,8 +69,8 @@ def q4_candidates(facts: Iterable["FactRow"]) -> list[Candidate]:
                     rule_id="Q4_FY_MINUS_9M", rule_priority=1,
                     chain_depth=1, chained=False,
                     inputs=[
-                        _input_dict(fy_fact),
-                        _input_dict(nm),
+                        input_dict_from_fact(fy_fact),
+                        input_dict_from_fact(nm),
                     ],
                     extras={"formula": f"FY{fy} - 9M_FY{fy}"},
                 ))
@@ -85,23 +85,13 @@ def q4_candidates(facts: Iterable["FactRow"]) -> list[Candidate]:
                     rule_id="Q4_FY_MINUS_Q1Q2Q3", rule_priority=2,
                     chain_depth=1, chained=False,
                     inputs=[
-                        _input_dict(fy_fact),
-                        _input_dict(q1), _input_dict(q2), _input_dict(q3),
+                        input_dict_from_fact(fy_fact),
+                        input_dict_from_fact(q1), input_dict_from_fact(q2), input_dict_from_fact(q3),
                     ],
                     extras={"formula": f"FY{fy} - Q1_FY{fy} - Q2_FY{fy} - Q3_FY{fy}"},
                 ))
             # else: skip — missing inputs (per design §3.4)
     return out
-
-
-def _input_dict(fact) -> dict:
-    return {
-        "cell_id": fact.cell_id,
-        "uni_account": fact.uni_account,
-        "period": fact.period,
-        "value": fact.value,
-        "status": fact.status,
-    }
 
 
 def _units_match(*facts) -> bool:
