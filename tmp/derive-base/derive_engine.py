@@ -124,13 +124,49 @@ def run_engine(
         c.chained = True
     p3_winners, p3_conflicts = resolve_candidates(p3)
 
+    all_winners = p1_winners + p2_winners + p3_winners
+    all_winners, fact_dropped = filter_against_facts(all_winners, facts)
     return {
-        "winners": p1_winners + p2_winners + p3_winners,
+        "winners": all_winners,
         "conflicts": p1_conflicts + p2_conflicts + p3_conflicts,
+        "fact_conflicts": fact_dropped,
         "stats": {
-            "pass1_count": len(p1_winners),
-            "pass2_count": len(p2_winners),
-            "pass3_count": len(p3_winners),
-            "conflicts":   len(p1_conflicts) + len(p2_conflicts) + len(p3_conflicts),
+            "pass1_count":      len(p1_winners),
+            "pass2_count":      len(p2_winners),
+            "pass3_count":      len(p3_winners),
+            "final_count":      len(all_winners),
+            "conflicts":        len(p1_conflicts) + len(p2_conflicts) + len(p3_conflicts),
+            "fact_skips":       len(fact_dropped),
         },
     }
+
+
+def filter_against_facts(winners: list[Candidate], facts: list) -> tuple[list[Candidate], list[dict]]:
+    """Drop any winner whose semantic key already has a direct SOURCE_OF_TRUTH fact.
+
+    Records a 'facts_already_cover' note in the dropped list. If values
+    disagree at hard level, also records a tolerance conflict.
+    """
+    fact_idx: dict[SemanticKey, object] = {}
+    for f in facts:
+        if f.status != "SOURCE_OF_TRUTH":
+            continue
+        k = (f.ticker, f.period, f.period_kind, f.statement, f.version, f.uni_account)
+        fact_idx.setdefault(k, f)
+    keep: list[Candidate] = []
+    dropped: list[dict] = []
+    for w in winners:
+        k = _key(w)
+        if k in fact_idx:
+            fact = fact_idx[k]
+            cls = diff_classification(fact.value, w.value, w.unit)
+            dropped.append({
+                "reason": "facts_already_cover",
+                "ticker": k[0], "period": k[1], "statement": k[3], "version": k[4],
+                "uni_account": k[5], "facts_value": fact.value, "derived_value": w.value,
+                "tolerance_level": cls["level"], "abs_diff": cls["abs"], "rel_pct": cls["rel_pct"],
+                "rule_id": w.rule_id,
+            })
+        else:
+            keep.append(w)
+    return keep, dropped

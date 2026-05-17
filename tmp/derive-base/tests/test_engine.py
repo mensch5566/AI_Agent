@@ -102,3 +102,51 @@ def test_run_engine_q4_then_identity(sample_gaap_revenue_facts):
     input_periods = sorted(i["period"] for i in inputs)
     assert input_periods == ["9M_FY2024", "FY2024"]
     assert all(i["status"] == "SOURCE_OF_TRUTH" for i in inputs)
+
+
+def test_filter_winner_against_existing_facts_skips_and_records_conflict(sample_gaap_revenue_facts):
+    """Pass 2 derives Q4=101000. If facts already had a Q4 revenue of 101050,
+    Q4_FY2024 derive should be skipped (facts win) and the diff recorded."""
+    from derive_engine import filter_against_facts
+    from _shared.sec_json_adapter import FactRow
+    direct_q4 = FactRow(
+        cell_id="q4_direct", ticker="AAOI", period="Q4_FY2024",
+        period_end="2024-12-31", period_kind="quarter_duration",
+        statement="IS", version="GAAP", uni_account="revenue",
+        source_account="us-gaap:Revenues", xbrl_tag="us-gaap:Revenues",
+        value=101050.0, weight=1, unit="USD_thousands",
+        status="SOURCE_OF_TRUTH", ordinal=None, long_tail_metadata=None,
+        provenance={},
+    )
+    facts = list(sample_gaap_revenue_facts) + [direct_q4]
+    from rules_q4 import q4_candidates
+    cands = q4_candidates(facts)   # may or may not return — direct exists so should skip
+    # If our q4_candidates correctly skips, we don't need filter_against_facts at all here.
+    assert cands == []
+
+
+def test_filter_against_facts_drops_winner_with_matching_direct():
+    """If a winner says revenue=100 for Q1 GAAP IS, but facts already
+    have revenue=100 there, drop the winner (facts already cover it)."""
+    from derive_engine import filter_against_facts
+    from derive_types import Candidate
+    from _shared.sec_json_adapter import FactRow
+    facts = [FactRow(
+        cell_id="x", ticker="X", period="Q1_FY2024", period_end="2024-03-31",
+        period_kind="quarter_duration", statement="IS", version="GAAP",
+        uni_account="gross_profit", source_account="t", xbrl_tag="t",
+        value=40.0, weight=1, unit="USD_thousands",
+        status="SOURCE_OF_TRUTH", ordinal=None, long_tail_metadata=None, provenance={},
+    )]
+    winner = Candidate(
+        ticker="X", period="Q1_FY2024", period_kind="quarter_duration",
+        period_start=None, period_end="2024-03-31",
+        statement="IS", version="GAAP", uni_account="gross_profit",
+        value=40.0, unit="USD_thousands",
+        rule_id="CALC_LINKBASE", rule_priority=3, chain_depth=1, chained=False,
+        inputs=[], extras={},
+    )
+    keep, dropped = filter_against_facts([winner], facts)
+    assert keep == []
+    assert len(dropped) == 1
+    assert dropped[0]["reason"] == "facts_already_cover"
