@@ -67,13 +67,21 @@ from rules_identity import apply_identity_rules, apply_static_allowlist
 def _materialize_facts_with_winners(facts: list, winners: list[Candidate]) -> list:
     """Append Pass 1 / Pass 2 winners as facts for the next pass.
 
+    WARNING — INTERNAL PLUMBING ONLY:
+    These synthesized FactRows have `cell_id` prefixed with "derived::" and
+    `source_account="derived"`. They MUST NOT leak into output JSON or
+    Supabase upserts. Task 14 (`to_derived_metric_row`) consumes resolved
+    Candidates (not these synthetic facts), so the plumbing is sound — but
+    any future code that iterates `facts_after_p1` / `facts_after_p2` to
+    write output rows MUST filter `cell_id.startswith("derived::")`.
+
     We use the same FactRow shape so identity rules can iterate uniformly.
     """
     from _shared.sec_json_adapter import FactRow
     out = list(facts)
     for w in winners:
         out.append(FactRow(
-            cell_id=f"derived::{w.rule_id}::{w.period}::{w.uni_account}",
+            cell_id=f"derived::{w.rule_id}::{w.ticker}::{w.statement}::{w.version}::{w.period}::{w.uni_account}::{w.unit}",
             ticker=w.ticker, period=w.period, period_end=w.period_end,
             period_kind=w.period_kind, statement=w.statement, version=w.version,
             uni_account=w.uni_account, source_account="derived",

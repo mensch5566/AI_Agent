@@ -96,3 +96,9 @@ def test_run_engine_q4_then_identity(sample_gaap_revenue_facts):
     assert s["pass2_count"] == 1
     assert s["pass3_count"] == 0
     assert s["conflicts"] == 0
+    # Provenance lineage — the Q4 winner must carry references to the FY + 9M source facts.
+    inputs = rows[0].inputs
+    assert len(inputs) == 2, f"expected 2 inputs (FY + 9M), got {len(inputs)}"
+    input_periods = sorted(i["period"] for i in inputs)
+    assert input_periods == ["9M_FY2024", "FY2024"]
+    assert all(i["status"] == "SOURCE_OF_TRUTH" for i in inputs)
