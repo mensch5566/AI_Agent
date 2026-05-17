@@ -102,7 +102,8 @@ def write_audit_md(out_dir: Path, ticker: str, result: dict, *, meta_extras: dic
     # Chain depth distribution
     by_depth: dict[int, int] = {}
     for w in result["winners"]:
-        d = w.provenance.get("chain_depth", w.chain_depth if hasattr(w, "chain_depth") else 1)
+        # winners are Candidate objects; use .chain_depth directly.
+        d = w.chain_depth if hasattr(w, "chain_depth") else 1
         by_depth[d] = by_depth.get(d, 0) + 1
     lines.append("## chain_depth distribution")
     for d in sorted(by_depth):
