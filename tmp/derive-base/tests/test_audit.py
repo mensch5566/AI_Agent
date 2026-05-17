@@ -1,4 +1,4 @@
-from audit import to_derived_metric_row
+from audit import to_derived_metric_row, write_audit_md, write_conflict_md
 from derive_types import Candidate
 
 
@@ -24,3 +24,32 @@ def test_to_derived_metric_row_deterministic_cell_id():
     assert a.provenance["formula"] == "FY2024 - 9M_FY2024"
     assert a.provenance["chain_depth"] == 1
     assert a.provenance["target_table"] == "sec_financial_metrics"
+
+
+def test_write_audit_md_lists_pass_counts_and_chain_paths(tmp_path):
+    result = {
+        "winners": [],
+        "conflicts": [],
+        "fact_conflicts": [],
+        "stats": {"pass1_count": 0, "pass2_count": 1, "pass3_count": 0, "final_count": 1, "conflicts": 0, "fact_skips": 0},
+    }
+    p = write_audit_md(tmp_path, "AAOI", result, meta_extras={"input_facts_count": 100})
+    txt = p.read_text()
+    assert "Pass 1" in txt and "Pass 2" in txt and "Pass 3" in txt
+    assert "input_facts_count" in txt or "100" in txt
+
+
+def test_write_conflict_md_lists_tolerance_breaches(tmp_path):
+    result = {
+        "conflicts": [{
+            "ticker": "AAOI", "period": "Q4_FY2024", "statement": "IS",
+            "version": "GAAP", "uni_account": "revenue",
+            "preferred_rule": "Q4_FY_MINUS_9M",     "preferred_value": 101000.0,
+            "other_rule":     "Q4_FY_MINUS_Q1Q2Q3", "other_value":     99000.0,
+            "abs_diff": 2000.0, "rel_pct": 2.0, "unit": "USD_thousands",
+        }],
+        "fact_conflicts": [],
+    }
+    p = write_conflict_md(tmp_path, "AAOI", result)
+    txt = p.read_text()
+    assert "Q4_FY2024" in txt and "revenue" in txt and "2.0%" in txt

@@ -78,3 +78,72 @@ def _row_to_dict(r: DerivedMetricRow) -> dict:
         "status":      r.status,
         "provenance":  r.provenance,
     }
+
+
+def write_audit_md(out_dir: Path, ticker: str, result: dict, *, meta_extras: dict | None = None) -> Path:
+    """Write human-readable audit markdown with per-pass counts and chain depth distribution."""
+    stats = result["stats"]
+    lines = [
+        f"# {ticker} derive-base audit",
+        "",
+        f"- Pass 1 (identity_on_direct):  {stats['pass1_count']}",
+        f"- Pass 2 (GAAP_Q4):             {stats['pass2_count']}",
+        f"- Pass 3 (identity_on_q4):      {stats['pass3_count']}",
+        f"- Final winners (after facts):  {stats['final_count']}",
+        f"- Hard tolerance conflicts:     {stats['conflicts']}",
+        f"- Facts-already-cover skips:    {stats['fact_skips']}",
+        "",
+    ]
+    if meta_extras:
+        lines.append("## metadata")
+        for k, v in meta_extras.items():
+            lines.append(f"- {k}: {v}")
+        lines.append("")
+    # Chain depth distribution
+    by_depth: dict[int, int] = {}
+    for w in result["winners"]:
+        d = w.provenance.get("chain_depth", w.chain_depth if hasattr(w, "chain_depth") else 1)
+        by_depth[d] = by_depth.get(d, 0) + 1
+    lines.append("## chain_depth distribution")
+    for d in sorted(by_depth):
+        lines.append(f"- depth {d}: {by_depth[d]}")
+    p = out_dir / f"{ticker}_derive_audit.md"
+    p.write_text("\n".join(lines))
+    return p
+
+
+def write_conflict_md(out_dir: Path, ticker: str, result: dict) -> Path:
+    """Write conflict report markdown: tolerance breaches + facts-already-cover diffs."""
+    lines = [f"# {ticker} derive-base conflicts", ""]
+    confs = result.get("conflicts", [])
+    if confs:
+        lines.append("## Hard tolerance conflicts (candidate skipped)")
+        lines.append("")
+        lines.append("| period | uni_account | preferred | other | abs | rel |")
+        lines.append("|---|---|---|---|---:|---:|")
+        for c in confs:
+            lines.append(
+                f"| {c['period']} | {c['uni_account']} | "
+                f"{c['preferred_rule']}={c['preferred_value']} | "
+                f"{c['other_rule']}={c['other_value']} | "
+                f"{c['abs_diff']} {c['unit']} | {c['rel_pct']:.1f}% |"
+            )
+        lines.append("")
+    fc = result.get("fact_conflicts", [])
+    if fc:
+        lines.append("## Facts already cover (derive skipped, diff recorded)")
+        lines.append("")
+        lines.append("| period | uni_account | facts_value | derived_value | abs | rel | level |")
+        lines.append("|---|---|---:|---:|---:|---:|---|")
+        for c in fc:
+            lines.append(
+                f"| {c['period']} | {c['uni_account']} | "
+                f"{c['facts_value']} | {c['derived_value']} | "
+                f"{c['abs_diff']} | {c['rel_pct']:.2f}% | {c['tolerance_level']} |"
+            )
+        lines.append("")
+    if not confs and not fc:
+        lines.append("_(none)_")
+    p = out_dir / f"{ticker}_conflict_report.md"
+    p.write_text("\n".join(lines))
+    return p
