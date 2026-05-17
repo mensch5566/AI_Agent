@@ -264,6 +264,27 @@ def apply(batch: A.NormalizedBatch) -> None:
     print(f"  upserted: sec_financial_edges ({n} rows)")
 
 
+# ---- Derived metrics (derive-base output) ------------------------------------
+
+
+def load_derived_metrics(vault: Path, ticker: str) -> list[dict]:
+    """Read latest derive-base run for `ticker` and return its derived_metrics[].
+
+    Returns [] if no derive-base output exists yet (skill not run).
+    """
+    base = (vault / "Khouse" / "Semiconductors" / ticker
+            / "01_Source" / "SEC Filings" / "Skill_Output" / "derive-base")
+    if not base.exists():
+        return []
+    runs = sorted(p for p in base.iterdir() if p.is_dir())
+    if not runs:
+        return []
+    derived = runs[-1] / f"{ticker}_derived.json"
+    if not derived.exists():
+        return []
+    return json.loads(derived.read_text()).get("derived_metrics", [])
+
+
 # ---- CLI ---------------------------------------------------------------------
 
 
@@ -282,9 +303,21 @@ def main():
         print("\n  ✗ Gate FAILED — refusing to upsert. Fix issues above and re-run.")
         sys.exit(1)
 
+    derived_rows = load_derived_metrics(OBSIDIAN_BASE, ticker)
+    if derived_rows:
+        print(f"\n  + {len(derived_rows)} derived metrics from derive-base")
+    else:
+        print(f"\n  (no derive-base output found for {ticker})")
+
     if args.apply:
         print(f"\n=== Real upsert to Supabase ===")
         apply(batch)
+        if derived_rows:
+            client = supabase_client()
+            client.table("sec_financial_metrics").upsert(
+                derived_rows, on_conflict="cell_id"
+            ).execute()
+            print(f"  upserted: sec_financial_metrics ({len(derived_rows)} rows)")
         print(f"  ✓ Upsert complete.")
     else:
         print(f"\n  ✓ Dry-run complete. Gate passed. Re-run with --apply to write to Supabase.")
