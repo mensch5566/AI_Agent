@@ -48,7 +48,9 @@ def resolve_candidates(candidates: list[Candidate]) -> tuple[list[Candidate], li
                     "ticker": k[0], "period": k[1], "period_kind": k[2],
                     "statement": k[3], "version": k[4], "uni_account": k[5],
                     "preferred_rule": preferred.rule_id, "preferred_value": preferred.value,
+                    "preferred_chain_depth": preferred.chain_depth,
                     "other_rule":     other.rule_id,     "other_value":     other.value,
+                    "other_chain_depth": other.chain_depth,
                     "abs_diff": cls["abs"], "rel_pct": cls["rel_pct"],
                     "unit": preferred.unit,
                 })

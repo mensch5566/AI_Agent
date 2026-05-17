@@ -38,3 +38,38 @@ def test_resolve_two_keys_independent():
     b = _c(uni_account="gross_profit", value=40.0)
     winners, conflicts = resolve_candidates([a, b])
     assert len(winners) == 2
+
+
+def test_resolve_within_band_picks_preferred_no_conflict():
+    """Small diff (within tolerance band) → preferred wins silently, no conflict."""
+    # USD_thousands abs_tol=1.0; 100.0 vs 100.05 → within
+    a = _c(rule_id="Q4_FY_MINUS_9M",     rule_priority=1, value=100.0)
+    b = _c(rule_id="Q4_FY_MINUS_Q1Q2Q3", rule_priority=2, value=100.05)
+    winners, conflicts = resolve_candidates([a, b])
+    assert len(winners) == 1
+    assert winners[0].rule_id == "Q4_FY_MINUS_9M"
+    assert conflicts == []
+
+
+def test_resolve_single_candidate_per_key():
+    """One candidate per key → always wins, no comparison loop runs."""
+    a = _c(value=42.0)
+    winners, conflicts = resolve_candidates([a])
+    assert len(winners) == 1
+    assert winners[0].value == 42.0
+    assert conflicts == []
+
+
+def test_resolve_stable_tie_break_by_insertion_order():
+    """When (rule_priority, chain_depth) are identical, the candidate that
+    appeared first in input wins (Python sorted() is stable)."""
+    # Both at priority 3, depth 1; first inserted is rule_a
+    a = _c(rule_id="rule_a", rule_priority=3, chain_depth=1, value=10.0)
+    b = _c(rule_id="rule_b", rule_priority=3, chain_depth=1, value=10.0)
+    winners, _ = resolve_candidates([a, b])
+    assert len(winners) == 1
+    assert winners[0].rule_id == "rule_a"
+
+    # Reverse insertion order → other wins
+    winners2, _ = resolve_candidates([b, a])
+    assert winners2[0].rule_id == "rule_b"
