@@ -73,3 +73,26 @@ def test_resolve_stable_tie_break_by_insertion_order():
     # Reverse insertion order → other wins
     winners2, _ = resolve_candidates([b, a])
     assert winners2[0].rule_id == "rule_b"
+
+
+def test_run_engine_q4_then_identity(sample_gaap_revenue_facts):
+    """Pass 2 emits Q4 revenue (FY-9M=101000). Pass 3 has no IS subtotal
+    children to derive a parent from (only revenue exists), so Pass 3
+    emits nothing. Final winners = 1 row."""
+    from derive_engine import run_engine
+    result = run_engine(
+        facts=sample_gaap_revenue_facts,
+        calc_rules={},          # no calc edges → only Q4 rule fires
+        qname_to_uni={},
+    )
+    rows = result["winners"]
+    assert len(rows) == 1
+    assert rows[0].uni_account == "revenue"
+    assert rows[0].period == "Q4_FY2024"
+    assert rows[0].value == 101000.0
+    # Stats sanity
+    s = result["stats"]
+    assert s["pass1_count"] == 0
+    assert s["pass2_count"] == 1
+    assert s["pass3_count"] == 0
+    assert s["conflicts"] == 0
