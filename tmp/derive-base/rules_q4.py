@@ -13,6 +13,7 @@ Scope (design §3.1):
 """
 from __future__ import annotations
 from collections.abc import Iterable
+from datetime import date, timedelta
 from typing import TYPE_CHECKING
 import re
 
@@ -56,8 +57,8 @@ def q4_candidates(facts: Iterable["FactRow"]) -> list[Candidate]:
             q1 = fbp.get(f"Q1_FY{fy}")
             q2 = fbp.get(f"Q2_FY{fy}")
             q3 = fbp.get(f"Q3_FY{fy}")
-            q4_end = _q4_period_end(fy)
-            q4_start = _q4_period_start(fy)
+            q4_end = _q4_end_from_fy(fy_fact)
+            q4_start = _q4_start_from_q3_or_fy(q3, q4_end)
 
             if nm is not None and _units_match(fy_fact, nm):
                 v = fy_fact.value - nm.value
@@ -99,13 +100,21 @@ def _units_match(*facts) -> bool:
     return len(units) == 1
 
 
-def _q4_period_start(fy: str) -> str:
-    # FY ending Dec → Q4 starts Oct 1. For non-Dec FY ends this isn't exact,
-    # but derive-base reads period_end from the FY input; period_start is a
-    # nice-to-have audit field. v1 keeps it simple; we'll refine if a non-
-    # calendar-FY ticker shows mismatched audit dates.
-    return f"{fy}-10-01"
+def _q4_end_from_fy(fy_fact) -> str:
+    # Q4 ends when FY ends. Inherit verbatim from the FY input's period_end so
+    # non-Dec fiscal years (e.g., SNDK FY-end June) get correct CY mapping.
+    return fy_fact.period_end
 
 
-def _q4_period_end(fy: str) -> str:
-    return f"{fy}-12-31"
+def _q4_start_from_q3_or_fy(q3, q4_end: str) -> str:
+    # Prefer (Q3.period_end + 1 day) when Q3 is present; this is exact.
+    # Fall back to (Q4_end - ~92 days) when Q3 is missing — audit-only field.
+    if q3 is not None and q3.period_end:
+        try:
+            return (date.fromisoformat(q3.period_end) + timedelta(days=1)).isoformat()
+        except ValueError:
+            pass
+    try:
+        return (date.fromisoformat(q4_end) - timedelta(days=92)).isoformat()
+    except ValueError:
+        return ""

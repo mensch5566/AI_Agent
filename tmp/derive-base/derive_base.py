@@ -24,8 +24,9 @@ from derive_engine import run_engine
 from audit import to_derived_metric_row, write_derived_json, write_audit_md, write_conflict_md
 
 
-DEFAULT_VAULT = Path(os.path.expanduser(
-    "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian"
+DEFAULT_VAULT = Path(os.environ.get(
+    "OBSIDIAN_VAULT",
+    os.path.expanduser("~/Obsidian"),
 ))
 
 
@@ -33,7 +34,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ticker", required=True)
     ap.add_argument("--vault", default=str(DEFAULT_VAULT),
-                    help="Obsidian vault root (default: real iCloud vault)")
+                    help="Obsidian vault root (default: ~/Obsidian or $OBSIDIAN_VAULT)")
     args = ap.parse_args()
 
     ticker = args.ticker.upper()

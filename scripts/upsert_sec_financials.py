@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections import Counter
 from dataclasses import asdict
@@ -43,9 +44,10 @@ sys.path.insert(0, str(REPO_ROOT / "Tools" / "research-tools"))
 
 from _shared import sec_json_adapter as A  # noqa: E402
 
-OBSIDIAN_BASE = Path(
-    "/Users/mensch5566/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian"
-)
+OBSIDIAN_BASE = Path(os.environ.get(
+    "OBSIDIAN_VAULT",
+    os.path.expanduser("~/Obsidian"),
+))
 
 BATCH_SIZE = 500
 

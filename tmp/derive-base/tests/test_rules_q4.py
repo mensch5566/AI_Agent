@@ -51,6 +51,38 @@ def test_q4_skipped_when_units_mismatch(sample_gaap_revenue_facts):
     assert [c for c in cands if c.period == "Q4_FY2024"] == []
 
 
+def test_q4_dates_inherit_from_fy_for_dec_fy_end(sample_gaap_revenue_facts):
+    """Dec FY-end (AAOI/INTC shape): Q4 period_end matches FY period_end,
+    Q4 period_start = Q3.period_end + 1 day."""
+    cands = q4_candidates(sample_gaap_revenue_facts)
+    q4 = next(c for c in cands if c.period == "Q4_FY2024")
+    assert q4.period_end == "2024-12-31"  # = FY2024 period_end
+    assert q4.period_start == "2024-10-01"  # = Q3 (2024-09-30) + 1 day
+
+
+def test_q4_dates_inherit_from_fy_for_non_dec_fy_end():
+    """Non-Dec FY-end (SNDK shape, June FY-end): Q4 period_end must follow
+    FY's period_end (not hardcoded Dec 31), so CY mapping works on frontend."""
+    from _shared.sec_json_adapter import FactRow
+    base = dict(
+        ticker="SNDK", statement="IS", version="GAAP",
+        uni_account="revenue", source_account="us-gaap:Revenues",
+        xbrl_tag="Revenues", unit="USD_millions", weight=1,
+        status="SOURCE_OF_TRUTH", ordinal=None, long_tail_metadata=None,
+        provenance={"source_filing": "10-K"},
+    )
+    rows = [
+        FactRow(**{**base, "cell_id": "q3", "period": "Q3_FY2025", "period_kind": "quarter_duration",   "period_end": "2025-03-28", "value": 1695.0}),
+        FactRow(**{**base, "cell_id": "9m", "period": "9M_FY2025", "period_kind": "ytd_duration",       "period_end": "2025-03-28", "value": 5454.0}),
+        FactRow(**{**base, "cell_id": "fy", "period": "FY2025",    "period_kind": "fy_annual_duration", "period_end": "2025-06-27", "value": 7355.0}),
+    ]
+    cands = q4_candidates(rows)
+    q4 = next(c for c in cands if c.period == "Q4_FY2025")
+    assert q4.value == 1901.0
+    assert q4.period_end == "2025-06-27"   # NOT 2025-12-31
+    assert q4.period_start == "2025-03-29" # Q3.period_end + 1 day, NOT 2025-10-01
+
+
 def test_q4_skipped_when_q4_already_direct(sample_gaap_revenue_facts):
     """If Q4 is already a direct fact, derive must NOT emit a candidate
     (facts always win — disclosed > derived)."""
