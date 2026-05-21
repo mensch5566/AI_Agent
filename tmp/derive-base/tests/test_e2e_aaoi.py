@@ -2,8 +2,9 @@ import json, os, subprocess, sys
 from pathlib import Path
 import pytest
 
-VAULT = Path(os.path.expanduser(
-    "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian"
+VAULT = Path(os.environ.get(
+    "OBSIDIAN_VAULT",
+    os.path.expanduser("~/Obsidian"),
 ))
 
 

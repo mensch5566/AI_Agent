@@ -153,14 +153,14 @@ Treat the following Working Memory as the current project context. Use `search_m
 
 # [Working] Combined AI Working Memory
 
-Updated: 2026-05-17T06:55:38.397056
+Updated: 2026-05-21T10:48:34.049488
 
 Project scope: `ai_agent`
 
 ## Global Working Memory
 # [Working] Shared AI Working Memory (global)
 
-Updated: 2026-05-17T06:55:38.138859
+Updated: 2026-05-21T10:48:33.899822
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -186,6 +186,13 @@ Use it for current state. Use `search_memory` for older or more detailed history
 ## Python Wrapper 的作用
 
 ## Recent Shared Memory
+### export-ticker-ppt 優化方向：主筆記 IS+假設情境 dual-table slide 對應規格（2026-05-19 AAOI 實證）
+# export-ticker-ppt 優化方向：主筆記 IS+假設情境 dual-table slide 對應規格（2026-05-19 AAOI 實證）
+# export-ticker-ppt skill 優化方向：主筆記 → 估值推估細節 slide 的對應規格
+Date: 2026-05-19
+Project scope: obsidian / AAOI valuation
+Status: 已用手動方式驗證 pattern 成功（共學_季報_AAOI.pptx 新增 v20260519-1 / v20260519-2 兩張 slide）
+
 ### Financials Viewer v2 — 3 frontend bugs fixed (column alignment / long-tail double display / Q4 union) 2026-05-17
 # Financials Viewer v2 — 3 frontend bugs fixed (column alignment / long-tail double display / Q4 union) 2026-05-17
 # Financials Viewer v2 — 3 frontend bugs fixed
@@ -233,17 +240,10 @@ Date: 2026-05-13
 Project scope: ai_knowledge_system
 Status: **設計討論完成、改 skill 工作交給下個 session**。下個 session 直接看這份就能接手，不必重推。
 
-### AAOI parse 完工 + SEC 三 skill 結構性修正（小公司支援）2026-05-12
-# AAOI parse 完工 + SEC 三 skill 結構性修正（小公司支援）2026-05-12
-# AAOI parse 完工 + SEC 三 skill 結構性修正（小公司支援）
-Date: 2026-05-12
-Project: ai_agent
-Status: 已 commit + push（CC_Switch_Config `679b457` / AI_Agent `aa133f2`）
-
 ## Project Working Memory
 # [Working] Shared AI Working Memory (project:ai_agent)
 
-Updated: 2026-05-17T06:55:38.159624
+Updated: 2026-05-21T10:48:33.916210
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -257,12 +257,40 @@ Use it for current state. Use `search_memory` for older or more detailed history
 - After meaningful project changes, assess whether `docs/STATUS.md` should be updated.
 
 ## Recent Project Memory
+### AI Memory Daily Log: 2026-05-21 (ai_agent)
+# AI Memory Daily Log: 2026-05-21 (ai_agent)
+## 10:48:33 [claude] "TICKER_CIK 應該從 {ticker}_gaap.json 的 metadata.cik 動態讀" 你自己直接改。
+### Intent (raw)
+"TICKER_CIK 應該從 {ticker}_gaap.json 的 metadata.cik 動態讀" 你自己直接改。
+另外一件事，怎麼讓前端的顯示小數位跟.PDF上面的一樣？ 或是乾脆所有科目都小數後一位，EPS單獨小數後2位
+
+### AI Memory Daily Log: 2026-05-20 (ai_agent)
+# AI Memory Daily Log: 2026-05-20 (ai_agent)
+## 23:52:12 [claude] 兩個都要根治，所以如果都走路徑一，就都根治對吧？那就根治它吧。
+### Intent (raw)
+兩個都要根治，所以如果都走路徑一，就都根治對吧？那就根治它吧。
+### Summary (Haiku)
+
+### AI Memory Daily Log: 2026-05-19 (ai_agent)
+# AI Memory Daily Log: 2026-05-19 (ai_agent)
+## 23:39:37 [claude] 還有需要繼續交互測試下去嗎？還是可以直接重跑所有的 ticker，去看看到底完不完整？
+### Intent (raw)
+還有需要繼續交互測試下去嗎？還是可以直接重跑所有的 ticker，去看看到底完不完整？
+因為你跟 GPT 一直在交互，其實我已經沒在盯著細節了，所以現在不知道細節進行到什麼程度。
+
+### AI Memory Daily Log: 2026-05-18 (ai_agent)
+# AI Memory Daily Log: 2026-05-18 (ai_agent)
+## 23:10:13 [claude] 請寫一個關於開發現況與測試狀況的 Markdown。
+### Intent (raw)
+請寫一個關於開發現況與測試狀況的 Markdown。
+看是要跟輸出的內容放在一起，還是放在其他地方？我看 TMP 資料夾裡面有個 derived_base，看是不是放那裡比較好。
+
 ### AI Memory Daily Log: 2026-05-17 (ai_agent)
 # AI Memory Daily Log: 2026-05-17 (ai_agent)
-## 06:55:38 [claude] 先B，直接改吧
+## 23:46:34 [claude] 好
 ### Intent (raw)
-先B，直接改吧
-### Outcome (raw)
+好
+### Summary (Haiku)
 
 ### AI Memory Daily Log: 2026-05-16 (ai_agent)
 # AI Memory Daily Log: 2026-05-16 (ai_agent)
@@ -284,32 +312,4 @@ Use it for current state. Use `search_memory` for older or more detailed history
 ### Intent (raw)
 直接動工改 v3 寫回 tmp/financials-viewer-redesign-plan.md
 ### Outcome (raw)
-
-### AI Memory Daily Log: 2026-05-13 (ai_agent)
-# AI Memory Daily Log: 2026-05-13 (ai_agent)
-## 23:57:07 [claude] 現在直接做 Phase 3 吧。
-### Intent (raw)
-現在直接做 Phase 3 吧。
-反正我們 Skill 在 Git 上面都有版本，在 CC Switch 上面也都有版本。現在直接做，然後測試一樣在 temp 目錄這邊做；做完直接跟過去，我不想再討論這個問題，馬上改過去就行。
-
-### AI Memory Daily Log: 2026-05-12 (ai_agent)
-# AI Memory Daily Log: 2026-05-12 (ai_agent)
-## 23:39:47 [claude] /Users/mensch5566/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian
-### Intent (raw)
-/Users/mensch5566/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian/Khouse/Semiconductors/AAOI/01_Source/SEC Filings/Skill_Output/parse-8k-nongaap/2026-05-12-1030_NONGAAP_FY23Q4-FY26Q1/AAOI_pending_classification.md
-確認一下這個檔案是幹嘛用的？
-
-### AI Memory Daily Log: 2026-05-11 (ai_agent)
-# AI Memory Daily Log: 2026-05-11 (ai_agent)
-## 23:58:44 [claude] Q1先做B，adjustments先記起來，之後比較有餘裕再做。
-### Intent (raw)
-Q1先做B，adjustments先記起來，之後比較有餘裕再做。
-Q2做A，兩個都存。
-
-### AI Memory Daily Log: 2026-05-10 (ai_agent)
-# AI Memory Daily Log: 2026-05-10 (ai_agent)
-## 23:54:08 [claude] Parse 的三個 Skill 到現在算是告一段落了吧？
-### Intent (raw)
-Parse 的三個 Skill 到現在算是告一段落了吧？
-你覺得要不要 save memory 一下，把這三個 Parse 的開發過程（這幾天我們已經持續好幾天了）重點大概記一下。內容可以包括：
 <!-- AI_MEMORY_MANAGED_END -->

@@ -47,17 +47,44 @@ class Candidate:
     rule_priority: int         # lower = preferred
     chain_depth: int
     chained: bool
-    inputs: list[dict]         # [{cell_id, uni_account, period, value, status}, ...]
+    inputs: list[dict]         # [{cell_id, uni_account, period, value, status, ...}, ...]
+    # Source concept identity carried from the primary input fact so Pass 3
+    # calc-linkbase identity can match this derived value as a child of a
+    # parent calc rule. Empty string when unknown (e.g. allowlist outputs).
+    source_account: str = ""
+    xbrl_tag: str = ""
     extras: dict = field(default_factory=dict)   # role_uri, formula text, etc.
 
 
 def input_dict_from_fact(f: "FactRow") -> dict:
-    """Compact dict of a FactRow's identity + value, suitable for storing
-    in Candidate.inputs / DerivedMetricRow.provenance.inputs."""
-    return {
+    """Compact dict of a FactRow's identity + value + audit trail, suitable
+    for storing in Candidate.inputs / DerivedMetricRow.provenance.inputs.
+
+    Includes restatement-relevant lineage fields (accession_number,
+    source_filing, period_end, source_account, xbrl_tag, decimals) when the
+    underlying FactRow carries them — see Codex round-2 finding F6."""
+    base = {
         "cell_id": f.cell_id,
         "uni_account": f.uni_account,
         "period": f.period,
+        "period_end": getattr(f, "period_end", None),
         "value": f.value,
+        "unit": getattr(f, "unit", None),
         "status": f.status,
+        "source_account": getattr(f, "source_account", None),
+        "xbrl_tag": getattr(f, "xbrl_tag", None),
     }
+    # Optional restatement-trace fields — present on production FactRow.provenance
+    # after io_loader._backfill_filing_provenance() runs. Read via provenance
+    # dict when not a direct attribute. R4-F4: include form/filing_date/
+    # primary_doc and mark precision_unknown when decimals absent so the
+    # output honestly reflects what audit lineage is and isn't available.
+    prov = getattr(f, "provenance", {}) or {}
+    for key in ("accession_number", "source_filing", "form", "filing_date",
+                "primary_doc", "decimals"):
+        val = getattr(f, key, None) or prov.get(key)
+        if val is not None:
+            base[key] = val
+    if base.get("decimals") is None:
+        base["precision_unknown"] = True
+    return base

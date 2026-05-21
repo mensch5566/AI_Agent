@@ -16,27 +16,62 @@ if TYPE_CHECKING:
     from _shared.sec_json_adapter import FactRow  # noqa: F401
 
 
-def calc_rules_from_edges(edges: list[dict]) -> dict[tuple, list[dict]]:
-    """Group calc edges by (role_uri, parent_qname).
+def _local_name(qname_or_tag: str | None) -> str:
+    """Strip any 'prefix:' from an XBRL identifier so calc child_qname
+    (`us-gaap:GrossProfit`) and FactRow.xbrl_tag (`GrossProfit`) match.
+    Returns "" for None/empty."""
+    if not qname_or_tag:
+        return ""
+    return qname_or_tag.rsplit(":", 1)[-1]
 
-    Each value is a list of child dicts with at least:
+
+def calc_rules_from_edges(edges: list[dict]) -> dict[tuple, list[dict]]:
+    """Group calc edges by (period, role_uri, parent_qname).
+
+    Each value is a list of unique child dicts (deduped by child_qname+weight):
       {"child_qname": str, "weight": int, "source": str | None}
+
+    Period is included in the key because the same (role_uri, parent, child)
+    edge appears once per filing period in production cal files; collapsing
+    across period would replicate children N times and over-derive the parent
+    by Nx if identity ever fired. Period-aware grouping also lets us handle
+    company taxonomies that legitimately change between filings.
+
+    Real XBRL calc edges carry parent_qname/role_uri/child_qname. Long-tail
+    roll-up edges injected by build_separated.py use bare parent/child fields
+    (no qname, no role_uri) and are filtered out by the qname presence check.
     """
-    out: dict[tuple, list[dict]] = defaultdict(list)
+    grouped: dict[tuple, list[dict]] = defaultdict(list)
     for e in edges:
-        if e.get("edge_type") != "calc":
+        # Missing edge_type means production cal file (already type-implicit by
+        # filename); only reject when edge_type is explicitly non-calc.
+        edge_type = e.get("edge_type")
+        if edge_type is not None and edge_type != "calc":
             continue
         parent = e.get("parent_qname")
         role = e.get("role_uri")
         child = e.get("child_qname")
         if not (parent and role and child):
             continue
-        out[(role, parent)].append({
+        period = e.get("period")  # may be None for fixtures; deduped later
+        grouped[(period, role, parent)].append({
             "child_qname": child,
             "weight": int(e.get("weight") or 0),
             "source": e.get("source"),
         })
-    return dict(out)
+    # Dedupe children within each rule by (child_qname, weight).
+    out: dict[tuple, list[dict]] = {}
+    for key, children in grouped.items():
+        seen: set[tuple] = set()
+        unique: list[dict] = []
+        for c in children:
+            k = (c["child_qname"], c["weight"])
+            if k in seen:
+                continue
+            seen.add(k)
+            unique.append(c)
+        out[key] = unique
+    return out
 
 
 from derive_types import Candidate, input_dict_from_fact
@@ -128,13 +163,15 @@ def apply_identity_rules(
     Skips if any required child is missing.
     Skips if parent uni_account already exists for that period.
     """
-    # Index facts by (period, statement, version, unit, xbrl_tag)
+    # Index facts by (period, statement, version, unit, local_tag).
+    # Use _local_name() so calc child_qname (us-gaap:GrossProfit) matches
+    # FactRow.xbrl_tag (GrossProfit) regardless of namespace prefix.
     fact_idx: dict[tuple, object] = {}
     seen_uni: set[tuple] = set()
     for f in facts:
         if f.version != "GAAP":
             continue
-        key = (f.period, f.statement, f.version, f.unit, f.xbrl_tag)
+        key = (f.period, f.statement, f.version, f.unit, _local_name(f.xbrl_tag))
         fact_idx.setdefault(key, f)
         seen_uni.add((f.period, f.statement, f.version, f.uni_account))
 
@@ -144,16 +181,26 @@ def apply_identity_rules(
     for (period, stmt, ver, unit, tag), f in fact_idx.items():
         facts_by_pctx[(period, stmt, ver, unit)][tag] = f
 
-    for (role_uri, parent_qname), children in calc_rules.items():
+    for rule_key, children in calc_rules.items():
+        # Support both period-aware (period, role, parent) and legacy
+        # (role, parent) keys so old test fixtures keep working.
+        if len(rule_key) == 3:
+            rule_period, role_uri, parent_qname = rule_key
+        else:
+            rule_period = None
+            role_uri, parent_qname = rule_key
         parent_uni = qname_to_uni.get(parent_qname)
         if not parent_uni:
             continue
         for (period, stmt, ver, unit), tag_map in facts_by_pctx.items():
+            # Period-aware rules only fire against matching-period facts.
+            if rule_period is not None and rule_period != period:
+                continue
             # All children present?
             child_facts = []
             ok = True
             for ch in children:
-                cf = tag_map.get(ch["child_qname"])
+                cf = tag_map.get(_local_name(ch["child_qname"]))
                 if cf is None:
                     ok = False
                     break

@@ -11,8 +11,14 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Reuse _shared.cell_id from AI_Agent
-AI_AGENT_ROOT = Path(__file__).resolve().parents[2]
+# Reuse _shared.cell_id from AI_Agent. Robust path discovery mirrors
+# io_loader so audit.py can be import-ed standalone in any of the 4
+# mirrors (CC_Switch_Config + 3 runtimes + prototype tmp/) without
+# relying on derive_base.py running io_loader first. Codex round-5 F2.
+AI_AGENT_ROOT = Path(__file__).resolve().parents[4] / "AI_Agent"
+if not (AI_AGENT_ROOT / "Tools" / "research-tools" / "_shared").exists():
+    # Fallback: prototype location (parents[2] = AI_Agent when run from tmp/derive-base)
+    AI_AGENT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(AI_AGENT_ROOT / "Tools" / "research-tools"))
 from _shared.cell_id import metrics_cell_id  # noqa: E402
 
@@ -92,8 +98,24 @@ def write_audit_md(out_dir: Path, ticker: str, result: dict, *, meta_extras: dic
         f"- Final winners (after facts):  {stats['final_count']}",
         f"- Hard tolerance conflicts:     {stats['conflicts']}",
         f"- Facts-already-cover skips:    {stats['fact_skips']}",
+        f"- Q4 input-mismatch skips:      {stats.get('q4_skips', 0)}",
         "",
     ]
+    # R4-F3: surface the Q4 candidates that were intentionally dropped
+    # (concept/unit mismatch) so a reviewer can tell missing != skipped.
+    q4_skips = result.get("q4_skips") or []
+    if q4_skips:
+        lines.append("## Q4 input-mismatch skips")
+        for s in q4_skips:
+            inputs_desc = ", ".join(
+                f"{i.get('period')}={i.get('source_account') or i.get('xbrl_tag') or '?'}@{i.get('unit')}"
+                for i in s["inputs"]
+            )
+            lines.append(
+                f"- `{s['reason']}` {s['ticker']} {s['period']} {s['statement']}.{s['uni_account']} "
+                f"(unit={s['unit']}) — inputs: {inputs_desc}"
+            )
+        lines.append("")
     if meta_extras:
         lines.append("## metadata")
         for k, v in meta_extras.items():

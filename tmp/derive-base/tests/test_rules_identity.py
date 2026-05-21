@@ -1,7 +1,9 @@
 from rules_identity import calc_rules_from_edges
 
 
-def test_calc_rules_groups_by_parent_and_role():
+def test_calc_rules_groups_by_period_role_parent():
+    # F3: rule key is now (period, role_uri, parent_qname). Edges without
+    # period default to None.
     edges = [
         {"role_uri": "stmt-is", "parent_qname": "us-gaap:OperatingIncomeLoss",
          "child_qname": "us-gaap:GrossProfit",            "weight": 1, "edge_type": "calc"},
@@ -14,8 +16,8 @@ def test_calc_rules_groups_by_parent_and_role():
     ]
     rules = calc_rules_from_edges(edges)
     keys = sorted(rules.keys())
-    assert keys == [("stmt-is", "us-gaap:GrossProfit"), ("stmt-is", "us-gaap:OperatingIncomeLoss")]
-    op = rules[("stmt-is", "us-gaap:OperatingIncomeLoss")]
+    assert keys == [(None, "stmt-is", "us-gaap:GrossProfit"), (None, "stmt-is", "us-gaap:OperatingIncomeLoss")]
+    op = rules[(None, "stmt-is", "us-gaap:OperatingIncomeLoss")]
     assert sorted(c["child_qname"] for c in op) == [
         "us-gaap:GrossProfit", "us-gaap:OperatingExpenses",
     ]
@@ -26,6 +28,97 @@ def test_calc_rules_filters_non_calc_edges():
         {"role_uri": "r", "parent_qname": "P", "child_qname": "C", "weight": 1, "edge_type": "presentation"},
     ]
     assert calc_rules_from_edges(edges) == {}
+
+
+def test_calc_rules_keyed_by_period_and_dedup_children():
+    """Codex round-2 F3: same (role, parent, child) appears once per filing
+    period in production; rule key must include period and children must be
+    deduped within a rule to prevent N× child multiplication if identity fires."""
+    from rules_identity import calc_rules_from_edges
+    edges = [
+        # Same edge appears 3 times across 3 periods
+        {"period": "FY2023", "role_uri": "r", "parent_qname": "us-gaap:OperatingIncomeLoss",
+         "child_qname": "us-gaap:GrossProfit", "weight": 1},
+        {"period": "FY2024", "role_uri": "r", "parent_qname": "us-gaap:OperatingIncomeLoss",
+         "child_qname": "us-gaap:GrossProfit", "weight": 1},
+        {"period": "FY2025", "role_uri": "r", "parent_qname": "us-gaap:OperatingIncomeLoss",
+         "child_qname": "us-gaap:GrossProfit", "weight": 1},
+        # Same period with duplicate child entry — must dedup
+        {"period": "FY2025", "role_uri": "r", "parent_qname": "us-gaap:OperatingIncomeLoss",
+         "child_qname": "us-gaap:GrossProfit", "weight": 1},
+    ]
+    rules = calc_rules_from_edges(edges)
+    # 3 distinct (period, role, parent) keys, each with exactly one child
+    assert len(rules) == 3
+    for key, children in rules.items():
+        assert len(key) == 3  # (period, role, parent)
+        assert len(children) == 1  # deduped
+
+
+def test_apply_identity_matches_qname_against_bare_xbrl_tag():
+    """Codex round-2 F1: production calc edges carry child_qname with
+    namespace (e.g. us-gaap:GrossProfit) but FactRow.xbrl_tag is the bare
+    local name (GrossProfit). apply_identity_rules must normalize both sides.
+    Without this fix, calc-linkbase identity never matches any production fact."""
+    from rules_identity import apply_identity_rules
+    from _shared.sec_json_adapter import FactRow
+
+    base = dict(
+        ticker="AAOI", statement="IS", version="GAAP",
+        unit="USD_thousands", weight=1,
+        status="SOURCE_OF_TRUTH", ordinal=None, long_tail_metadata=None,
+        provenance={},
+    )
+    # Two children present, parent missing → identity should derive parent
+    rev = FactRow(**{**base, "cell_id": "rev", "period": "FY2024", "period_end": "2024-12-31",
+                    "period_kind": "fy_annual_duration",
+                    "uni_account": "revenue", "source_account": "us-gaap:Revenues",
+                    "xbrl_tag": "Revenues", "value": 100.0})
+    cogs = FactRow(**{**base, "cell_id": "cogs", "period": "FY2024", "period_end": "2024-12-31",
+                     "period_kind": "fy_annual_duration",
+                     "uni_account": "cost_of_goods_sold",
+                     "source_account": "us-gaap:CostOfGoodsAndServicesSold",
+                     "xbrl_tag": "CostOfGoodsAndServicesSold", "value": 60.0})
+    calc_rules = {
+        ("FY2024", "r", "us-gaap:GrossProfit"): [
+            {"child_qname": "us-gaap:Revenues", "weight": 1, "source": None},
+            {"child_qname": "us-gaap:CostOfGoodsAndServicesSold", "weight": -1, "source": None},
+        ],
+    }
+    qname_to_uni = {"us-gaap:GrossProfit": "gross_profit"}
+    cands = apply_identity_rules([rev, cogs], calc_rules, qname_to_uni)
+    gp = [c for c in cands if c.uni_account == "gross_profit"]
+    assert len(gp) == 1
+    assert gp[0].value == 40.0
+    assert gp[0].rule_id == "CALC_LINKBASE"
+
+
+def test_calc_rules_accepts_production_edge_shape_without_edge_type():
+    """Codex F3: real parse-10QK-gaap _gaap_edges_cal.json edges carry NO
+    edge_type field. They must still be recognized as calc edges (file is
+    already type-implicit by name). Synthetic 'long_tail_metadata' source
+    edges (no qname) must still be filtered out."""
+    edges = [
+        # Production-shape calc edge (no edge_type field)
+        {"role_uri": "http://aaoi.com/role/StatementsOfOps",
+         "parent_qname": "us-gaap:OperatingIncomeLoss",
+         "child_qname": "us-gaap:GrossProfit",
+         "weight": 1, "order": 1.0},
+        {"role_uri": "http://aaoi.com/role/StatementsOfOps",
+         "parent_qname": "us-gaap:OperatingIncomeLoss",
+         "child_qname": "us-gaap:OperatingExpenses",
+         "weight": -1, "order": 2.0},
+        # Long-tail roll-up edge injected by build_separated.py — must be ignored
+        {"period": "FY2024", "axis": "IS",
+         "parent": "selling_general_administrative",
+         "child": "GeneralAndAdministrativeExpense",
+         "weight": 1, "source": "long_tail_metadata"},
+    ]
+    rules = calc_rules_from_edges(edges)
+    assert len(rules) == 1
+    key = (None, "http://aaoi.com/role/StatementsOfOps", "us-gaap:OperatingIncomeLoss")
+    assert key in rules
+    assert len(rules[key]) == 2
 
 
 from rules_identity import apply_identity_rules

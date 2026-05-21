@@ -14,7 +14,9 @@ export type MetricSpec = {
 // Income Statement
 export const IS_ROWS: MetricSpec[] = [
   { key: "revenue", label: "Revenue", kind: "core" },
+  { key: "revenue_long_tail", label: "Other Revenue (long-tail)", kind: "long_tail_bucket" },
   { key: "cost_of_goods_sold", label: "Cost of Revenue", kind: "core" },
+  { key: "cost_of_revenue_long_tail", label: "Other Cost Items (long-tail)", kind: "long_tail_bucket" },
   { key: "gross_profit", label: "Gross Profit", kind: "subtotal" },
   { key: "selling_general_administrative", label: "SG&A", kind: "core" },
   { key: "research_and_development", label: "R&D", kind: "core" },
@@ -31,6 +33,7 @@ export const IS_ROWS: MetricSpec[] = [
   { key: "income_tax_expense", label: "Income Tax Expense", kind: "core" },
   { key: "net_income", label: "Net Income", kind: "subtotal" },
   { key: "below_line_long_tail", label: "Below-Line Items (long-tail)", kind: "long_tail_bucket" },
+  { key: "net_income_available_to_common", label: "Net Income Available to Common", kind: "subtotal" },
   { key: "eps_basic", label: "EPS Basic", kind: "core" },
   { key: "eps_diluted", label: "EPS Diluted", kind: "core" },
   { key: "shares_basic_millions", label: "Shares Basic (M)", kind: "core" },
@@ -196,14 +199,15 @@ export const LONG_TAIL_ROLLUP_HINTS: Record<string, string> = {
 
 export function fmtValue(value: number | null | undefined, unit: string): string {
   if (value === null || value === undefined) return "—";
-  if (unit === "Pure") return `${(value * 100).toFixed(1)}%`;
+  // EPS: 2 decimals (matches PDF disclosure)
   if (unit === "USD_per_share") return `$${value.toFixed(2)}`;
+  // All other numeric metrics: 1 decimal (matches PDF disclosure for millions/thousands tables)
+  if (unit === "Pure") return `${(value * 100).toFixed(1)}%`;
   if (unit === "USD_thousands") {
-    if (Math.abs(value) >= 1_000_000) return `${(value / 1000).toFixed(0)}M`;
     if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(1)}M`;
-    return `${value.toFixed(0)}K`;
+    return `${value.toFixed(1)}K`;
   }
-  if (unit === "USD_millions") return `${value.toFixed(0)}M`;
+  if (unit === "USD_millions") return `${value.toFixed(1)}M`;
   if (unit === "millions_shares") return `${value.toFixed(1)}M`;
   if (unit === "thousands_shares") return `${(value / 1000).toFixed(1)}M`;
   return String(value);

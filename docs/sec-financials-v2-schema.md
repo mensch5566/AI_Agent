@@ -87,11 +87,12 @@ adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validat
 | 12 | `other_nonoperating_income_expense` | `us-gaap:OtherNonoperatingIncomeExpense` | 其他業外 | ✅ |
 | 13 | `income_before_taxes` | `us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxes...` | 稅前淨利 | ✅ |
 | 14 | `income_tax_expense` | `us-gaap:IncomeTaxExpenseBenefit` | 所得稅 | ✅ |
-| 15 | `net_income` | `us-gaap:NetIncomeLoss` | 淨利 | ✅ |
-| 16 | `eps_basic` | `us-gaap:EarningsPerShareBasic` | 基本 EPS（unit=USD_per_share） | ✅ |
-| 17 | `eps_diluted` | `us-gaap:EarningsPerShareDiluted` | 稀釋 EPS（unit=USD_per_share） | ✅ |
-| 18 | `shares_basic_millions` | dei 或 instance fact (no GAAP tag) | 基本股數（百萬股） | ✅ |
-| 19 | `shares_diluted_millions` | 同上 | 稀釋股數 | ✅ |
+| 15 | `net_income` | `us-gaap:NetIncomeLoss` | 淨利（attributable to parent） | ✅ |
+| 16 | `net_income_available_to_common` | `us-gaap:NetIncomeLossAvailableToCommonStockholdersBasic` | 歸屬於母公司普通股東淨利（= net_income − below_line items 如 participating securities allocation；EPS numerator） | ✅ |
+| 17 | `eps_basic` | `us-gaap:EarningsPerShareBasic` | 基本 EPS（unit=USD_per_share） | ✅ |
+| 18 | `eps_diluted` | `us-gaap:EarningsPerShareDiluted` | 稀釋 EPS（unit=USD_per_share） | ✅ |
+| 19 | `shares_basic_millions` | dei 或 instance fact (no GAAP tag) | 基本股數（百萬股） | ✅ |
+| 20 | `shares_diluted_millions` | 同上 | 稀釋股數 | ✅ |
 
 ### 1.2 IS long-tail buckets
 
@@ -100,11 +101,14 @@ adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validat
 | Bucket uni_account | 涵蓋範圍 | rolls_up_to |
 |---|---|---|
 | `revenue_long_tail` | 營收細項拆分 | `revenue` |
+| `cost_of_revenue_long_tail` | COGS 內細項（COGS-portion amortization 等獨立揭露） | `cost_of_goods_sold` |
 | `operating_expense_long_tail` | OpEx 內非標準項（goodwill imp / restructuring / business sep） | `total_operating_expenses` |
 | `nonoperating_long_tail` | OpInc 與稅前淨利之間（divestiture gain/loss / equity method 特例） | `income_before_taxes` |
-| `below_line_long_tail` | NI 附近（discontinued ops / accounting change） | `net_income` |
+| `below_line_long_tail` | NI 附近（discontinued ops / accounting change / participating securities allocation） | `net_income` |
 
 **AAOI 實際出現的 long-tail**：`operating_expense_long_tail` 用於 SG&A 子科目分拆（`SellingAndMarketingExpense`, `GeneralAndAdministrativeExpense`），rolls_up_to=`selling_general_administrative`。
+
+**LITE 實際出現的 long-tail**：`cost_of_revenue_long_tail` 用於 COGS-portion amortization（XBRL `CostOfGoodsAndServicesSoldAmortization`，PDF "Amortization of acquired developed intangibles"），rolls_up_to=`cost_of_goods_sold`。Lumentum 把無形資產攤銷拆 COGS-portion 獨立揭露於 gross profit 之上，跟核心 `amortization_of_acquired_intangibles`（總額）區分。
 
 ---
 

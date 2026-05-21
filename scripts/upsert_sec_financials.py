@@ -269,22 +269,121 @@ def apply(batch: A.NormalizedBatch) -> None:
 # ---- Derived metrics (derive-base output) ------------------------------------
 
 
-def load_derived_metrics(vault: Path, ticker: str) -> list[dict]:
-    """Read latest derive-base run for `ticker` and return its derived_metrics[].
+def load_derived_metrics(vault: Path, ticker: str) -> tuple[str, list[dict]]:
+    """Back-compat wrapper around `load_derived_run` that returns only the
+    (status, rows) pair. Existing call sites + tests use this signature."""
+    status, payload = load_derived_run(vault, ticker)
+    return status, (payload.get("derived_metrics", []) if payload else [])
 
-    Returns [] if no derive-base output exists yet (skill not run).
+
+def load_derived_run(vault: Path, ticker: str) -> tuple[str, dict | None]:
+    """Read latest derive-base run for `ticker` and return the full payload.
+
+    Returns tri-state (status, payload):
+      - ("missing_run", None)     — no derive-base output dir / no runs yet
+      - ("incomplete_run", None)  — run folder exists but JSON missing / unparseable
+      - ("loaded", payload_dict)  — JSON loaded; derived_metrics may be [] (legit empty)
+
+    Callers needing freshness check (R6-F1) should use this and read
+    `payload["metadata"]["input_files"]` to verify source hashes.
     """
     base = (vault / "Khouse" / "Semiconductors" / ticker
             / "01_Source" / "SEC Filings" / "Skill_Output" / "derive-base")
     if not base.exists():
-        return []
+        return ("missing_run", None)
     runs = sorted(p for p in base.iterdir() if p.is_dir())
     if not runs:
-        return []
+        return ("missing_run", None)
     derived = runs[-1] / f"{ticker}_derived.json"
     if not derived.exists():
-        return []
-    return json.loads(derived.read_text()).get("derived_metrics", [])
+        return ("incomplete_run", None)
+    try:
+        payload = json.loads(derived.read_text())
+    except (OSError, json.JSONDecodeError):
+        return ("incomplete_run", None)
+    if payload.get("derived_metrics") is None:
+        return ("incomplete_run", None)
+    return ("loaded", payload)
+
+
+# R7-F1: minimum input_files contract a derive-base run must carry to be
+# considered a verifiable snapshot. Missing/empty input_files or absence of
+# any required key fails the freshness gate, otherwise an old/manual JSON
+# that lacks lineage would bypass R6-F1.
+_REQUIRED_INPUT_FILE_KEYS = frozenset({"gaap_inline", "gaap_facts", "gaap_edges_cal"})
+
+
+def verify_derived_freshness(payload: dict) -> list[dict]:
+    """Re-hash every source file referenced in derived payload.metadata
+    .input_files and compare to the stored sha256. Returns a list of mismatch
+    descriptors (empty = fresh). R6-F1 / R7-F1.
+
+    Each mismatch: {"key", "path", "stored_sha256", "current_sha256", "reason"}
+    reason ∈ {"hash_mismatch", "file_missing", "input_files_missing",
+              "input_file_key_missing"}.
+    """
+    import hashlib
+    metadata = (payload or {}).get("metadata") or {}
+    input_files = metadata.get("input_files")
+    mismatches: list[dict] = []
+
+    # R7-F1: minimum metadata contract.
+    if not input_files:
+        mismatches.append({
+            "key": "(metadata.input_files)", "path": None,
+            "stored_sha256": None, "current_sha256": None,
+            "reason": "input_files_missing",
+        })
+        return mismatches
+    for required_key in _REQUIRED_INPUT_FILE_KEYS:
+        if required_key not in input_files or input_files[required_key] is None:
+            mismatches.append({
+                "key": required_key, "path": None,
+                "stored_sha256": None, "current_sha256": None,
+                "reason": "input_file_key_missing",
+            })
+
+    for key, info in input_files.items():
+        if info is None:  # legitimate optional source (e.g. nongaap absent)
+            continue
+        # R8-F1: info must be a dict with non-empty path AND sha256. Anything
+        # else is malformed metadata — refuse to treat as fresh.
+        if not isinstance(info, dict) or not info.get("path") or not info.get("sha256"):
+            mismatches.append({
+                "key": key, "path": (info.get("path") if isinstance(info, dict) else None),
+                "stored_sha256": (info.get("sha256") if isinstance(info, dict) else None),
+                "current_sha256": None,
+                "reason": "input_file_metadata_invalid",
+            })
+            continue
+        path = Path(info["path"])
+        stored = info["sha256"]
+        if not path.is_file():
+            mismatches.append({
+                "key": key, "path": str(path),
+                "stored_sha256": stored, "current_sha256": None,
+                "reason": "file_missing",
+            })
+            continue
+        try:
+            data = path.read_bytes()
+        except OSError:
+            mismatches.append({
+                "key": key, "path": str(path),
+                "stored_sha256": stored, "current_sha256": None,
+                "reason": "file_unreadable",
+            })
+            continue
+        h = hashlib.sha256()
+        h.update(data)
+        current = h.hexdigest()
+        if current != stored:
+            mismatches.append({
+                "key": key, "path": str(path),
+                "stored_sha256": stored, "current_sha256": current,
+                "reason": "hash_mismatch",
+            })
+    return mismatches
 
 
 # ---- CLI ---------------------------------------------------------------------
@@ -294,6 +393,11 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("ticker", help="ticker symbol (case-insensitive)")
     p.add_argument("--apply", action="store_true", help="real upsert to Supabase (default: dry-run)")
+    p.add_argument("--allow-missing-derived", action="store_true",
+                   help="Allow --apply when local derive-base output is missing "
+                        "AND Supabase already has derived_q4 metrics for this "
+                        "ticker. Default is fail-closed (R7-F2) to prevent "
+                        "mixed-vintage state (new facts + stale metrics).")
     args = p.parse_args()
     ticker = args.ticker.upper()
 
@@ -305,21 +409,105 @@ def main():
         print("\n  ✗ Gate FAILED — refusing to upsert. Fix issues above and re-run.")
         sys.exit(1)
 
-    derived_rows = load_derived_metrics(OBSIDIAN_BASE, ticker)
-    if derived_rows:
-        print(f"\n  + {len(derived_rows)} derived metrics from derive-base")
-    else:
+    derive_status, derived_payload = load_derived_run(OBSIDIAN_BASE, ticker)
+    derived_rows = (derived_payload or {}).get("derived_metrics", []) if derived_payload else []
+    if derive_status == "loaded":
+        print(f"\n  + derive-base output: {len(derived_rows)} rows (status=loaded)")
+    elif derive_status == "missing_run":
         print(f"\n  (no derive-base output found for {ticker})")
+    elif derive_status == "incomplete_run":
+        print(f"\n  ⚠ derive-base latest run INCOMPLETE for {ticker}")
+
+    # R4-F2: incomplete_run must abort the whole apply, not just skip the
+    # derive scope. Otherwise facts/dimensional/edges get refreshed while
+    # metrics stay stale → Viewer shows mixed-vintage data.
+    if args.apply and derive_status == "incomplete_run":
+        print(f"\n  ✗ Refusing --apply: derive-base latest run is incomplete for {ticker}.")
+        print(f"     Re-run derive-base for {ticker} and retry. Existing DB rows preserved.")
+        sys.exit(2)
+
+    # R7-F2: missing_run is only safe when DB has no derived_q4 metrics for
+    # this ticker (first-time ingest). When DB already has derived metrics,
+    # parse-only refresh would create mixed-vintage state (new facts + stale
+    # metrics). Fail-closed unless --allow-missing-derived is explicit.
+    if args.apply and derive_status == "missing_run" and not args.allow_missing_derived:
+        # R8-F2: mirror the snapshot-replacement scope (statement IN IS/CF) so
+        # future derive-analytics RATIO rows don't falsely trigger this gate.
+        client = supabase_client()
+        existing = (client.table("sec_financial_metrics")
+                    .select("cell_id", count="exact")
+                    .eq("ticker", ticker)
+                    .eq("period_kind", "derived_q4")
+                    .eq("version", "GAAP")
+                    .in_("statement", ["IS", "CF"])
+                    .limit(1)
+                    .execute())
+        if existing.count and existing.count > 0:
+            print(f"\n  ✗ Refusing --apply: derive-base output missing for {ticker} "
+                  f"but Supabase has {existing.count} existing derived_q4 rows.")
+            print(f"     Run derive-base for {ticker} first, or pass "
+                  f"--allow-missing-derived to accept parse-only refresh "
+                  f"(existing metrics will not be touched).")
+            sys.exit(4)
+
+    # R6-F1: source-hash freshness gate. If `derive_status == "loaded"` but
+    # the underlying parse files have changed since the derive run produced
+    # this output, refuse --apply — otherwise we'd write new facts and
+    # stale derived metrics into Supabase, creating mixed-vintage Viewer
+    # state. Workflow fix: re-run derive-base, then retry upsert.
+    if args.apply and derive_status == "loaded" and derived_payload is not None:
+        mismatches = verify_derived_freshness(derived_payload)
+        if mismatches:
+            print(f"\n  ✗ Refusing --apply: derive-base output is STALE for {ticker}.")
+            print(f"     {len(mismatches)} input source(s) changed since derive run:")
+            for m in mismatches:
+                reason = m["reason"]
+                if reason == "file_missing":
+                    print(f"       - {m['key']}: file missing at {m['path']}")
+                elif reason == "file_unreadable":
+                    print(f"       - {m['key']}: file unreadable at {m['path']} (OSError)")
+                elif reason == "input_files_missing":
+                    print(f"       - metadata.input_files absent — derive payload lacks source-snapshot contract")
+                elif reason == "input_file_key_missing":
+                    print(f"       - {m['key']}: required input_files key absent in derive payload")
+                elif reason == "input_file_metadata_invalid":
+                    print(f"       - {m['key']}: malformed metadata (missing path or sha256)")
+                else:
+                    print(f"       - {m['key']}: stored={m['stored_sha256'][:12]}…  current={m['current_sha256'][:12]}…")
+            print(f"     Re-run derive-base for {ticker} and retry. Existing DB rows preserved.")
+            sys.exit(3)
 
     if args.apply:
         print(f"\n=== Real upsert to Supabase ===")
         apply(batch)
-        if derived_rows:
+        # Fail-closed snapshot replacement (Codex round-2 F5 + round-3 F2/F3
+        # + round-4 F2): only DELETE the derive-base scope when status=loaded.
+        # incomplete_run was already rejected above; missing_run keeps any
+        # existing metrics untouched (parse-only refresh path).
+        #
+        # Scope narrowed to statement IN ('IS','CF') so future
+        # derive-analytics RATIO rows (same period_kind) are not clobbered.
+        if derive_status == "loaded":
             client = supabase_client()
-            client.table("sec_financial_metrics").upsert(
-                derived_rows, on_conflict="cell_id"
-            ).execute()
-            print(f"  upserted: sec_financial_metrics ({len(derived_rows)} rows)")
+            del_r = (client.table("sec_financial_metrics")
+                     .delete()
+                     .eq("ticker", ticker)
+                     .eq("period_kind", "derived_q4")
+                     .eq("version", "GAAP")
+                     .in_("statement", ["IS", "CF"])
+                     .execute())
+            print(f"  cleared derive-base scope (IS/CF): sec_financial_metrics ({len(del_r.data)} rows deleted)")
+            if derived_rows:
+                client.table("sec_financial_metrics").upsert(
+                    derived_rows, on_conflict="cell_id"
+                ).execute()
+                print(f"  upserted: sec_financial_metrics ({len(derived_rows)} rows)")
+            else:
+                print(f"  (derive-base loaded an intentionally empty set — DB derive scope is now empty)")
+        else:
+            # missing_run reaches here only with --allow-missing-derived (R7-F2);
+            # no Supabase round-trip needed for the derive scope.
+            print(f"  ⚠ skipping derive-base scope replacement (status={derive_status}); existing metrics preserved")
         print(f"  ✓ Upsert complete.")
     else:
         print(f"\n  ✓ Dry-run complete. Gate passed. Re-run with --apply to write to Supabase.")

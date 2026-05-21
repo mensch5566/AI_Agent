@@ -2,6 +2,35 @@ from audit import to_derived_metric_row, write_audit_md, write_conflict_md
 from derive_types import Candidate
 
 
+def test_audit_can_be_imported_standalone_from_all_mirrors():
+    """Codex round-5 F2: audit.py must be import-able directly in each
+    of the 4 mirror locations without relying on io_loader having run
+    first to set sys.path. Regression guard for the AI_AGENT_ROOT
+    discovery hardening."""
+    import importlib.util, sys as _sys, os
+    mirrors = [
+        os.path.expanduser("~/CC_Switch_Config/skills/derive-base/scripts/audit.py"),
+        os.path.expanduser("~/.claude/skills/derive-base/scripts/audit.py"),
+        os.path.expanduser("~/.codex/skills/derive-base/scripts/audit.py"),
+        os.path.expanduser("~/.cc-switch/skills/derive-base/scripts/audit.py"),
+    ]
+    tested = 0
+    for path in mirrors:
+        if not os.path.exists(path):
+            continue
+        spec = importlib.util.spec_from_file_location(f"audit_{abs(hash(path))}", path)
+        mod = importlib.util.module_from_spec(spec)
+        _sys.path.insert(0, os.path.dirname(path))
+        try:
+            spec.loader.exec_module(mod)
+        finally:
+            _sys.path.pop(0)
+        assert callable(mod.metrics_cell_id), f"{path}: metrics_cell_id missing after import"
+        assert callable(mod.write_audit_md), f"{path}: write_audit_md missing after import"
+        tested += 1
+    assert tested > 0, "at least one mirror should exist on this machine"
+
+
 def _c():
     return Candidate(
         ticker="AAOI", period="Q4_FY2024", period_kind="derived_q4",
