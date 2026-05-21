@@ -323,6 +323,53 @@ def test_duplicate_identity_in_existing_audited_fails_closed(tmp_path):
         xbrl_extract._preserve_audited_cells(new_data, existing)
 
 
+def test_legacy_agent_classified_match_promotes_to_classification_source(tmp_path):
+    """F7: MATCH on a legacy AGENT_CLASSIFIED-in-audit_source row must end
+    up with canonical classification_source=AGENT_CLASSIFIED on the new row.
+    Without this, the next re-extract wouldn't detect it (silent loss)."""
+    existing = _write_existing(tmp_path, [{
+        "period": "Q1_FY2026", "uni_account": "operating_expense_long_tail",
+        "source_account": "Some Item", "unit": "USD_millions", "type": "GAAP",
+        "value": 5.0,
+        "audit_source": "AGENT_CLASSIFIED",  # legacy field
+        "long_tail_metadata": {"rolls_up_to": "operating_expenses"},
+    }])
+    new_data = {"income_statement": [{
+        "period": "Q1_FY2026", "uni_account": "operating_expense_long_tail",
+        "source_account": "Some Item", "unit": "USD_millions", "type": "GAAP",
+        "value": 5.0,  # MATCH
+    }]}
+    out, *_ = xbrl_extract._preserve_audited_cells(new_data, existing)
+    new_row = out["income_statement"][0]
+    assert new_row.get("classification_source") == "AGENT_CLASSIFIED"
+    assert new_row.get("long_tail_metadata") == {"rolls_up_to": "operating_expenses"}
+    # Legacy field must NOT be carried as audit_source
+    assert new_row.get("audit_source") != "AGENT_CLASSIFIED"
+
+
+def test_legacy_agent_classified_conflict_promotes_and_uses_classification_event(tmp_path):
+    """F7: CONFLICT on legacy AGENT_CLASSIFIED must also normalize AND
+    set CLASSIFICATION event (not AUDIT)."""
+    existing = _write_existing(tmp_path, [{
+        "period": "Q1_FY2026", "uni_account": "operating_expense_long_tail",
+        "source_account": "Some Item", "unit": "USD_millions", "type": "GAAP",
+        "value": 5.0,
+        "audit_source": "AGENT_CLASSIFIED",  # legacy field only
+        "long_tail_metadata": {"rolls_up_to": "operating_expenses"},
+    }])
+    new_data = {"income_statement": [{
+        "period": "Q1_FY2026", "uni_account": "operating_expense_long_tail",
+        "source_account": "Some Item", "unit": "USD_millions", "type": "GAAP",
+        "value": 7.5,  # differs
+    }]}
+    out, *_ = xbrl_extract._preserve_audited_cells(new_data, existing)
+    new_row = out["income_statement"][0]
+    assert new_row["value"] == 5.0
+    assert new_row.get("classification_source") == "AGENT_CLASSIFIED"
+    assert new_row["preservation_event"] == "REEXTRACT_PRESERVED_PRIOR_CLASSIFICATION"
+    assert new_row["preserved_from_audit"] is False
+
+
 def test_long_tail_rows_with_different_source_account_no_collision(tmp_path):
     """Two long-tail rows sharing uni_account but different source_account
     must NOT collide on identity (this is the bug F1 fixes)."""

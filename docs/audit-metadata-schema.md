@@ -247,17 +247,64 @@ Predicate：
 
 ## 6. 識別 key（preservation matching）
 
-不同 skill 用不同 dimensional identity 比對舊/新 row 是否 match：
+識別 key 分**兩層**：
 
-| Skill | Identity key (tuple, deterministic) |
-|---|---|
-| parse-10QK-gaap | `(period, period_kind, version, statement, uni_account, source_account, xbrl_tag, unit)` |
-| parse-8k-nongaap | 同上，但 version 永遠 NON_GAAP |
-| parse-SEC-supplement v3 | `(period, period_kind, axis_key, member_key, uni_account, canonical_json(other_dimensions), unit)` |
+- **Phase 2 inline parse JSON preservation identity** — 對應 `_shared.audit_metadata.build_preservation_identity()`，作用於 `xbrl_extract.py` / `extract_8k_nongaap.py` re-extract 時對舊/新 row 的 match。Row 上實際存在的欄位才用。
+- **Future DB / API `cell_id` identity** — 對應 `_shared/sec_json_adapter.py::metrics_cell_id()`，作用於 Supabase upsert / derive-base input；可以包含 row 上沒寫但 adapter 推得出的欄位（例：`period_kind` 從 period label 推、`xbrl_tag` 從 source_account 推）。
+
+### 6.1 Phase 2 inline parse JSON identity（GAAP / 8K）
+
+```python
+PRESERVATION_IDENTITY_FIELDS = (
+    "period",            # e.g. "Q1_FY2026"
+    "uni_account",       # canonical metric key
+    "source_account",    # 為 GAAP/8K row 充當 xbrl_tag 角色
+    "unit",              # USD_millions / USD_thousands / USD_per_share / ...
+    "type",              # "GAAP" / "NON_GAAP" — 充當 version 角色
+)
+```
+
+Identity tuple: `(statement, period, uni_account, source_account, unit, type)`
+
+helper:
+```python
+from _shared.audit_metadata import build_preservation_identity, DuplicateIdentityError
+
+ident = build_preservation_identity(statement, row)
+# duplicate 必須 fail-closed，禁止 dict last-write-wins
+```
+
+**為什麼是這 6 欄而不是 §6.3 的 8 欄**：
+- `period_kind` 不是 row 上的獨立欄位（已隱含在 `period` 字串裡如 `Q1_FY2026` / `FY2025`）。Phase 2 不要求 row 寫 `period_kind`。
+- `xbrl_tag` 對 SEC GAAP row 就是 `source_account` 的值（如 `RevenueFromContractWithCustomerExcludingAssessedTax`）。不重複欄位。
+- `version` 用 row 上的 `type` 欄位實際命名（v1_long_format 寫的就是 `type` 不是 `version`）。
+
+### 6.2 Supplement (parse-SEC-supplement v3) identity
+
+```python
+(period, period_kind, axis_key, member_key, uni_account,
+ canonical_json(other_dimensions), unit)
+```
 
 `axis_key` / `member_key` 由 `_shared/sec_json_adapter.py::build_axis_key()` / `build_member_key()` 計算，preference order：xbrl qname → local display label → fallback。**不要用 raw display label** 做 primary identity（會撞 label-variant case）。
 
-`cell_id` 是上述 tuple 的 hash + deterministic encoding，可作為 identity 的 short form。
+Supplement 走自己的 identity（dimensional facts 性質不同）；Phase 4 任務。
+
+### 6.3 Future DB / API `cell_id`（Phase 3 起）
+
+```python
+# adapter 側可包含 row 上沒顯式寫但能推導的欄位
+(period, period_kind, version, statement, uni_account, source_account,
+ xbrl_tag, unit)
+```
+
+`cell_id` 是上述 tuple 的 hash + deterministic encoding，可作為 identity 的 short form。Phase 3 adapter 落地時定型。
+
+---
+
+### 6.4 Duplicate fail-closed
+
+`build_preservation_identity` 對 legacy row（缺 `unit` / `type`）容許，**但 duplicate 必須 fail-closed**：兩 row 同 identity tuple → raise `DuplicateIdentityError`。不允許 dict last-write-wins（會誤把一個 row 的 audit metadata 蓋掉另一個）。
 
 ---
 

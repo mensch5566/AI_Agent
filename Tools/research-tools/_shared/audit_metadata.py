@@ -111,10 +111,24 @@ def copy_audit_provenance(dst: dict[str, Any], src: dict[str, Any]) -> None:
 
 def copy_classification_metadata(dst: dict[str, Any], src: dict[str, Any]) -> None:
     """Copy classification metadata (long-tail bucket assignment).
-    Independent from audit provenance."""
+    Independent from audit provenance.
+
+    F7 fix: normalize legacy `audit_source == "AGENT_CLASSIFIED"` to
+    `classification_source = "AGENT_CLASSIFIED"`. Without this, MATCH/CONFLICT
+    on a legacy row would drop the classification marker silently (the legacy
+    field doesn't get carried, and the new field was never set), causing the
+    NEXT re-extract to not even track the row anymore.
+    """
     for key in CLASSIFICATION_KEYS:
         if key in src and src[key] is not None:
             dst[key] = src[key]
+    # Legacy normalization: if src had AGENT_CLASSIFIED in audit_source field
+    # but no canonical classification_source, set it now.
+    if (
+        not dst.get("classification_source")
+        and src.get("audit_source") == "AGENT_CLASSIFIED"
+    ):
+        dst["classification_source"] = "AGENT_CLASSIFIED"
 
 
 def set_preservation_event(
@@ -283,3 +297,110 @@ class DuplicateIdentityError(RuntimeError):
     """Raised when two rows resolve to the same preservation identity tuple.
     Means the fallback identity isn't unique — pipeline must add discriminator
     or stop. Never silently overwrite (last-write-wins) on audit-bearing data."""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Unit resolution by uni_account type (F8 fix)
+#
+# Different metric families use different unit types; a USD_millions fallback
+# is wrong for EPS / shares / pct. Resolver checks uni_account family first,
+# only falls back to ticker monetary unit for clearly monetary metrics.
+# ─────────────────────────────────────────────────────────────────────────────
+
+EPS_UNI_ACCOUNTS = frozenset({
+    "eps_basic", "eps_diluted",
+    "adj_eps", "adj_eps_basic", "adj_eps_diluted",
+    "non_gaap_eps", "non_gaap_eps_basic", "non_gaap_eps_diluted",
+})
+
+SHARES_UNI_ACCOUNT_PREFIXES = ("shares_",)
+
+PCT_UNI_ACCOUNT_SUFFIXES = ("_pct", "_margin", "_rate", "_ratio")
+
+
+def expected_unit_family(uni_account: str | None) -> str | None:
+    """Return expected unit FAMILY for a given uni_account:
+      'per_share' | 'shares' | 'pct' | 'monetary' | None (unknown)
+
+    Used by apply_audit resolvers to refuse cross-family fallback
+    (e.g. don't write USD_millions to an eps_basic row).
+    """
+    if not uni_account:
+        return None
+    if uni_account in EPS_UNI_ACCOUNTS:
+        return "per_share"
+    if any(uni_account.startswith(p) for p in SHARES_UNI_ACCOUNT_PREFIXES):
+        return "shares"
+    if any(uni_account.endswith(s) for s in PCT_UNI_ACCOUNT_SUFFIXES):
+        return "pct"
+    # Otherwise treat as monetary (revenue / cost / income / expense / etc.)
+    return "monetary"
+
+
+def _row_unit_family(row: dict[str, Any]) -> str | None:
+    """What family is the given row's unit? Used to filter same-family rows."""
+    u = row.get("unit")
+    if not u:
+        return None
+    u_lower = u.lower()
+    if "per_share" in u_lower or u_lower.endswith("_per_share"):
+        return "per_share"
+    if "share" in u_lower:  # millions_shares, shares
+        return "shares"
+    if u_lower == "pct" or u_lower.endswith("_pct"):
+        return "pct"
+    if u_lower.startswith("usd") or u_lower.startswith("twd") or u_lower.endswith(
+        ("_millions", "_thousands", "_billions")
+    ):
+        return "monetary"
+    return None
+
+
+# Canonical default unit per family. Resolver returns these ONLY as last-
+# resort fallback for non-monetary families (where ticker scale is irrelevant).
+FAMILY_DEFAULT_UNITS = {
+    "per_share": "USD_per_share",
+    "shares":    "millions_shares",
+    "pct":       "pct",
+}
+
+
+def resolve_unit_for_uni_account(
+    is_rows: list[dict[str, Any]],
+    period: str,
+    uni_account: str,
+) -> str | None:
+    """Resolve `unit` for a new audit/classification row, respecting the
+    metric family of `uni_account`. F8 fix.
+
+    Order:
+      1. Existing row with same uni_account → that row's unit
+      2. Existing row in same family at same period
+      3. Existing row in same family anywhere
+      4. Canonical default for non-monetary family (per_share / shares / pct)
+      5. None → caller must fail-closed
+
+    For 'monetary' family, no canonical default — ticker scale matters
+    (AAOI uses USD_thousands, INTC/LITE use USD_millions). Resolver returns
+    None and caller must ensure existing rows or explicit input.
+    """
+    family = expected_unit_family(uni_account)
+    # 1. exact uni_account match (no family check needed — same uni)
+    for r in is_rows:
+        if r.get("uni_account") == uni_account and r.get("unit"):
+            return r["unit"]
+    # 2 & 3. family-filtered fallback
+    if family:
+        for r in is_rows:
+            if (r.get("period") == period
+                and _row_unit_family(r) == family
+                and r.get("unit")):
+                return r["unit"]
+        for r in is_rows:
+            if _row_unit_family(r) == family and r.get("unit"):
+                return r["unit"]
+    # 4. canonical default for non-monetary
+    if family in FAMILY_DEFAULT_UNITS:
+        return FAMILY_DEFAULT_UNITS[family]
+    # 5. monetary family with no existing rows: fail-closed (caller decides)
+    return None

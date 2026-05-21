@@ -25,9 +25,11 @@ from _shared.audit_metadata import (  # noqa: E402
     clear_audit_provenance,
     copy_audit_provenance,
     copy_classification_metadata,
+    expected_unit_family,
     is_manual_audit_source,
     is_manual_classification_source,
     normalize_audit_source,
+    resolve_unit_for_uni_account,
     row_has_audited_value,
     set_preservation_event,
     stamp_audit_provenance,
@@ -166,6 +168,31 @@ def test_copy_classification_does_not_copy_audit():
     copy_classification_metadata(dst, src)
     assert "audit_source" not in dst
     assert dst["classification_source"] == "AGENT_CLASSIFIED"
+
+
+def test_copy_classification_normalizes_legacy_agent_classified_in_audit_source():
+    """F7: legacy row with audit_source=AGENT_CLASSIFIED (no classification_source)
+    must be normalized to classification_source=AGENT_CLASSIFIED."""
+    src = {
+        "audit_source":          "AGENT_CLASSIFIED",  # legacy field
+        "long_tail_metadata":    {"rolls_up_to": "operating_expenses"},
+        # no canonical classification_source
+    }
+    dst = {}
+    copy_classification_metadata(dst, src)
+    assert dst["classification_source"] == "AGENT_CLASSIFIED"
+    assert dst["long_tail_metadata"] == {"rolls_up_to": "operating_expenses"}
+    # Legacy audit_source must NOT be carried (would falsely look like audit)
+    assert "audit_source" not in dst
+
+
+def test_copy_classification_does_not_override_existing_classification_source():
+    """If dst already has classification_source, legacy normalization must
+    not clobber it."""
+    src = {"audit_source": "AGENT_CLASSIFIED"}
+    dst = {"classification_source": "MANUAL_RECLASSIFIED"}
+    copy_classification_metadata(dst, src)
+    assert dst["classification_source"] == "MANUAL_RECLASSIFIED"  # not overwritten
 
 
 # ── §4 set_preservation_event ────────────────────────────────────────────────
@@ -370,6 +397,91 @@ def test_row_has_audited_value_classification_only_is_false():
 
 
 # ── round-trip: stamp → copy → preserve ──────────────────────────────────────
+
+# ── F8: unit resolution by uni_account family ──────────────────────────────
+
+def test_expected_unit_family_eps():
+    assert expected_unit_family("eps_basic")    == "per_share"
+    assert expected_unit_family("eps_diluted")  == "per_share"
+    assert expected_unit_family("adj_eps")      == "per_share"
+
+
+def test_expected_unit_family_shares():
+    assert expected_unit_family("shares_basic_millions")   == "shares"
+    assert expected_unit_family("shares_diluted_millions") == "shares"
+
+
+def test_expected_unit_family_pct():
+    assert expected_unit_family("gross_margin_pct")        == "pct"
+    assert expected_unit_family("effective_tax_rate")      == "pct"
+    assert expected_unit_family("net_margin")              == "pct"
+
+
+def test_expected_unit_family_monetary_default():
+    assert expected_unit_family("revenue")          == "monetary"
+    assert expected_unit_family("net_income")       == "monetary"
+    assert expected_unit_family("operating_income") == "monetary"
+
+
+def test_resolve_unit_eps_does_not_fallback_to_monetary():
+    """F8: new eps_basic row with no existing eps row must NOT inherit
+    USD_millions from other IS rows."""
+    is_rows = [
+        {"period": "Q1_FY2026", "uni_account": "revenue", "unit": "USD_millions"},
+        {"period": "Q1_FY2026", "uni_account": "net_income", "unit": "USD_millions"},
+    ]
+    u = resolve_unit_for_uni_account(is_rows, "Q1_FY2026", "eps_basic")
+    assert u == "USD_per_share"   # canonical default for per_share family
+    assert u != "USD_millions"
+
+
+def test_resolve_unit_shares_does_not_fallback_to_monetary():
+    is_rows = [
+        {"period": "Q1_FY2026", "uni_account": "revenue", "unit": "USD_millions"},
+    ]
+    u = resolve_unit_for_uni_account(is_rows, "Q1_FY2026", "shares_basic_millions")
+    assert u == "millions_shares"
+    assert u != "USD_millions"
+
+
+def test_resolve_unit_pct_does_not_fallback_to_monetary():
+    is_rows = [
+        {"period": "Q1_FY2026", "uni_account": "revenue", "unit": "USD_millions"},
+    ]
+    u = resolve_unit_for_uni_account(is_rows, "Q1_FY2026", "gross_margin_pct")
+    assert u == "pct"
+
+
+def test_resolve_unit_exact_match_wins():
+    is_rows = [
+        {"period": "Q1_FY2026", "uni_account": "eps_basic", "unit": "USD_per_share"},
+        {"period": "Q1_FY2026", "uni_account": "revenue", "unit": "USD_millions"},
+    ]
+    assert resolve_unit_for_uni_account(is_rows, "Q1_FY2026", "eps_basic") == "USD_per_share"
+
+
+def test_resolve_unit_monetary_uses_existing_row_unit():
+    """USD_thousands small-cap: new monetary row must inherit ticker scale."""
+    is_rows = [
+        {"period": "Q1_FY2026", "uni_account": "revenue", "unit": "USD_thousands"},
+    ]
+    assert resolve_unit_for_uni_account(is_rows, "Q1_FY2026", "net_income") == "USD_thousands"
+
+
+def test_resolve_unit_monetary_no_existing_rows_fails():
+    """Monetary family with no existing rows must return None (fail-closed)."""
+    assert resolve_unit_for_uni_account([], "Q1_FY2026", "net_income") is None
+
+
+def test_resolve_unit_same_period_family_preferred_over_other_period():
+    is_rows = [
+        {"period": "Q4_FY2025", "uni_account": "eps_diluted", "unit": "TWD_per_share"},
+        {"period": "Q1_FY2026", "uni_account": "eps_diluted", "unit": "USD_per_share"},
+    ]
+    u = resolve_unit_for_uni_account(is_rows, "Q1_FY2026", "eps_basic")
+    # Same period eps_diluted preferred over other-period eps_diluted
+    assert u == "USD_per_share"
+
 
 def test_round_trip_stamp_copy_preserve():
     """Realistic re-extract preservation flow."""
