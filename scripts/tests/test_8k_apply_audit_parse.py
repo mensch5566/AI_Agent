@@ -202,32 +202,56 @@ def test_is_audit_value_filled_no_table_returns_false(tmp_path):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# F12-R4-1: 8-K extract _resolve_unit must route raw $-prefixed strings
-# through normalize_unit_label (was silently mapping `$ thousands` → USD_millions)
-#
-# _resolve_unit is a nested function inside review_md_for_ticker; we verify
-# the helper contract (normalize_unit_label canonical form) and that the
-# production file imports + uses normalize_unit_label.
+# F12-R4-1 + R5-F2: 8-K extract resolve_8k_unit promoted to module-level for
+# direct testing. R5-F1: USD_billions propagates (no down-convert).
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_normalize_unit_label_handles_dollar_thousands_for_extract_path():
-    """F12-R4-1: extract path now routes via this helper. Verify the
-    canonical-form contract that the new _resolve_unit relies on."""
-    from _shared.audit_metadata import normalize_unit_label
-    assert normalize_unit_label("$ thousands")      == "USD_thousands"
-    assert normalize_unit_label("thousands of USD") == "USD_thousands"
-    # Old broken branch was `if "$" in u: return "USD_millions"`;
-    # `$ thousands` would have hit it. The new helper returns USD_thousands.
-    assert normalize_unit_label("$ millions")       == "USD_millions"
-
-
-def test_extract_8k_imports_normalize_unit_label():
-    """Guard: production extract path uses the shared helper. If someone
-    reverts the import, this test fails."""
+def test_resolve_8k_unit_dollar_thousands_canonicalizes():
+    """F12-R4-1 core: `$ thousands` MUST NOT be silently mapped to USD_millions
+    (old `$`-substring bug → 1000x scale error). Now → USD_thousands."""
     e = _import_extract_8k()
-    assert hasattr(e, "normalize_unit_label")
-    # And: helper agrees with itself on the F12-R4-1 case
-    assert e.normalize_unit_label("$ thousands") == "USD_thousands"
+    assert e.resolve_8k_unit("$ thousands")      == "USD_thousands"
+    assert e.resolve_8k_unit("thousands of USD") == "USD_thousands"
+
+
+def test_resolve_8k_unit_dollar_millions_canonicalizes():
+    e = _import_extract_8k()
+    assert e.resolve_8k_unit("$ millions")      == "USD_millions"
+    assert e.resolve_8k_unit("millions of USD") == "USD_millions"
+
+
+def test_resolve_8k_unit_billions_propagates_no_downconvert():
+    """R5-F1: USD_billions must propagate as-is, NOT be silently
+    down-converted to USD_millions (that would change the unit string
+    without scaling the value → reverse 1000x scale error)."""
+    e = _import_extract_8k()
+    assert e.resolve_8k_unit("billions of USD") == "USD_billions"
+    assert e.resolve_8k_unit("$ billions")      == "USD_billions"
+
+
+def test_resolve_8k_unit_percent():
+    e = _import_extract_8k()
+    assert e.resolve_8k_unit("%")       == "pct"
+    assert e.resolve_8k_unit("percent") == "pct"
+
+
+def test_resolve_8k_unit_per_share():
+    e = _import_extract_8k()
+    assert e.resolve_8k_unit("$ per share") == "USD_per_share"
+    assert e.resolve_8k_unit("USD/share")   == "USD_per_share"
+
+
+def test_resolve_8k_unit_empty_or_none_defaults_to_usd_millions():
+    """Legacy fallback for missing unit (backward compat)."""
+    e = _import_extract_8k()
+    assert e.resolve_8k_unit("")   == "USD_millions"
+    assert e.resolve_8k_unit(None) == "USD_millions"
+
+
+def test_resolve_8k_unit_unknown_passthrough():
+    """Unknown unit strings preserved as-is (legacy fallback)."""
+    e = _import_extract_8k()
+    assert e.resolve_8k_unit("widgets") == "widgets"
 
 
 
