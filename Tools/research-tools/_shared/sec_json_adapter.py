@@ -22,6 +22,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import cell_id as _id
+from .audit_metadata import (
+    AUDIT_PROVENANCE_KEYS,
+    CLASSIFICATION_KEYS,
+    PRESERVATION_EVENT_KEYS,
+    normalize_audit_source,
+)
 from .dimensional_aliases import build_axis_key, build_member_key
 from .period_kind import infer_period_kind, normalize_supplement_period_kind
 from .unit_canonicalize import (
@@ -200,6 +206,55 @@ def adapt_company(metadata: dict, sign_flip_concepts: list[str] | None = None) -
     )
 
 
+def _carry_audit_metadata_to_provenance(row: dict, provenance: dict[str, Any]) -> None:
+    """Copy v4 audit metadata channels from a parse-skill row into the
+    FactRow.provenance dict that downstream (derive-base / upsert / API)
+    reads.
+
+    Schema v4 §7.1 canonical contract:
+      - `audit_source` → normalized via legacy enum map (canonical only)
+      - `audit_source_raw` → preserves whatever the row had (forensic)
+      - audit_note / audited_at / audited_by / audit_evidence carried as-is
+      - classification_source / classification_note / classified_at /
+        long_tail_metadata carried (independent channel)
+      - preservation_event keys carried (downstream may need to inspect)
+    """
+    raw_audit_source = row.get("audit_source")
+    raw_audit_source_raw = row.get("audit_source_raw")
+    # Canonical: normalize whatever audit_source carries (legacy or canonical
+    # already). If row only has audit_source_raw (DB legacy fallback),
+    # use that as the input to normalize.
+    canonical = normalize_audit_source(raw_audit_source or raw_audit_source_raw)
+    if canonical is not None:
+        provenance["audit_source"] = canonical
+        # audit_source_raw: prefer explicit field; fall back to whatever the
+        # row had in audit_source (since that's the raw legacy enum on
+        # legacy rows). Schema §2.2: write-side preserves the original.
+        provenance["audit_source_raw"] = (
+            raw_audit_source_raw if raw_audit_source_raw is not None
+            else raw_audit_source
+        )
+    # Carry remaining audit fields verbatim (skip the two we just handled)
+    remaining_audit_keys = tuple(
+        k for k in AUDIT_PROVENANCE_KEYS
+        if k not in ("audit_source", "audit_source_raw")
+    )
+    for key in remaining_audit_keys:
+        v = row.get(key)
+        if v is not None:
+            provenance[key] = v
+    # Classification channel
+    for key in CLASSIFICATION_KEYS:
+        v = row.get(key)
+        if v is not None:
+            provenance[key] = v
+    # Preservation event channel
+    for key in PRESERVATION_EVENT_KEYS:
+        v = row.get(key)
+        if v is not None:
+            provenance[key] = v
+
+
 def adapt_gaap_facts(gaap_json: dict, pe_map: dict[str, str]) -> tuple[list[FactRow], list[dict]]:
     """parse-10QK-gaap facts -> FactRow list."""
     ticker = gaap_json["metadata"]["ticker"].upper()
@@ -264,12 +319,12 @@ def _adapt_one_gaap_fact(
     provenance: dict[str, Any] = {
         "source_filing": form.get(period),
         "accession_number": accession.get(period),
-        # Preserve audit_source if present on the fact row (apply_audit
-        # writes "MANUAL_AUDIT_FROM_PDF" when the value comes from NLM/PDF
-        # audit rather than XBRL). Downstream derive-base reads this to
-        # relax concept-match guards for audit-sourced rows.
-        "audit_source": f.get("audit_source"),
     }
+    # Phase 3.1: audit metadata v4 — read raw row, dual-write canonical +
+    # raw, carry full v4 channel set (audit / classification / preservation
+    # event). Reading downstream MUST use `provenance.audit_source` for
+    # canonical decisions; `audit_source_raw` is forensic only.
+    _carry_audit_metadata_to_provenance(f, provenance)
 
     cid = _id.facts_cell_id(
         ticker=ticker,
@@ -369,8 +424,18 @@ def _adapt_one_nongaap_fact(
     provenance: dict[str, Any] = {
         "source_filing": "8-K",
         "accession_number": accession_8k.get(period),
-        "audit_source": "NotebookLM_PDF_read",
+        # Phase 3.2: provenance.data_source replaces legacy
+        # `audit_source: "NotebookLM_PDF_read"`. That string was NEVER a v4
+        # manual audit source (not in MANUAL_AUDIT_SOURCES) — using
+        # `audit_source` for it would let `is_manual_audit_source` return
+        # False but still pollute the field semantics. Move to its own
+        # parser-extraction lineage field.
+        "data_source": "NotebookLM_PDF_read",
     }
+    # Phase 3.2: carry v4 audit metadata (canonical + raw) from row if present.
+    # Manual audits written by parse-8k-nongaap.apply_audit will populate
+    # these via stamp_audit_provenance; plain extracted rows have nothing.
+    _carry_audit_metadata_to_provenance(r, provenance)
 
     cid = _id.facts_cell_id(
         ticker=ticker,
