@@ -93,6 +93,22 @@ STATIC_ALLOWLIST_GAAP = [
     ("operating_income",          ("gross_profit", "total_operating_expenses"),
         lambda v: v["gross_profit"] - v["total_operating_expenses"],
         "STATIC_ALLOWLIST", 4),
+    # IBT (income_before_taxes) fallback — used when filer omits the
+    # XBRL subtotal tag for this period (e.g. Lumentum FY2021+).
+    # filter_against_facts ensures raw IBT (when present) overrides derived.
+    #
+    # Preferred form uses interest_and_other_net (the net non-operating
+    # subtotal already disclosed). Fallback uses signed sub-components;
+    # interest_expense is stored as positive magnitude (XBRL convention)
+    # so the formula subtracts it. We do NOT add interest_income because
+    # LITE's other_nonoperating_income_expense is already a net value;
+    # adding interest_income would double-count.
+    ("income_before_taxes",       ("operating_income", "interest_and_other_net"),
+        lambda v: v["operating_income"] + v["interest_and_other_net"],
+        "IDENTITY_IBT_FROM_OP_PLUS_NONOP", 4),
+    ("income_before_taxes",       ("operating_income", "interest_expense", "other_nonoperating_income_expense"),
+        lambda v: v["operating_income"] - v["interest_expense"] + v["other_nonoperating_income_expense"],
+        "IDENTITY_IBT_FROM_OP_MINUS_INTEXP_PLUS_NONOP", 5),
 ]
 
 STATIC_ALLOWLIST_NONGAAP = [

@@ -51,6 +51,25 @@ OBSIDIAN_BASE = Path(os.environ.get(
 
 BATCH_SIZE = 500
 
+# Fallback list of rule_ids produced by derive-base. Used by the missing_run
+# gate when local derive-base output isn't loaded (we can't read its
+# managed_rule_ids metadata, so we must hardcode what derive-base might own).
+# When derive-base output IS loaded, prefer derived_payload.metadata.managed_rule_ids.
+# Update when adding a new derive-base rule.
+DERIVE_BASE_RULE_IDS_FALLBACK = (
+    # Q4 reconstruction
+    "Q4_FY_MINUS_9M",
+    "Q4_FY_MINUS_Q1Q2Q3",
+    # GAAP / Non-GAAP identity allowlists
+    "STATIC_ALLOWLIST",
+    "NG_ALLOWLIST",
+    # XBRL calculation linkbase derivation
+    "CALC_LINKBASE",
+    # Future identity rules — derive-base outputs concrete rule_ids, not prefixes,
+    # so we list each here. When a new IDENTITY_* rule lands in derive-base, add it.
+    "IDENTITY_IBT_FROM_OP_PLUS_NONOP",
+)
+
 
 # ---- IO helpers --------------------------------------------------------------
 
@@ -287,21 +306,32 @@ def load_derived_run(vault: Path, ticker: str) -> tuple[str, dict | None]:
     Callers needing freshness check (R6-F1) should use this and read
     `payload["metadata"]["input_files"]` to verify source hashes.
     """
+    return _load_skill_run(vault, ticker, "derive-base", f"{ticker}_derived.json", "derived_metrics")
+
+
+def load_analytics_run(vault: Path, ticker: str) -> tuple[str, dict | None]:
+    """Read latest derive-analytics run for `ticker`. Same tri-state contract
+    as load_derived_run. Payload rows live under "ratio_metrics" key."""
+    return _load_skill_run(vault, ticker, "derive-analytics", f"{ticker}_analytics.json", "ratio_metrics")
+
+
+def _load_skill_run(vault: Path, ticker: str, skill_dir: str,
+                    json_filename: str, rows_key: str) -> tuple[str, dict | None]:
     base = (vault / "Khouse" / "Semiconductors" / ticker
-            / "01_Source" / "SEC Filings" / "Skill_Output" / "derive-base")
+            / "01_Source" / "SEC Filings" / "Skill_Output" / skill_dir)
     if not base.exists():
         return ("missing_run", None)
     runs = sorted(p for p in base.iterdir() if p.is_dir())
     if not runs:
         return ("missing_run", None)
-    derived = runs[-1] / f"{ticker}_derived.json"
-    if not derived.exists():
+    payload_path = runs[-1] / json_filename
+    if not payload_path.exists():
         return ("incomplete_run", None)
     try:
-        payload = json.loads(derived.read_text())
+        payload = json.loads(payload_path.read_text())
     except (OSError, json.JSONDecodeError):
         return ("incomplete_run", None)
-    if payload.get("derived_metrics") is None:
+    if payload.get(rows_key) is None:
         return ("incomplete_run", None)
     return ("loaded", payload)
 
@@ -395,9 +425,9 @@ def main():
     p.add_argument("--apply", action="store_true", help="real upsert to Supabase (default: dry-run)")
     p.add_argument("--allow-missing-derived", action="store_true",
                    help="Allow --apply when local derive-base output is missing "
-                        "AND Supabase already has derived_q4 metrics for this "
-                        "ticker. Default is fail-closed (R7-F2) to prevent "
-                        "mixed-vintage state (new facts + stale metrics).")
+                        "AND Supabase already has derive-base-managed metrics "
+                        "for this ticker. Default is fail-closed (R7-F2) to "
+                        "prevent mixed-vintage state (new facts + stale metrics).")
     args = p.parse_args()
     ticker = args.ticker.upper()
 
@@ -426,25 +456,25 @@ def main():
         print(f"     Re-run derive-base for {ticker} and retry. Existing DB rows preserved.")
         sys.exit(2)
 
-    # R7-F2: missing_run is only safe when DB has no derived_q4 metrics for
-    # this ticker (first-time ingest). When DB already has derived metrics,
+    # R7-F2: missing_run is only safe when DB has no derive-base-managed
+    # metrics for this ticker (first-time ingest). When DB already has them,
     # parse-only refresh would create mixed-vintage state (new facts + stale
     # metrics). Fail-closed unless --allow-missing-derived is explicit.
+    #
+    # Scope is identified by provenance.rule_id (filter on JSON path), using
+    # the DERIVE_BASE_RULE_IDS_FALLBACK constant. derive-analytics writes
+    # different rule_ids and is not touched.
     if args.apply and derive_status == "missing_run" and not args.allow_missing_derived:
-        # R8-F2: mirror the snapshot-replacement scope (statement IN IS/CF) so
-        # future derive-analytics RATIO rows don't falsely trigger this gate.
         client = supabase_client()
         existing = (client.table("sec_financial_metrics")
                     .select("cell_id", count="exact")
                     .eq("ticker", ticker)
-                    .eq("period_kind", "derived_q4")
-                    .eq("version", "GAAP")
-                    .in_("statement", ["IS", "CF"])
+                    .in_("provenance->>rule_id", list(DERIVE_BASE_RULE_IDS_FALLBACK))
                     .limit(1)
                     .execute())
         if existing.count and existing.count > 0:
             print(f"\n  ✗ Refusing --apply: derive-base output missing for {ticker} "
-                  f"but Supabase has {existing.count} existing derived_q4 rows.")
+                  f"but Supabase has {existing.count} existing derive-base-managed rows.")
             print(f"     Run derive-base for {ticker} first, or pass "
                   f"--allow-missing-derived to accept parse-only refresh "
                   f"(existing metrics will not be touched).")
@@ -485,18 +515,23 @@ def main():
         # incomplete_run was already rejected above; missing_run keeps any
         # existing metrics untouched (parse-only refresh path).
         #
-        # Scope narrowed to statement IN ('IS','CF') so future
-        # derive-analytics RATIO rows (same period_kind) are not clobbered.
+        # Scope is determined by derive-base's self-declared managed_rule_ids
+        # in payload metadata. derive-analytics uses different rule_ids and
+        # is not touched. Falls back to DERIVE_BASE_RULE_IDS_FALLBACK if the
+        # payload predates managed_rule_ids metadata (legacy output).
         if derive_status == "loaded":
+            managed = (derived_payload.get("metadata", {}) or {}).get("managed_rule_ids")
+            if not managed:
+                managed = list(DERIVE_BASE_RULE_IDS_FALLBACK)
+                print(f"  (derive payload has no managed_rule_ids; using fallback list)")
             client = supabase_client()
             del_r = (client.table("sec_financial_metrics")
                      .delete()
                      .eq("ticker", ticker)
-                     .eq("period_kind", "derived_q4")
-                     .eq("version", "GAAP")
-                     .in_("statement", ["IS", "CF"])
+                     .in_("provenance->>rule_id", managed)
                      .execute())
-            print(f"  cleared derive-base scope (IS/CF): sec_financial_metrics ({len(del_r.data)} rows deleted)")
+            print(f"  cleared derive-base scope (rule_ids={managed}): "
+                  f"sec_financial_metrics ({len(del_r.data)} rows deleted)")
             if derived_rows:
                 client.table("sec_financial_metrics").upsert(
                     derived_rows, on_conflict="cell_id"
@@ -508,6 +543,34 @@ def main():
             # missing_run reaches here only with --allow-missing-derived (R7-F2);
             # no Supabase round-trip needed for the derive scope.
             print(f"  ⚠ skipping derive-base scope replacement (status={derive_status}); existing metrics preserved")
+
+        # ---- derive-analytics (ratios) snapshot replacement ----
+        # Independent scope from derive-base. Uses its own managed_rule_ids.
+        # If analytics output is missing/incomplete we just skip — analytics
+        # is purely additive (ratios). No fail-closed gate yet; it's MVP.
+        analytics_status, analytics_payload = load_analytics_run(OBSIDIAN_BASE, ticker)
+        if analytics_status == "loaded":
+            ratio_rows = analytics_payload.get("ratio_metrics") or []
+            a_managed = (analytics_payload.get("metadata", {}) or {}).get("managed_rule_ids")
+            if not a_managed:
+                print(f"  (analytics payload has no managed_rule_ids; skipping delete)")
+            else:
+                a_del = (client.table("sec_financial_metrics")
+                         .delete()
+                         .eq("ticker", ticker)
+                         .in_("provenance->>rule_id", a_managed)
+                         .execute())
+                print(f"  cleared derive-analytics scope (rule_ids={a_managed}): "
+                      f"sec_financial_metrics ({len(a_del.data)} rows deleted)")
+            if ratio_rows:
+                client.table("sec_financial_metrics").upsert(
+                    ratio_rows, on_conflict="cell_id"
+                ).execute()
+                print(f"  upserted: sec_financial_metrics ({len(ratio_rows)} analytics rows)")
+        elif analytics_status == "missing_run":
+            print(f"  (no derive-analytics output found for {ticker} — ratios not refreshed)")
+        elif analytics_status == "incomplete_run":
+            print(f"  ⚠ derive-analytics latest run INCOMPLETE for {ticker}; existing ratio rows preserved")
         print(f"  ✓ Upsert complete.")
     else:
         print(f"\n  ✓ Dry-run complete. Gate passed. Re-run with --apply to write to Supabase.")

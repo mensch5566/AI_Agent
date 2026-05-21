@@ -58,6 +58,22 @@ def discover_sources(vault_base: Path, ticker: str) -> dict[str, Path | None]:
     return out
 
 
+def discover_cross_check_run(vault_base: Path, ticker: str) -> Path | None:
+    """Find the most recent cross-check run folder for ticker, used for
+    derived-vs-NLM validation. Returns None if no run exists (older tickers
+    or first-time ingest before cross-check has been run)."""
+    skill_out = _vault_skill_out(vault_base, ticker)
+    cc_dir = skill_out / "parse-sec-cross-check"
+    if not cc_dir.exists():
+        return None
+    # Run folders follow timestamped pattern: 2026-MM-DD-HHMM_*
+    runs = sorted(
+        [d for d in cc_dir.iterdir() if d.is_dir() and d.name[:4].isdigit()],
+        reverse=True,
+    )
+    return runs[0] if runs else None
+
+
 def output_dir(vault_base: Path, ticker: str, run_stamp: str) -> Path:
     d = _vault_skill_out(vault_base, ticker) / "derive-base" / run_stamp
     d.mkdir(parents=True, exist_ok=True)

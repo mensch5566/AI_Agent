@@ -249,6 +249,54 @@ def test_allowlist_skips_when_parent_present():
     assert [c for c in cands if c.uni_account == "gross_profit"] == []
 
 
+def test_ibt_identity_preferred_via_interest_and_other_net():
+    """IDENTITY_IBT_FROM_OP_PLUS_NONOP fires when raw IBT missing but
+    operating_income and interest_and_other_net are both present.
+    LITE FY2021 reference: 527.0 + (-63.9) = 463.1 (matches PDF)."""
+    facts = [
+        _f(uni_account="operating_income",       value=527.0),
+        _f(uni_account="interest_and_other_net", value=-63.9, cell_id="ion"),
+    ]
+    cands = apply_static_allowlist(facts, version="GAAP")
+    ibt = [c for c in cands if c.uni_account == "income_before_taxes"]
+    assert any(c.rule_id == "IDENTITY_IBT_FROM_OP_PLUS_NONOP" for c in ibt)
+    preferred = [c for c in ibt if c.rule_id == "IDENTITY_IBT_FROM_OP_PLUS_NONOP"][0]
+    assert abs(preferred.value - 463.1) < 1e-9
+    assert preferred.rule_priority == 4
+
+
+def test_ibt_identity_fallback_via_sub_components():
+    """IDENTITY_IBT_FROM_OP_MINUS_INTEXP_PLUS_NONOP fires when filer doesn't
+    disclose the net subtotal but discloses interest_expense + other_nonop
+    separately. Interest_expense is positive magnitude (XBRL convention) so
+    formula subtracts it. LITE FY2021 sub-component view:
+    527.0 - 66.7 + 2.8 = 463.1 (matches PDF)."""
+    facts = [
+        _f(uni_account="operating_income",                  value=527.0),
+        _f(uni_account="interest_expense",                  value=66.7, cell_id="ie"),
+        _f(uni_account="other_nonoperating_income_expense", value=2.8,  cell_id="onie"),
+    ]
+    cands = apply_static_allowlist(facts, version="GAAP")
+    fallback = [c for c in cands
+                if c.uni_account == "income_before_taxes"
+                and c.rule_id == "IDENTITY_IBT_FROM_OP_MINUS_INTEXP_PLUS_NONOP"]
+    assert len(fallback) == 1
+    assert abs(fallback[0].value - 463.1) < 1e-9
+    assert fallback[0].rule_priority == 5  # lower precedence than preferred
+
+
+def test_ibt_identity_skips_when_raw_ibt_present():
+    """If income_before_taxes is already a direct disclosed fact, identity
+    rule must not produce a competing candidate (parent-already-direct guard)."""
+    facts = [
+        _f(uni_account="operating_income",       value=527.0),
+        _f(uni_account="interest_and_other_net", value=-63.9, cell_id="ion"),
+        _f(uni_account="income_before_taxes",    value=463.1, cell_id="ibt"),
+    ]
+    cands = apply_static_allowlist(facts, version="GAAP")
+    assert [c for c in cands if c.uni_account == "income_before_taxes"] == []
+
+
 from rules_identity import build_qname_to_uni
 
 

@@ -349,10 +349,14 @@ def test_main_apply_fails_closed_on_missing_run_with_db_metrics(tmp_path, monkey
     assert apply_called["n"] == 0
 
 
-def test_missing_run_db_lookup_ignores_ratio_rows(tmp_path, monkeypatch):
-    """R8-F2: when checking if Supabase already has derive-base-managed
-    metrics, the query must restrict to statement IN ('IS','CF'). RATIO
-    rows belong to future derive-analytics scope and must not trigger the
+def test_missing_run_db_lookup_filters_by_rule_id(tmp_path, monkeypatch):
+    """Replaces the legacy R8-F2 statement-IS-CF filter test.
+
+    When checking if Supabase already has derive-base-managed metrics, the
+    query must restrict by provenance->>rule_id IN DERIVE_BASE_RULE_IDS_FALLBACK.
+    This is the provenance-based scope contract (replacing the old
+    period_kind=derived_q4 + statement IN IS/CF combo) so RATIO rows from
+    derive-analytics — which have different rule_ids — never trigger the
     missing_run + DB-existing exit-4 path."""
     upsert = _import_upsert()
     vault = tmp_path
@@ -368,28 +372,31 @@ def test_missing_run_db_lookup_ignores_ratio_rows(tmp_path, monkeypatch):
     class _StubExec:
         def __init__(self, n): self.count = n; self.data = []
     class _StubQuery:
-        def __init__(self): self._has_isfc = False
+        def __init__(self): self._has_rule_filter = False
         def select(self, *a, **kw): return self
         def eq(self, *a, **kw): return self
         def in_(self, col, vals):
             captured_filters.append((col, tuple(vals)))
-            self._has_isfc = (col == "statement" and set(vals) == {"IS", "CF"})
+            self._has_rule_filter = (
+                col == "provenance->>rule_id"
+                and set(vals) >= {"Q4_FY_MINUS_9M", "Q4_FY_MINUS_Q1Q2Q3"}
+            )
             return self
         def limit(self, *a, **kw): return self
         def execute(self):
-            # Only return count > 0 if the IS/CF filter was applied.
-            return _StubExec(7 if self._has_isfc else 0)
+            # Only return count > 0 if the rule_id filter was applied.
+            return _StubExec(7 if self._has_rule_filter else 0)
     class _StubClient:
         def table(self, name): return _StubQuery()
     monkeypatch.setattr(upsert, "supabase_client", lambda: _StubClient())
     monkeypatch.setattr(sys, "argv", ["upsert_sec_financials.py", "RTONLY", "--apply"])
 
-    # With IS/CF filter present, stub returns 7 → exit 4 (gate fires correctly)
+    # With rule_id filter present, stub returns 7 → exit 4 (gate fires correctly)
     with pytest.raises(SystemExit) as exc:
         upsert.main()
     assert exc.value.code == 4
-    # The IS/CF filter must have been applied to the lookup
-    assert ("statement", ("IS", "CF")) in captured_filters
+    # The rule_id filter must have been applied to the lookup
+    assert any(col == "provenance->>rule_id" for col, _ in captured_filters)
 
 
 def test_main_apply_allows_missing_run_when_flag_passed(tmp_path, monkeypatch):
