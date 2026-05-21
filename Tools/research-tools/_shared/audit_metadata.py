@@ -337,21 +337,91 @@ def expected_unit_family(uni_account: str | None) -> str | None:
     return "monetary"
 
 
+def normalize_unit_label(raw_unit: str | None) -> str | None:
+    """Map a raw `unit` string (from XBRL parse / 8-K review table) to a
+    canonical form. F12 fix: 8-K raw output uses display strings like
+    `thousands of USD`, `millions of USD`, `$ millions`, `%` — these were
+    invisible to `_row_unit_family()` before.
+
+    Canonical forms returned:
+      - "USD_thousands" / "USD_millions" / "USD_billions"
+      - "TWD_thousands" / "TWD_millions"
+      - "USD_per_share" / "TWD_per_share"
+      - "millions_shares" / "shares"
+      - "pct"
+      - None for unrecognized input
+
+    Already-canonical inputs pass through unchanged.
+
+    TODO (non-USD): when adding TWD/JPY/etc. tickers, extend the currency
+    detection. Currently biased to USD because Phase 2 scope is SEC 美股.
+    """
+    if not raw_unit:
+        return None
+    u = str(raw_unit).strip()
+    if not u:
+        return None
+    # Already canonical
+    canonical = {
+        "USD_thousands", "USD_millions", "USD_billions",
+        "TWD_thousands", "TWD_millions",
+        "USD_per_share", "TWD_per_share",
+        "millions_shares", "shares",
+        "pct",
+    }
+    if u in canonical:
+        return u
+    u_lower = u.lower()
+    # Percent / margin / rate
+    if u_lower in ("%", "percent", "percentage", "pct"):
+        return "pct"
+    # Per-share variants
+    if "per share" in u_lower or "per_share" in u_lower or u_lower.endswith("/share"):
+        if "twd" in u_lower or "nt$" in u_lower or "ntd" in u_lower:
+            return "TWD_per_share"
+        return "USD_per_share"
+    # Shares count
+    if "share" in u_lower and ("million" in u_lower or "mn" in u_lower):
+        return "millions_shares"
+    if u_lower in ("shares", "share count", "share"):
+        return "shares"
+    # Monetary — detect scale and currency from substrings
+    scale = None
+    if "thousand" in u_lower or u_lower in ("k", "k$"):
+        scale = "thousands"
+    elif "million" in u_lower or u_lower in ("m", "mm", "mn"):
+        scale = "millions"
+    elif "billion" in u_lower or u_lower in ("b", "bn"):
+        scale = "billions"
+    if scale:
+        if "twd" in u_lower or "nt$" in u_lower or "ntd" in u_lower:
+            return f"TWD_{scale}" if scale != "billions" else "TWD_millions"
+        # Default to USD for $ / "of USD" / bare scale on SEC pipeline
+        return f"USD_{scale}"
+    return None
+
+
 def _row_unit_family(row: dict[str, Any]) -> str | None:
-    """What family is the given row's unit? Used to filter same-family rows."""
+    """What family is the given row's unit? Used to filter same-family rows.
+
+    F12 fix: normalize raw display strings first so we recognize formats like
+    `thousands of USD` (AAOI 8-K) and `$ millions` (LITE 8-K)."""
     u = row.get("unit")
     if not u:
         return None
-    u_lower = u.lower()
-    if "per_share" in u_lower or u_lower.endswith("_per_share"):
+    canonical = normalize_unit_label(u)
+    if canonical:
+        u_lower = canonical.lower()
+    else:
+        u_lower = u.lower()
+    if "per_share" in u_lower:
         return "per_share"
-    if "share" in u_lower:  # millions_shares, shares
+    if "share" in u_lower:
         return "shares"
     if u_lower == "pct" or u_lower.endswith("_pct"):
         return "pct"
-    if u_lower.startswith("usd") or u_lower.startswith("twd") or u_lower.endswith(
-        ("_millions", "_thousands", "_billions")
-    ):
+    if (u_lower.startswith("usd") or u_lower.startswith("twd")
+            or u_lower.endswith(("_millions", "_thousands", "_billions"))):
         return "monetary"
     return None
 

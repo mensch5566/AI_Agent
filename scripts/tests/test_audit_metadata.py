@@ -29,6 +29,7 @@ from _shared.audit_metadata import (  # noqa: E402
     is_manual_audit_source,
     is_manual_classification_source,
     normalize_audit_source,
+    normalize_unit_label,
     resolve_unit_for_uni_account,
     row_has_audited_value,
     set_preservation_event,
@@ -471,6 +472,83 @@ def test_resolve_unit_monetary_uses_existing_row_unit():
 def test_resolve_unit_monetary_no_existing_rows_fails():
     """Monetary family with no existing rows must return None (fail-closed)."""
     assert resolve_unit_for_uni_account([], "Q1_FY2026", "net_income") is None
+
+
+# ── F12: normalize_unit_label + raw unit family detection ────────────────────
+
+def test_normalize_unit_label_canonical_passthrough():
+    assert normalize_unit_label("USD_millions")  == "USD_millions"
+    assert normalize_unit_label("USD_thousands") == "USD_thousands"
+    assert normalize_unit_label("USD_per_share") == "USD_per_share"
+    assert normalize_unit_label("pct")           == "pct"
+
+
+def test_normalize_unit_label_raw_monetary_thousands():
+    """AAOI 8-K: 'thousands of USD'."""
+    assert normalize_unit_label("thousands of USD") == "USD_thousands"
+    assert normalize_unit_label("$ thousands")      == "USD_thousands"
+
+
+def test_normalize_unit_label_raw_monetary_millions():
+    """LITE 8-K: '$ millions'."""
+    assert normalize_unit_label("$ millions")       == "USD_millions"
+    assert normalize_unit_label("millions of USD")  == "USD_millions"
+
+
+def test_normalize_unit_label_percent_variants():
+    assert normalize_unit_label("%")       == "pct"
+    assert normalize_unit_label("percent") == "pct"
+
+
+def test_normalize_unit_label_per_share_variants():
+    assert normalize_unit_label("$ per share") == "USD_per_share"
+    assert normalize_unit_label("USD/share")   == "USD_per_share"
+
+
+def test_normalize_unit_label_shares_variant():
+    assert normalize_unit_label("millions of shares") == "millions_shares"
+    assert normalize_unit_label("shares")             == "shares"
+
+
+def test_normalize_unit_label_none_or_empty():
+    assert normalize_unit_label(None) is None
+    assert normalize_unit_label("")   is None
+    assert normalize_unit_label("   ") is None
+
+
+def test_normalize_unit_label_unknown_returns_none():
+    assert normalize_unit_label("widgets") is None
+
+
+def test_resolve_unit_recognizes_raw_thousands_of_usd():
+    """F12 core: existing AAOI row with `thousands of USD` raw unit must
+    be recognized as monetary so new monetary row inherits it (not fail-closed)."""
+    is_rows = [
+        {"period": "Q1_FY2026", "uni_account": "revenue", "unit": "thousands of USD"},
+    ]
+    u = resolve_unit_for_uni_account(is_rows, "Q1_FY2026", "net_income")
+    assert u == "thousands of USD"  # returns whatever existing row has
+
+
+# ── F13: 8K apply integration — review-table unit must be canonicalized ─────
+
+def test_normalize_then_family_check_compatible():
+    """Sim 8K apply path: review table unit=`thousands of USD`, key=revenue
+    → canon=USD_thousands, family=monetary == expected monetary → use canon."""
+    review_raw = "thousands of USD"
+    key = "revenue"
+    canon = normalize_unit_label(review_raw)
+    assert canon == "USD_thousands"
+    assert expected_unit_family(key) == "monetary"
+
+
+def test_normalize_then_family_check_incompatible_pct_for_eps():
+    """Review table mis-marks pct for eps_basic; family mismatch must be
+    detected so apply can fallback."""
+    canon = normalize_unit_label("%")
+    assert canon == "pct"
+    assert expected_unit_family("eps_basic") == "per_share"
+    # Caller sees canon!=family → fallback to resolver
 
 
 def test_resolve_unit_same_period_family_preferred_over_other_period():

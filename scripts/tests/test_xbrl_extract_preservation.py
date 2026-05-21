@@ -137,9 +137,10 @@ def test_conflict_accept_new_clears_audit_provenance(tmp_path):
 
 # ── Legacy AGENT_CLASSIFIED in audit_source field ────────────────────────────
 
-def test_legacy_agent_classified_in_audit_source_field_preserved(tmp_path):
-    """Pre-v4 apply_audit wrote AGENT_CLASSIFIED into audit_source. We still
-    must preserve those rows (as classification, not audit)."""
+def test_legacy_agent_classified_in_audit_source_field_canonicalized_on_added_back(tmp_path):
+    """F14: ADDED_BACK on a pre-v4 row with audit_source=AGENT_CLASSIFIED
+    must canonicalize: classification_source set, audit_source dropped,
+    forensic raw preserved under long_tail_metadata.legacy_audit_source_raw."""
     existing = _write_existing(tmp_path, [{
         "period": "Q3_FY2025", "uni_account": "operating_expense_long_tail",
         "value": 3.5,
@@ -150,8 +151,11 @@ def test_legacy_agent_classified_in_audit_source_field_preserved(tmp_path):
     out, n_pres, _ = xbrl_extract._preserve_audited_cells(new_data, existing)
     assert n_pres == 1
     new_row = out["income_statement"][0]
-    # Legacy field carried through (don't lose data)
-    assert new_row["audit_source"] == "AGENT_CLASSIFIED"
+    # F14: canonical — classification_source set, audit_source dropped
+    assert new_row.get("classification_source") == "AGENT_CLASSIFIED"
+    assert new_row.get("audit_source") is None or "audit_source" not in new_row
+    # Forensic raw preserved in long_tail_metadata
+    assert new_row["long_tail_metadata"]["legacy_audit_source_raw"] == "AGENT_CLASSIFIED"
     # Treated as classification preservation, not audit
     assert new_row["preservation_event"] == "REEXTRACT_PRESERVED_PRIOR_CLASSIFICATION"
     assert new_row["preserved_from_audit"] is False

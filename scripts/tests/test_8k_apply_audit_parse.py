@@ -141,6 +141,66 @@ def test_unmapped_table_with_audit_internal_key_emitted(tmp_path):
 # F6 mixed tables in one file
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────────────
+# F11: is_audit_value_filled header-aware
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _import_extract_8k():
+    """Lazy import — needs CC_Switch_Config skill path on sys.path."""
+    sys.path.insert(
+        0,
+        "/Users/mensch5566/CC_Switch_Config/skills/parse-8k-nongaap/scripts",
+    )
+    import extract_8k_nongaap as e
+    return e
+
+
+def test_is_audit_value_filled_empty_audit_value_returns_false(tmp_path):
+    """F11 core bug: NLM Non-GAAP numbers were being counted as filled."""
+    e = _import_extract_8k()
+    md = _write(tmp_path, [
+        MAIN_HEADER, MAIN_SEP,
+        "| Q1_FY2020 | Gross profit | `gross_profit` | HARD | 206.1 |  |  |  | $ millions |",
+        "| Q1_FY2020 | Adj. EPS | `adj_eps` | HARD | 0.45 |  |  |  | USD_per_share |",
+    ])
+    assert e.is_audit_value_filled(md) is False
+
+
+def test_is_audit_value_filled_filled_returns_true(tmp_path):
+    e = _import_extract_8k()
+    md = _write(tmp_path, [
+        MAIN_HEADER, MAIN_SEP,
+        "| Q1_FY2020 | Adj. EPS | `adj_eps` | HARD | 0.45 |  | 0.48 | corrected | USD_per_share |",
+    ])
+    assert e.is_audit_value_filled(md) is True
+
+
+def test_is_audit_value_filled_mixed(tmp_path):
+    e = _import_extract_8k()
+    md = _write(tmp_path, [
+        MAIN_HEADER, MAIN_SEP,
+        "| Q1_FY2020 | Revenue | `revenue` | HARD | 500 |  |  |  | USD_millions |",
+        "| Q1_FY2020 | Adj. EPS | `adj_eps` | HARD | 0.45 |  | 0.48 | x | USD_per_share |",
+    ])
+    assert e.is_audit_value_filled(md) is True
+
+
+def test_is_audit_value_filled_unmapped_table(tmp_path):
+    """Unmapped table also has audit_value column — must check both tables."""
+    e = _import_extract_8k()
+    md = _write(tmp_path, [
+        UNMAPPED_HEADER, UNMAPPED_SEP,
+        "| Q1_FY2020 | Weird | 42 | USD_millions | `adj_other` | 43 | x |",
+    ])
+    assert e.is_audit_value_filled(md) is True
+
+
+def test_is_audit_value_filled_no_table_returns_false(tmp_path):
+    e = _import_extract_8k()
+    md = _write(tmp_path, ["# Header", "Some text", ""])
+    assert e.is_audit_value_filled(md) is False
+
+
 def test_main_and_unmapped_tables_both_parsed(tmp_path):
     md = _write(tmp_path, [
         "# Header",
