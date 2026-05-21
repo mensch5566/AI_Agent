@@ -35,8 +35,8 @@ function displayValue(c: Cell | undefined, signFlipConcepts: Set<string>): strin
   if (!c) return "—";
   const flip = !!c.xbrl_tag && signFlipConcepts.has(c.xbrl_tag);
   const v = flip ? -Math.abs(c.value) : c.value;
-  if (v < 0) return `(${fmtValue(Math.abs(v), c.unit)})`;
-  return fmtValue(v, c.unit);
+  if (v < 0) return `(${fmtValue(Math.abs(v), c.unit, c.uni_account)})`;
+  return fmtValue(v, c.unit, c.uni_account);
 }
 
 function statusTooltip(status: CellStatus, c?: Cell): string {
@@ -157,7 +157,6 @@ export function StatementMatrix({
                 }
                 style={{
                   background: isSelected ? undefined : rowBg,
-                  boxShadow: selColor ? `inset 3px 0 0 ${selColor}` : undefined,
                 }}
                 onClick={clickable ? () => onToggleRow!(row.key) : undefined}
                 title={
@@ -177,7 +176,12 @@ export function StatementMatrix({
                   }
                   style={{
                     paddingLeft: 12 + indentPx,
-                    background: isSelected ? "transparent" : rowBg,
+                    // Always opaque so the sticky Metric column hides scrolled-away
+                    // numbers underneath. The selection indicator is rendered as an
+                    // inset left bar here (moved from <tr>) so the opaque td doesn't
+                    // mask it.
+                    background: rowBg,
+                    boxShadow: selColor ? `inset 3px 0 0 ${selColor}` : undefined,
                   }}
                 >
                   {selColor && (

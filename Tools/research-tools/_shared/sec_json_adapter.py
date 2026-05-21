@@ -264,7 +264,11 @@ def _adapt_one_gaap_fact(
     provenance: dict[str, Any] = {
         "source_filing": form.get(period),
         "accession_number": accession.get(period),
-        "audit_source": None,
+        # Preserve audit_source if present on the fact row (apply_audit
+        # writes "MANUAL_AUDIT_FROM_PDF" when the value comes from NLM/PDF
+        # audit rather than XBRL). Downstream derive-base reads this to
+        # relax concept-match guards for audit-sourced rows.
+        "audit_source": f.get("audit_source"),
     }
 
     cid = _id.facts_cell_id(

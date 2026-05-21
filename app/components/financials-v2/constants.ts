@@ -197,12 +197,32 @@ export const LONG_TAIL_ROLLUP_HINTS: Record<string, string> = {
 
 // Display formatting
 
-export function fmtValue(value: number | null | undefined, unit: string): string {
+// XBRL "Pure" unit covers both percentage-style ratios (margins, tax rate) and
+// multiple-style ratios (current/quick/cash ratio). The stored value is the
+// raw decimal in both cases; the difference is purely display. List here the
+// uni_accounts that should render as a multiple ("4.49x") instead of the
+// default percentage ("449.2%").
+export const RATIO_AS_MULTIPLE = new Set<string>([
+  "current_ratio",
+  // Add quick_ratio / cash_ratio / debt_to_equity here when derive-analytics
+  // emits them.
+]);
+
+export function fmtValue(
+  value: number | null | undefined,
+  unit: string,
+  uniAccount?: string,
+): string {
   if (value === null || value === undefined) return "—";
   // EPS: 2 decimals (matches PDF disclosure)
   if (unit === "USD_per_share") return `$${value.toFixed(2)}`;
   // All other numeric metrics: 1 decimal (matches PDF disclosure for millions/thousands tables)
-  if (unit === "Pure") return `${(value * 100).toFixed(1)}%`;
+  if (unit === "Pure") {
+    if (uniAccount && RATIO_AS_MULTIPLE.has(uniAccount)) {
+      return `${value.toFixed(2)}x`;
+    }
+    return `${(value * 100).toFixed(1)}%`;
+  }
   if (unit === "USD_thousands") {
     if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(1)}M`;
     return `${value.toFixed(1)}K`;

@@ -178,9 +178,25 @@ def _concepts_match(*facts) -> bool:
     SecuritiesFvNi` but Q1/Q2/Q3 use `EquitySecuritiesFvNiGainLoss`).
     Subtracting these is arithmetically possible but semantically wrong.
     Require the normalized concept identity (local-name of source_account
-    or xbrl_tag) to match across all inputs."""
+    or xbrl_tag) to match across all inputs.
+
+    Exception: NLM-audited rows (apply_audit-written) carry the PDF label as
+    `source_account` but the value's semantic identity is anchored by
+    `uni_account` (auditor confirmed). Different PDFs may use different
+    wording for the same line item across years (e.g. "Income before income
+    taxes" vs "Loss before income taxes") — treat all audit-sourced inputs
+    as concept-compatible.
+    """
     def _local(s: str | None) -> str:
         return (s or "").rsplit(":", 1)[-1]
+    # If ANY input is audit-sourced, fall back to uni_account+unit identity
+    # (already enforced by caller). PDF-label variation is not a concept change.
+    if any(
+        (getattr(f, "provenance", None) or {}).get("audit_source") or
+        getattr(f, "audit_source", None)
+        for f in facts
+    ):
+        return True
     concepts = set()
     for f in facts:
         concept = _local(getattr(f, "source_account", "")) or _local(getattr(f, "xbrl_tag", ""))

@@ -15,10 +15,16 @@ import { LONG_TAIL_ROLLUP_HINTS, ROWS_BY_STATEMENT, comparePeriods } from "./con
  *   cell: {cell?, status} — status='PENDING' if no DB row found
  *
  * Statement-aware period filtering (per docs/financials-data-rules.md §SEC v2):
- *   IS/CF/RATIO + quarterly: quarter_duration ∪ derived_q4
- *   IS/CF/RATIO + annual:    fy_annual_duration
+ *   IS/CF + quarterly:       quarter_duration ∪ derived_q4
+ *   IS/CF + annual:          fy_annual_duration
  *   BS + quarterly:          instant_period_end (period = Qx_FYyyyy)
  *   BS + annual:             instant_period_end (period = FYyyyy)
+ *   RATIO + quarterly:       quarter_duration ∪ derived_q4 ∪ instant_period_end (Qx_FYyyyy)
+ *   RATIO + annual:          fy_annual_duration ∪ instant_period_end (FYyyyy)
+ *
+ * RATIO mixes duration-based ratios (margins, ETR computed off IS) and
+ * instant-based ratios (current_ratio computed off BS). Both period_kinds are
+ * allowed; instant cells are constrained by period-name pattern to avoid leakage.
  */
 
 export type Frequency = "quarterly" | "annual";
@@ -94,7 +100,18 @@ export function buildMatrix(
       if (!BS_PKINDS.includes(c.period_kind)) return false;
       return frequency === "quarterly" ? isQuarterPeriod(c.period) : isFyPeriod(c.period);
     }
-    // IS / CF / RATIO
+    if (statement === "RATIO") {
+      // Allow both duration-based ratios (margins, ETR) and instant-based
+      // ratios (current_ratio off BS). Instant cells must additionally match
+      // the freq's period-name shape so we don't accidentally pull stray
+      // periods into the RATIO grid.
+      if (c.period_kind === "instant_period_end") {
+        return frequency === "quarterly" ? isQuarterPeriod(c.period) : isFyPeriod(c.period);
+      }
+      const allowed = frequency === "quarterly" ? QUARTERLY_PKINDS_IS_CF : ANNUAL_PKINDS_IS_CF;
+      return allowed.includes(c.period_kind);
+    }
+    // IS / CF
     const allowed = frequency === "quarterly" ? QUARTERLY_PKINDS_IS_CF : ANNUAL_PKINDS_IS_CF;
     return allowed.includes(c.period_kind);
   });

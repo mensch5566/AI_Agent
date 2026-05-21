@@ -51,10 +51,13 @@ OBSIDIAN_BASE = Path(os.environ.get(
 
 BATCH_SIZE = 500
 
-# Fallback list of rule_ids produced by derive-base. Used by the missing_run
-# gate when local derive-base output isn't loaded (we can't read its
-# managed_rule_ids metadata, so we must hardcode what derive-base might own).
-# When derive-base output IS loaded, prefer derived_payload.metadata.managed_rule_ids.
+# Authoritative list of all rule_ids derive-base has EVER produced. Used:
+#   (a) missing_run gate — when local output absent, identify derive-base-managed
+#       rows for the conflict check
+#   (b) snapshot replacement — delete scope is union(this run's managed_rule_ids,
+#       this list) so that when a previously-used rule stops firing for a period
+#       (e.g. Q4_FY_MINUS_Q1Q2Q3 replaced by Q4_FY_MINUS_9M after 9M becomes
+#       derivable via IBT identity), the orphan rows still get cleared.
 # Update when adding a new derive-base rule.
 DERIVE_BASE_RULE_IDS_FALLBACK = (
     # Q4 reconstruction
@@ -65,9 +68,10 @@ DERIVE_BASE_RULE_IDS_FALLBACK = (
     "NG_ALLOWLIST",
     # XBRL calculation linkbase derivation
     "CALC_LINKBASE",
-    # Future identity rules — derive-base outputs concrete rule_ids, not prefixes,
+    # Identity rules — derive-base outputs concrete rule_ids, not prefixes,
     # so we list each here. When a new IDENTITY_* rule lands in derive-base, add it.
     "IDENTITY_IBT_FROM_OP_PLUS_NONOP",
+    "IDENTITY_IBT_FROM_OP_MINUS_INTEXP_PLUS_NONOP",
 )
 
 
@@ -520,17 +524,21 @@ def main():
         # is not touched. Falls back to DERIVE_BASE_RULE_IDS_FALLBACK if the
         # payload predates managed_rule_ids metadata (legacy output).
         if derive_status == "loaded":
-            managed = (derived_payload.get("metadata", {}) or {}).get("managed_rule_ids")
-            if not managed:
-                managed = list(DERIVE_BASE_RULE_IDS_FALLBACK)
-                print(f"  (derive payload has no managed_rule_ids; using fallback list)")
+            managed = (derived_payload.get("metadata", {}) or {}).get("managed_rule_ids") or []
+            # Union with fallback list so rule_ids that stopped firing in this
+            # run (but were used in a previous run) still get their orphan rows
+            # cleared. Without this, a rule swap (e.g. Q4_FY_MINUS_Q1Q2Q3 →
+            # Q4_FY_MINUS_9M after 9M becomes derivable via IBT identity) would
+            # leave the old DB row stranded, creating silent duplicates.
+            delete_scope = sorted(set(managed) | set(DERIVE_BASE_RULE_IDS_FALLBACK))
             client = supabase_client()
             del_r = (client.table("sec_financial_metrics")
                      .delete()
                      .eq("ticker", ticker)
-                     .in_("provenance->>rule_id", managed)
+                     .in_("provenance->>rule_id", delete_scope)
                      .execute())
-            print(f"  cleared derive-base scope (rule_ids={managed}): "
+            print(f"  cleared derive-base scope ({len(delete_scope)} rule_ids, "
+                  f"current managed={managed}): "
                   f"sec_financial_metrics ({len(del_r.data)} rows deleted)")
             if derived_rows:
                 client.table("sec_financial_metrics").upsert(
