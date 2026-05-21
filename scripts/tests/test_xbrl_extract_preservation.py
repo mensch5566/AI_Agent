@@ -201,3 +201,144 @@ def test_added_back_does_not_carry_stale_preserved_at(tmp_path):
     out, *_ = xbrl_extract._preserve_audited_cells(new_data, existing)
     new_row = out["income_statement"][0]
     assert new_row["preserved_at"] != "2020-01-01T00:00:00Z"  # fresh timestamp
+
+
+# ── F2 fix: classification-only conflict gets classification event ───────────
+
+def test_classification_only_conflict_uses_classification_event(tmp_path):
+    existing = _write_existing(tmp_path, [{
+        "period": "Q1_FY2026", "uni_account": "operating_expense_long_tail",
+        "source_account": "Some Long-Tail Item", "unit": "USD_millions",
+        "type": "GAAP", "value": 5.0,
+        "classification_source": "AGENT_CLASSIFIED",
+        "long_tail_metadata": {"rolls_up_to": "operating_expenses"},
+    }])
+    new_data = {"income_statement": [{
+        "period": "Q1_FY2026", "uni_account": "operating_expense_long_tail",
+        "source_account": "Some Long-Tail Item", "unit": "USD_millions",
+        "type": "GAAP", "value": 7.5,  # value differs
+    }]}
+    out, _, n_conf = xbrl_extract._preserve_audited_cells(new_data, existing)
+    new_row = out["income_statement"][0]
+    assert n_conf == 1
+    assert new_row["value"] == 5.0  # restored
+    # F2: classification-only conflict must use CLASSIFICATION event, not AUDIT
+    assert new_row["preservation_event"] == "REEXTRACT_PRESERVED_PRIOR_CLASSIFICATION"
+    assert new_row["preserved_from_audit"] is False
+    assert new_row["classification_source"] == "AGENT_CLASSIFIED"
+    assert new_row["new_extract_value_rejected"] == 7.5
+
+
+def test_classification_only_accept_new_keeps_classification(tmp_path):
+    """ACCEPT_NEW + classification-only: classification must be carried
+    explicitly (was a bug pre-F2)."""
+    existing = _write_existing(tmp_path, [{
+        "period": "Q1_FY2026", "uni_account": "operating_expense_long_tail",
+        "source_account": "Some Item", "unit": "USD_millions", "type": "GAAP",
+        "value": 5.0,
+        "classification_source": "AGENT_CLASSIFIED",
+        "long_tail_metadata": {"rolls_up_to": "operating_expenses"},
+    }])
+    new_data = {"income_statement": [{
+        "period": "Q1_FY2026", "uni_account": "operating_expense_long_tail",
+        "source_account": "Some Item", "unit": "USD_millions", "type": "GAAP",
+        "value": 9.9,
+    }]}
+    out, *_ = xbrl_extract._preserve_audited_cells(
+        new_data, existing, accept_new_values=True
+    )
+    new_row = out["income_statement"][0]
+    assert new_row["value"] == 9.9  # new value wins
+    # Classification must be explicitly carried
+    assert new_row["classification_source"] == "AGENT_CLASSIFIED"
+    assert new_row["long_tail_metadata"]["rolls_up_to"] == "operating_expenses"
+    # F2/F5: accepted_new_value_replaces_audit must NOT be written for
+    # classification-only accept-new
+    assert "accepted_new_value_replaces_audit" not in new_row
+
+
+def test_audit_and_classification_conflict_audit_takes_priority(tmp_path):
+    """Row has BOTH audit + classification, value conflict.
+    Audit takes priority on event type, both metadata copied."""
+    existing = _write_existing(tmp_path, [{
+        "period": "Q1_FY2026", "uni_account": "research_and_development",
+        "source_account": "ResearchAndDevelopmentExpense", "unit": "USD_millions",
+        "type": "GAAP", "value": 50.0,
+        "audit_source": "MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+        "audit_source_raw": "MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+        "classification_source": "AGENT_CLASSIFIED",
+        "long_tail_metadata": {"rolls_up_to": "operating_expenses"},
+    }])
+    new_data = {"income_statement": [{
+        "period": "Q1_FY2026", "uni_account": "research_and_development",
+        "source_account": "ResearchAndDevelopmentExpense", "unit": "USD_millions",
+        "type": "GAAP", "value": 60.0,
+    }]}
+    out, _, n_conf = xbrl_extract._preserve_audited_cells(new_data, existing)
+    new_row = out["income_statement"][0]
+    assert n_conf == 1
+    assert new_row["value"] == 50.0
+    assert new_row["audit_source"] == "MANUAL_AUDIT_FROM_OFFICIAL_FILING"
+    assert new_row["classification_source"] == "AGENT_CLASSIFIED"
+    # Audit priority on event
+    assert new_row["preservation_event"] == "REEXTRACT_PRESERVED_PRIOR_AUDIT"
+
+
+# ── F1 fix: duplicate identity fails closed ──────────────────────────────────
+
+def test_duplicate_identity_in_new_extract_fails_closed(tmp_path):
+    """Two rows in new extract with same identity tuple → fail-closed."""
+    existing = _write_existing(tmp_path, [{
+        "period": "Q1_FY2026", "uni_account": "revenue",
+        "source_account": "Revenues", "unit": "USD_millions", "type": "GAAP",
+        "value": 100.0,
+        "audit_source": "MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+    }])
+    # Two new rows with identical identity (statement+period+uni+source+unit+type)
+    new_data = {"income_statement": [
+        {"period": "Q1_FY2026", "uni_account": "revenue",
+         "source_account": "Revenues", "unit": "USD_millions", "type": "GAAP",
+         "value": 100.0},
+        {"period": "Q1_FY2026", "uni_account": "revenue",
+         "source_account": "Revenues", "unit": "USD_millions", "type": "GAAP",
+         "value": 999.0},  # duplicate
+    ]}
+    from _shared.audit_metadata import DuplicateIdentityError
+    with pytest.raises(DuplicateIdentityError, match="duplicate identity"):
+        xbrl_extract._preserve_audited_cells(new_data, existing)
+
+
+def test_duplicate_identity_in_existing_audited_fails_closed(tmp_path):
+    existing = _write_existing(tmp_path, [
+        {"period": "Q1_FY2026", "uni_account": "revenue",
+         "source_account": "Revenues", "unit": "USD_millions", "type": "GAAP",
+         "value": 100.0, "audit_source": "MANUAL_AUDIT_FROM_OFFICIAL_FILING"},
+        {"period": "Q1_FY2026", "uni_account": "revenue",
+         "source_account": "Revenues", "unit": "USD_millions", "type": "GAAP",
+         "value": 999.0, "audit_source": "MANUAL_AUDIT_FROM_OFFICIAL_FILING"},
+    ])
+    new_data = {"income_statement": []}
+    from _shared.audit_metadata import DuplicateIdentityError
+    with pytest.raises(DuplicateIdentityError, match="duplicate audit"):
+        xbrl_extract._preserve_audited_cells(new_data, existing)
+
+
+def test_long_tail_rows_with_different_source_account_no_collision(tmp_path):
+    """Two long-tail rows sharing uni_account but different source_account
+    must NOT collide on identity (this is the bug F1 fixes)."""
+    existing = _write_existing(tmp_path, [
+        {"period": "Q1_FY2026", "uni_account": "operating_expense_long_tail",
+         "source_account": "Goodwill Impairment", "unit": "USD_millions",
+         "type": "GAAP", "value": 10.0,
+         "classification_source": "AGENT_CLASSIFIED"},
+        {"period": "Q1_FY2026", "uni_account": "operating_expense_long_tail",
+         "source_account": "Restructuring", "unit": "USD_millions",
+         "type": "GAAP", "value": 5.0,
+         "classification_source": "AGENT_CLASSIFIED"},
+    ])
+    new_data = {"income_statement": []}
+    # Should succeed (no collision) and preserve BOTH rows
+    out, n_pres, _ = xbrl_extract._preserve_audited_cells(new_data, existing)
+    assert n_pres == 2
+    sources = {r["source_account"] for r in out["income_statement"]}
+    assert sources == {"Goodwill Impairment", "Restructuring"}

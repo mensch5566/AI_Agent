@@ -260,6 +260,36 @@ def test_stamp_audit_provenance_rejects_unknown():
         stamp_audit_provenance({}, audit_source="BOGUS")
 
 
+def test_stamp_audit_provenance_official_filing_requires_evidence():
+    """Schema §2.2: OFFICIAL_FILING must carry audit_evidence."""
+    with pytest.raises(ValueError, match="audit_evidence"):
+        stamp_audit_provenance(
+            {},
+            audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+            audit_evidence=None,  # missing
+        )
+
+
+def test_stamp_audit_provenance_official_filing_evidence_must_have_locator():
+    """audit_evidence must include source_doc or page_or_section."""
+    with pytest.raises(ValueError, match="source_doc"):
+        stamp_audit_provenance(
+            {},
+            audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+            audit_evidence={"tool": "x"},  # no source_doc / page_or_section
+        )
+
+
+def test_stamp_audit_provenance_official_filing_with_page_or_section_ok():
+    dst = {}
+    stamp_audit_provenance(
+        dst,
+        audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+        audit_evidence={"page_or_section": "Note 15"},
+    )
+    assert dst["audit_source"] == "MANUAL_AUDIT_FROM_OFFICIAL_FILING"
+
+
 def test_stamp_audit_provenance_restatement_requires_accession():
     with pytest.raises(ValueError, match="accession_number"):
         stamp_audit_provenance(
@@ -269,12 +299,24 @@ def test_stamp_audit_provenance_restatement_requires_accession():
         )
 
 
-def test_stamp_audit_provenance_restatement_with_accession_ok():
+def test_stamp_audit_provenance_restatement_requires_evidence_too():
+    with pytest.raises(ValueError, match="audit_evidence"):
+        stamp_audit_provenance(
+            {},
+            audit_source="MANUAL_RESTATEMENT_FROM_AMENDED_FILING",
+            audit_evidence=None,
+        )
+
+
+def test_stamp_audit_provenance_restatement_with_accession_and_locator_ok():
     dst = {}
     stamp_audit_provenance(
         dst,
         audit_source="MANUAL_RESTATEMENT_FROM_AMENDED_FILING",
-        audit_evidence={"accession_number": "0001234567-25-000001"},
+        audit_evidence={
+            "source_doc": "amended.htm",
+            "accession_number": "0001234567-25-000001",
+        },
     )
     assert dst["audit_source"] == "MANUAL_RESTATEMENT_FROM_AMENDED_FILING"
 

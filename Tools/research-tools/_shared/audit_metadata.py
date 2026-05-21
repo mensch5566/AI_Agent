@@ -165,8 +165,28 @@ def stamp_audit_provenance(
     if audit_source not in MANUAL_AUDIT_SOURCES:
         raise ValueError(f"unknown audit_source: {audit_source}")
     canonical = normalize_audit_source(audit_source)
+    # Schema §2.2: audit_evidence required for both OFFICIAL_FILING and
+    # RESTATEMENT. Must carry at minimum source_doc or page_or_section.
+    if canonical in (
+        "MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+        "MANUAL_RESTATEMENT_FROM_AMENDED_FILING",
+    ):
+        if not audit_evidence:
+            raise ValueError(
+                f"{canonical} requires non-empty audit_evidence "
+                "(at minimum source_doc or page_or_section)"
+            )
+        has_locator = bool(
+            audit_evidence.get("source_doc")
+            or audit_evidence.get("page_or_section")
+        )
+        if not has_locator:
+            raise ValueError(
+                f"{canonical} audit_evidence must include source_doc "
+                "or page_or_section"
+            )
     if canonical == "MANUAL_RESTATEMENT_FROM_AMENDED_FILING":
-        if not (audit_evidence and audit_evidence.get("accession_number")):
+        if not audit_evidence.get("accession_number"):
             raise ValueError(
                 "MANUAL_RESTATEMENT_FROM_AMENDED_FILING requires "
                 "audit_evidence.accession_number"
@@ -217,3 +237,49 @@ def row_has_audited_value(row_or_provenance: dict[str, Any] | None) -> bool:
         is_manual_audit_source(row_or_provenance.get("audit_source"))
         or is_manual_audit_source(row_or_provenance.get("audit_source_raw"))
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Preservation identity (schema §6) — deterministic key for matching old/new
+# rows during re-extract. Long-tail rows share uni_account but differ on
+# source_account / unit / type, so single-key match would mis-bucket them.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Fields used to build identity tuple for GAAP / 8K row preservation.
+# `statement` is supplied by caller (not on row); rest come from row.
+PRESERVATION_IDENTITY_FIELDS = (
+    "period",
+    "uni_account",
+    "source_account",
+    "unit",
+    "type",
+)
+
+
+def build_preservation_identity(statement: str, row: dict[str, Any]) -> tuple:
+    """Build deterministic identity tuple for preservation matching.
+
+    Returns: (statement, period, uni_account, source_account, unit, type)
+
+    Schema §6 specifies a richer tuple including period_kind / xbrl_tag, but
+    those aren't independent fields on current GAAP/8K rows (period_kind is
+    inferred from period string; xbrl_tag is what source_account stores for
+    SEC rows). The fields here are what's actually present and deterministic.
+
+    Callers MUST detect duplicates and fail-closed; legacy rows missing
+    `unit` or `type` are tolerated only when they don't collide on identity.
+    """
+    return (
+        statement,
+        row.get("period"),
+        row.get("uni_account"),
+        row.get("source_account"),
+        row.get("unit"),
+        row.get("type"),
+    )
+
+
+class DuplicateIdentityError(RuntimeError):
+    """Raised when two rows resolve to the same preservation identity tuple.
+    Means the fallback identity isn't unique — pipeline must add discriminator
+    or stop. Never silently overwrite (last-write-wins) on audit-bearing data."""

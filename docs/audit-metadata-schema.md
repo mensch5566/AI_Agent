@@ -229,9 +229,12 @@ def clear_audit_provenance(dst: dict) -> None:
 | 情境 | 條件 | audit provenance | classification | preservation event |
 |---|---|---|---|---|
 | **MATCH** | new row found AND abs(new_value - audit_value) ≤ tolerance | `copy_audit_provenance(new, old)` | `copy_classification_metadata(new, old)` | **不設** event（沒有衝突需要記錄）|
-| **CONFLICT (keep audit)** | new row found AND value differs > tolerance AND `--accept-new-values` NOT given | `copy_audit_provenance(new, old)` | copy classification | `set_preservation_event(new, "REEXTRACT_PRESERVED_PRIOR_AUDIT")` + Supplement 另寫 conflict.json 標 `audit_conflicts_unresolved=true` |
-| **ADDED_BACK** | new XBRL/PDF 不再有此 row，但舊 audit row 還在 | `copy_audit_provenance` | copy classification | `set_preservation_event(new, "REEXTRACT_PRESERVED_PRIOR_AUDIT")` |
-| **ACCEPT_NEW** | `--accept-new-values` flag 給定 + CONFLICT | `clear_audit_provenance(new)` | classification 可能保留（看 row 性質） | 清除 event；decision 寫進 manual_edit_audit_log.jsonl |
+| **CONFLICT (keep audit)** | new row found AND value differs > tolerance AND `--accept-new-values` NOT given AND has_audit | `copy_audit_provenance(new, old)` | copy classification | `set_preservation_event(new, "REEXTRACT_PRESERVED_PRIOR_AUDIT")` + 寫 `new_extract_value_rejected` + Supplement 另寫 conflict.json 標 `audit_conflicts_unresolved=true` |
+| **CONFLICT (classification only)** | value differs AND has_classification AND NOT has_audit AND `--accept-new-values` NOT given | — | `copy_classification_metadata(new, old)` + restore `value=old_val` | `set_preservation_event(new, "REEXTRACT_PRESERVED_PRIOR_CLASSIFICATION")` + 寫 `new_extract_value_rejected` |
+| **ADDED_BACK (audit)** | new XBRL/PDF 不再有此 row，但舊 audit row 還在 | `copy_audit_provenance` | copy classification | `set_preservation_event(new, "REEXTRACT_PRESERVED_PRIOR_AUDIT")` |
+| **ADDED_BACK (classification only)** | new XBRL/PDF 不再有此 row，舊 row 只有 classification | — | `copy_classification_metadata` | `set_preservation_event(new, "REEXTRACT_PRESERVED_PRIOR_CLASSIFICATION")` |
+| **ACCEPT_NEW (audit)** | `--accept-new-values` flag 給定 + CONFLICT + has_audit | `clear_audit_provenance(new)` | `copy_classification_metadata(new, old)`（顯式保 classification） | 清除 event；寫 `accepted_new_value_replaces_audit={prior_audit_value, new_extracted_value}`；decision 寫進 manual_edit_audit_log.jsonl |
+| **ACCEPT_NEW (classification only)** | `--accept-new-values` + CONFLICT + classification-only | — | `copy_classification_metadata` | 清除 event；**不寫** `accepted_new_value_replaces_audit`（該欄位只記 audit conflict）|
 | **NO_AUDIT** | 舊 row 沒 audit metadata | — | — | — |
 | **NEW_ROW** | new row 出現，舊資料無此 row | — | — | — |
 
@@ -447,7 +450,32 @@ set_preservation_event(new, "REEXTRACT_PRESERVED_PRIOR_AUDIT")  # 永遠 now
 
 ---
 
+## 11. Forensic 欄位 — `accepted_new_value_replaces_audit`
+
+當 re-extract 走 ACCEPT_NEW path 且舊 row has_audit 時，新 row 寫入：
+
+```jsonc
+{
+  "accepted_new_value_replaces_audit": {
+    "prior_audit_value":    -172.1,
+    "new_extracted_value":  -180.5
+  }
+}
+```
+
+規則：
+- **只用在 audit conflict accept-new**。Classification-only conflict + accept_new 不寫這欄位。
+- 寫入時必須 `clear_audit_provenance` 已執行完。
+- Phase 5 `manual_edit.py` 看到這欄位代表「該 row 曾經 override 過 audit」，需要寫進 `manual_edit_audit_log.jsonl` 留 forensic trail。
+
+---
+
 ## CHANGELOG
+
+### 2026-05-21 (v4.1, Phase 2 Codex review)
+- §5 行為矩陣拆出 CONFLICT/ADDED_BACK/ACCEPT_NEW 的 audit vs classification-only 分支
+- §11 新增 `accepted_new_value_replaces_audit` 欄位定義
+- `stamp_audit_provenance` enforce OFFICIAL_FILING 也需要 audit_evidence (locator)
 
 ### 2026-05-21 (v4, Phase 1.2)
 - 初版 canonical schema
