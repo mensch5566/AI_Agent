@@ -201,6 +201,36 @@ def test_is_audit_value_filled_no_table_returns_false(tmp_path):
     assert e.is_audit_value_filled(md) is False
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# F12-R4-1: 8-K extract _resolve_unit must route raw $-prefixed strings
+# through normalize_unit_label (was silently mapping `$ thousands` → USD_millions)
+#
+# _resolve_unit is a nested function inside review_md_for_ticker; we verify
+# the helper contract (normalize_unit_label canonical form) and that the
+# production file imports + uses normalize_unit_label.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_normalize_unit_label_handles_dollar_thousands_for_extract_path():
+    """F12-R4-1: extract path now routes via this helper. Verify the
+    canonical-form contract that the new _resolve_unit relies on."""
+    from _shared.audit_metadata import normalize_unit_label
+    assert normalize_unit_label("$ thousands")      == "USD_thousands"
+    assert normalize_unit_label("thousands of USD") == "USD_thousands"
+    # Old broken branch was `if "$" in u: return "USD_millions"`;
+    # `$ thousands` would have hit it. The new helper returns USD_thousands.
+    assert normalize_unit_label("$ millions")       == "USD_millions"
+
+
+def test_extract_8k_imports_normalize_unit_label():
+    """Guard: production extract path uses the shared helper. If someone
+    reverts the import, this test fails."""
+    e = _import_extract_8k()
+    assert hasattr(e, "normalize_unit_label")
+    # And: helper agrees with itself on the F12-R4-1 case
+    assert e.normalize_unit_label("$ thousands") == "USD_thousands"
+
+
+
 def test_main_and_unmapped_tables_both_parsed(tmp_path):
     md = _write(tmp_path, [
         "# Header",
