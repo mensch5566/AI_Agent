@@ -300,6 +300,84 @@ class DuplicateIdentityError(RuntimeError):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Supplement (parse-SEC-supplement v3) preservation identity (schema §6.2)
+#
+# Dimensional facts have a richer identity than GAAP/8K rows because the same
+# (period, uni_account) tuple can appear under multiple axis × member combos
+# (e.g. revenue by business_segment.CCG vs by geography.US). The identity
+# must encode axis + member to disambiguate, plus other_dimensions for
+# multi-dim facts (e.g. business_segment.CCG × geography.US).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _canonical_other_dimensions(other_dims) -> str:
+    """Sort + serialize other_dimensions deterministically for identity hash.
+    Returns "" when no other dimensions (most common case)."""
+    if not other_dims:
+        return ""
+    import json as _json
+    # Normalize: each dim becomes (axis, member) tuple; sort by axis then member
+    pairs = []
+    for d in other_dims:
+        if isinstance(d, dict):
+            pairs.append((d.get("axis", ""), d.get("member", "")))
+        else:
+            pairs.append((str(d), ""))
+    pairs.sort()
+    return _json.dumps(pairs, separators=(",", ":"))
+
+
+def build_supplement_identity(row: dict[str, Any]) -> tuple:
+    """Build deterministic identity tuple for supplement v3 preservation.
+
+    Schema §6.2:
+        (period, period_kind, axis_key, member_key, uni_account,
+         canonical_json(other_dimensions), unit)
+
+    `axis_key` / `member_key` use `build_axis_key()` / `build_member_key()`
+    from _shared.dimensional_aliases (preference: xbrl qname → local label).
+    `other_dimensions` is canonical-JSON-serialized so multi-dim facts
+    (e.g. business_segment.CCG × geography.US) get distinct identities.
+
+    Row fields expected (parse-SEC-supplement v3 schema):
+      - period           (e.g. "Q1_FY2026")
+      - period_kind      ("single_quarter" / "fy_annual" / "instant")
+      - axis             (axis_class label, e.g. "business_segment")
+      - axis_qname       (e.g. "us-gaap:StatementBusinessSegmentsAxis")
+      - source_account   (member display label)
+      - source_account_qname (member qname)
+      - uni_account
+      - other_dimensions (list of {axis, member})
+      - unit
+    """
+    # Lazy import to avoid circular import (dimensional_aliases lives in same
+    # package; relative import).
+    try:
+        from .dimensional_aliases import build_axis_key, build_member_key
+    except ImportError:
+        # Fallback when audit_metadata is imported standalone (no package context).
+        from dimensional_aliases import build_axis_key, build_member_key  # type: ignore
+
+    axis_key = build_axis_key(
+        row.get("axis") or "",
+        row.get("axis_qname"),
+    )
+    member_key = build_member_key(
+        row.get("source_account") or "",
+        row.get("source_account_qname"),
+    )
+    return (
+        row.get("period"),
+        row.get("period_kind"),
+        axis_key,
+        member_key,
+        row.get("uni_account"),
+        _canonical_other_dimensions(row.get("other_dimensions")),
+        row.get("unit"),
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Unit resolution by uni_account type (F8 fix)
 #
 # Different metric families use different unit types; a USD_millions fallback
