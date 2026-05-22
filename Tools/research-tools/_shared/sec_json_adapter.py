@@ -220,12 +220,20 @@ def _carry_audit_metadata_to_provenance(row: dict, provenance: dict[str, Any]) -
         never leak into `provenance.audit_source`.
       - `audit_source_raw` → preserves the row's original audit_source value
         ONLY when the canonical value is in the audit allowlist (forensic).
-      - audit_note / audited_at / audited_by / audit_evidence carried as-is
+      - audit_note / audited_at / audited_by / audit_evidence carried as-is,
+        BUT only if a valid `audit_source` was also written (P3-F2 fix:
+        orphan audit metadata raises ValueError → row goes to rejected list).
       - classification_source / classification_note / classified_at /
         long_tail_metadata carried (independent channel).
       - **Legacy promotion** (P3-F1): if row has `audit_source="AGENT_CLASSIFIED"`
         and no `classification_source`, promote it to classification channel.
       - preservation_event keys carried (downstream may need to inspect)
+
+    Raises:
+        ValueError: row carries audit metadata fields (audit_note / audited_at /
+            audited_by / audit_evidence) but the `audit_source` is invalid /
+            absent / not a promotable classification — half-set audit
+            metadata can't be silently accepted (P3-F2).
     """
     raw_audit_source = row.get("audit_source")
     raw_audit_source_raw = row.get("audit_source_raw")
@@ -233,21 +241,40 @@ def _carry_audit_metadata_to_provenance(row: dict, provenance: dict[str, Any]) -
     canonical = normalize_audit_source(raw_audit_source or raw_audit_source_raw)
     # P3-F1: allowlist-guard audit channel writes. Only canonical values in
     # MANUAL_AUDIT_SOURCES get written to provenance.audit_source.
+    audit_channel_written = False
     if is_manual_audit_source(canonical):
         provenance["audit_source"] = canonical
         provenance["audit_source_raw"] = (
             raw_audit_source_raw if raw_audit_source_raw is not None
             else raw_audit_source
         )
-    # Carry remaining audit fields verbatim (skip the two we just handled)
-    remaining_audit_keys = tuple(
-        k for k in AUDIT_PROVENANCE_KEYS
-        if k not in ("audit_source", "audit_source_raw")
+        audit_channel_written = True
+
+    # P3-F2: orphan audit metadata fail-closed. If the row carries any of the
+    # audit-detail fields but we DIDN'T write a valid audit_source above,
+    # that's malformed input — better to surface as rejected than to ship
+    # orphan note/evidence with no source.
+    audit_detail_keys = ("audit_note", "audited_at", "audited_by", "audit_evidence")
+    has_audit_detail = any(row.get(k) is not None for k in audit_detail_keys)
+    is_promotable_classification = (
+        raw_audit_source in MANUAL_CLASSIFICATION_SOURCES
+        or raw_audit_source_raw in MANUAL_CLASSIFICATION_SOURCES
     )
-    for key in remaining_audit_keys:
-        v = row.get(key)
-        if v is not None:
-            provenance[key] = v
+    if has_audit_detail and not audit_channel_written and not is_promotable_classification:
+        raise ValueError(
+            f"orphan audit metadata: audit_note/audited_at/audited_by/audit_evidence "
+            f"present but audit_source={raw_audit_source!r} (raw={raw_audit_source_raw!r}) "
+            f"is not in MANUAL_AUDIT_SOURCES allowlist. "
+            f"Either supply a valid audit_source enum or remove the detail fields."
+        )
+
+    # Carry remaining audit fields verbatim — only when audit_channel_written
+    # (P3-F2: don't ship orphan note/evidence without a valid source).
+    if audit_channel_written:
+        for key in audit_detail_keys:
+            v = row.get(key)
+            if v is not None:
+                provenance[key] = v
     # Classification channel
     for key in CLASSIFICATION_KEYS:
         v = row.get(key)
