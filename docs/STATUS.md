@@ -1,13 +1,13 @@
 # AI_Agent Status
 
-Updated: 2026-05-22
+Updated: 2026-05-23
 
 ## Current Focus
 - Portal remains the main entrypoint for internal tools.
 - `Financials Viewer` now includes a `Valuation` tab for historical TTM P/E with `日 / 月 / 季` switching.
 - Weekly research workflow is being standardized through reusable skills such as `macro-weekly-news`.
 - TWSE XBRL ingestion now also supports onboarding new tickers such as `7769 鴻勁` into `Financials Viewer`.
-- **Audit Metadata Schema v4 contract shipped end-to-end** (parse skill → adapter → upsert → derive-base). Every audited / classified / preserved cell carries v4 channels through the full pipeline; 156 regression tests cover the contract.
+- **Audit Metadata Schema v4 contract shipped end-to-end across all parse paths** (10QK GAAP / 8K Non-GAAP / SEC-supplement v3) → adapter → upsert → derive-base. Every audited / classified / preserved cell carries v4 channels through the full pipeline; 179 regression tests cover the contract.
 
 ## Stable Areas
 - `app/page.tsx` portal card layout is the top-level navigation surface.
@@ -34,6 +34,14 @@ Updated: 2026-05-22
 - Prefer adding new portal-facing features behind an existing module/page when possible, instead of creating duplicate entrypoints.
 
 ## Latest Changes
+- **Audit Metadata Schema v4 — Phase 4 closed** (2026-05-22 → 2026-05-23, 2 rounds of Codex review).
+  - `parse-SEC-supplement/extract_supplement_v3.py` now preserves dimensional audit/classification cells across re-extracts. Identity tuple `(period, period_kind, axis_key, member_key, uni_account, canonical_json(other_dimensions), unit)` per schema §6.2 — uses `_shared/dimensional_aliases.build_axis_key()` / `build_member_key()` (xbrl qname preferred, local-label fallback).
+  - Behavior matrix mirrors GAAP/8K (MATCH / ADDED_BACK / CONFLICT / ACCEPT_NEW) with same audit vs classification-only branch, legacy `AGENT_CLASSIFIED` canonicalization on ADDED_BACK, and `DuplicateIdentityError` fail-closed.
+  - Supplement-specific fail-closed mechanism: AUDIT conflicts (not classification-only) get written to `{TICKER}_supplement_conflict.json` with `audit_conflicts_unresolved=true` flag (schema §5 supplement clause). User reviews each conflict, then re-runs extract with `--accept-new-values` to drop preserved audit metadata.
+  - Stale conflict.json is cleaned on any rerun that produces no audit conflicts (not just `--accept-new-values`).
+  - Corrupt existing facts JSON raises `ValueError` rather than silently dropping prior audit metadata.
+  - `_values_match` uses `≤ tol` per schema §5 wording (exact-boundary equality counts as MATCH).
+  - 23 regression tests for Phase 4 (identity tuple variants, full preservation matrix, classification-only / mixed conflicts, duplicate fail-closed, corrupt JSON, tolerance boundaries, stale cleanup).
 - **Audit Metadata Schema v4 — Phase 2 + Phase 3 closed** (2026-05-21 → 2026-05-22, 11 rounds of Codex review).
   - Canonical contract: `docs/audit-metadata-schema.md` v4.1 — three semantic channels (audit / classification / preservation event), strict allowlists for each, legacy enum normalization, re-extract behavior matrix.
   - Shared helper: `Tools/research-tools/_shared/audit_metadata.py` — allowlist constants, predicates (`is_manual_audit_source` / `is_manual_classification_source`), write helpers (`stamp_audit_provenance` / `stamp_classification` with locator / accession_number enforcement), copy helpers (`copy_audit_provenance` / `copy_classification_metadata` / `set_preservation_event`), preservation identity builder (`build_preservation_identity` + `DuplicateIdentityError`), unit normalization (`normalize_unit_label` / `expected_unit_family` / `resolve_unit_for_uni_account` — recognizes `$ thousands` / `thousands of USD` / `%` / `per share` etc.).
@@ -93,9 +101,8 @@ Updated: 2026-05-22
   - `docs/financials-view-schema.md` is the `key -> meaning/source` metric dictionary
 
 ## Next Suggested Steps
-- **Phase 4 (audit schema)**: `parse-SEC-supplement` v3 dimensional identity preservation + `conflict.json` fail-closed (currently `_preserve_audited_cells` matrix only covers 10QK / 8K; supplement still needs the same treatment for dimensional facts).
-- **Phase 5 (audit schema)**: `manual_edit.py` CLI for ad-hoc audit edits outside `apply_audit.py` flow (one-off cell corrections that aren't tied to a cross-check run).
-- **Phase 6 (audit schema)**: frontend audit indicator on cells with `provenance.audit_source != null` or derived rows with `has_audited_inputs=true`; DB legacy row migration (one-shot normalize of pre-v4 `audit_source` enums in existing Supabase data).
+- **Phase 5 (audit schema)**: `manual_edit.py` CLI for ad-hoc audit edits outside `apply_audit.py` flow (one-off cell corrections that aren't tied to a cross-check run). Schema v4 already supports the metadata; just needs a clean entry point + `manual_edit_audit_log.jsonl` write path.
+- **Phase 6 (audit schema)**: frontend audit indicator on cells with `provenance.audit_source != null` or derived rows with `has_audited_inputs=true`; DB legacy row migration (one-shot normalize of pre-v4 `audit_source` enums in existing Supabase data); optional `_shared/preservation.py` refactor to dedupe the now-three copy-pasted `_preserve_*_cells` functions across 10QK / 8K / supplement.
 - Add lightweight regression coverage for `/api/valuation/[ticker]`.
 - Decide whether valuation should stay Yahoo-based or move to a first-party normalized market-data pipeline.
 - Create a small architecture note for portal module boundaries if feature count keeps growing.
