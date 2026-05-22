@@ -662,6 +662,182 @@ def test_invalid_classification_source_rejected(tmp_path):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# P5-F9: classification mode cannot change value / cannot stamp new numeric row
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_classification_mode_cannot_change_value(tmp_path):
+    """P5-F9: classification edit with --new-value != existing → SystemExit.
+    Classification is metadata-only; value changes require --audit-source."""
+    p = _write_gaap(tmp_path, [{
+        "period": "Q1_FY2026", "uni_account": "operating_expense_long_tail",
+        "source_account": "Goodwill Impairment", "value": 100.0,
+        "unit": "USD_millions", "type": "GAAP",
+    }])
+    with pytest.raises(SystemExit) as exc:
+        _run(p,
+             audit_source=None,
+             classification_source="MANUAL_RECLASSIFIED",
+             classification_note="want to change value via classification",
+             uni_account="operating_expense_long_tail",
+             source_account="Goodwill Impairment",
+             new_value=999.0)   # ≠ existing 100.0
+    assert "cannot change row value" in str(exc.value)
+
+
+def test_classification_mode_value_unchanged_on_existing_row(tmp_path):
+    """P5-F9: classification edit with matching --new-value → value stays
+    at existing (not mutated; new_value just acknowledges current)."""
+    p = _write_gaap(tmp_path, [{
+        "period": "Q1_FY2026", "uni_account": "operating_expense_long_tail",
+        "source_account": "Goodwill Impairment", "value": 100.0,
+        "unit": "USD_millions", "type": "GAAP",
+    }])
+    _run(p,
+         audit_source=None,
+         classification_source="MANUAL_RECLASSIFIED",
+         classification_note="re-bucket only",
+         uni_account="operating_expense_long_tail",
+         source_account="Goodwill Impairment",
+         new_value=100.0)
+    row = json.loads(p.read_text())["income_statement"][0]
+    assert row["value"] == 100.0   # unchanged
+    assert row["classification_source"] == "MANUAL_RECLASSIFIED"
+    # Audit channel untouched
+    assert "audit_source" not in row
+
+
+def test_classification_mode_no_match_fails_closed(tmp_path):
+    """P5-F9: classification edit + no matching row → SystemExit, do NOT
+    create a new numeric row without audit provenance."""
+    p = _write_gaap(tmp_path, [])
+    with pytest.raises(SystemExit) as exc:
+        _run(p,
+             audit_source=None,
+             classification_source="MANUAL_RECLASSIFIED",
+             classification_note="trying to create a new long-tail row",
+             uni_account="operating_expense_long_tail",
+             source_account="Goodwill Impairment",
+             new_value=10.0)
+    assert "no matching row" in str(exc.value).lower()
+    # File untouched
+    assert json.loads(p.read_text())["income_statement"] == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P5-F8: supplement dedupe preserves v4 metadata
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _supp_row(value, **extras):
+    """Build a supplement input fact dict (pre-adapter)."""
+    base = {
+        "period":               "Q1_FY2026",
+        "period_end":           "2025-09-27",
+        "period_kind":          "single_quarter",
+        "axis":                 "product",
+        "axis_qname":           "srt:ProductOrServiceAxis",
+        "source_account":       "Components",
+        "source_account_qname": "us-gaap:ComponentsMember",
+        "uni_account":          "revenue",
+        "value":                value,
+        "unit":                 "USD_millions",
+        "type":                 "GAAP_SEGMENT",
+        "source_doc":           "test.htm",
+    }
+    base.update(extras)
+    return base
+
+
+def test_supplement_dedupe_preserves_audit_metadata_from_non_chosen():
+    """P5-F8: same-value duplicates — one with audit metadata, one without.
+    Dedupe must NOT drop the audit channel just because the audited row is
+    not 'members[0]'."""
+    from _shared.sec_json_adapter import adapt_supplement_facts
+    supp_doc = {
+        "metadata": {"ticker": "LITE"},
+        "facts": [
+            # First (plain — no audit)
+            _supp_row(379.2),
+            # Second (audited)
+            _supp_row(379.2,
+                      audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+                      audit_source_raw="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+                      audit_note="from 10-Q",
+                      audit_evidence={"source_doc": "manual.htm"}),
+        ],
+    }
+    rows, rejected, _, _ = adapt_supplement_facts(supp_doc)
+    assert not rejected
+    assert len(rows) == 1   # collapsed
+    prov = rows[0].provenance
+    # P5-F8: audit channel must survive
+    assert prov["audit_source"] == "MANUAL_AUDIT_FROM_OFFICIAL_FILING"
+    assert prov["audit_note"] == "from 10-Q"
+    assert prov["audit_evidence"] == {"source_doc": "manual.htm"}
+    # sources[] still merged from both
+    assert len(prov["sources"]) == 2
+
+
+def test_supplement_dedupe_preserves_classification_from_non_chosen():
+    """P5-F8: classification metadata also survives dedupe."""
+    from _shared.sec_json_adapter import adapt_supplement_facts
+    supp_doc = {
+        "metadata": {"ticker": "LITE"},
+        "facts": [
+            _supp_row(50.0),
+            _supp_row(50.0,
+                      classification_source="AGENT_CLASSIFIED",
+                      long_tail_metadata={"rolls_up_to": "revenue"}),
+        ],
+    }
+    rows, _, _, _ = adapt_supplement_facts(supp_doc)
+    assert len(rows) == 1
+    prov = rows[0].provenance
+    assert prov["classification_source"] == "AGENT_CLASSIFIED"
+    assert prov["long_tail_metadata"] == {"rolls_up_to": "revenue"}
+
+
+def test_supplement_dedupe_conflicting_v4_metadata_fails_closed():
+    """P5-F8: if two duplicates carry CONFLICTING v4 audit metadata, dedupe
+    rejects the group instead of silently picking one."""
+    from _shared.sec_json_adapter import adapt_supplement_facts
+    supp_doc = {
+        "metadata": {"ticker": "LITE"},
+        "facts": [
+            _supp_row(100.0,
+                      audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+                      audit_note="from filing A"),
+            _supp_row(100.0,
+                      audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+                      audit_note="from filing B"),   # conflicting note
+        ],
+    }
+    rows, rejected, _, _ = adapt_supplement_facts(supp_doc)
+    assert len(rows) == 0
+    assert len(rejected) == 1
+    assert "conflicting v4 metadata" in rejected[0]["reason"]
+
+
+def test_supplement_dedupe_no_audit_no_change_in_behavior():
+    """P5-F8 regression: same-value duplicates with no v4 metadata still
+    collapse correctly (no spurious v4 fields appear)."""
+    from _shared.sec_json_adapter import adapt_supplement_facts
+    supp_doc = {
+        "metadata": {"ticker": "LITE"},
+        "facts": [
+            _supp_row(100.0),
+            _supp_row(100.0),
+        ],
+    }
+    rows, rejected, _, _ = adapt_supplement_facts(supp_doc)
+    assert not rejected
+    assert len(rows) == 1
+    prov = rows[0].provenance
+    assert "audit_source" not in prov
+    assert "classification_source" not in prov
+    assert len(prov["sources"]) == 2
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Legacy enum input
 # ─────────────────────────────────────────────────────────────────────────────
 

@@ -607,6 +607,47 @@ def adapt_supplement_facts(
     value_conflicts: list[dict] = []
     dedupe_count = 0
     precision_dedupe_count = 0
+
+    def _v4_metadata_present(row: DimensionalRow) -> bool:
+        """True if row's provenance carries any v4 audit/classification/
+        preservation channel (independent of `sources[]`/`source_filing`/etc.)."""
+        p = row.provenance
+        return (
+            p.get("audit_source") is not None
+            or p.get("audit_source_raw") is not None
+            or p.get("classification_source") is not None
+            or p.get("preservation_event") is not None
+        )
+
+    def _merge_v4_channels(chosen_row: DimensionalRow,
+                            other_rows: list[DimensionalRow],
+                            dk: str) -> None:
+        """P5-F8: ensure any v4 audit/classification/preservation metadata on
+        non-chosen duplicates survives dedupe. If chosen already has v4 data,
+        any other member with conflicting v4 data fails the batch (we won't
+        silently pick one)."""
+        chosen_prov = chosen_row.provenance
+        for other in other_rows:
+            for key in (
+                "audit_source", "audit_source_raw", "audit_note",
+                "audited_at", "audited_by", "audit_evidence",
+                "classification_source", "classification_note",
+                "classified_at", "long_tail_metadata",
+                "preservation_event", "preserved_from_audit", "preserved_at",
+            ):
+                v = other.provenance.get(key)
+                if v is None:
+                    continue
+                existing = chosen_prov.get(key)
+                if existing is None:
+                    chosen_prov[key] = v
+                elif existing != v:
+                    raise ValueError(
+                        f"supplement dedupe: conflicting v4 metadata for "
+                        f"key={dk!r}, field={key!r}: chosen={existing!r} "
+                        f"vs other={v!r}. Resolve manually before re-running."
+                    )
+
     for dk, members in groups.items():
         if len(members) == 1:
             row, raw_meta = members[0]
@@ -616,9 +657,28 @@ def adapt_supplement_facts(
 
         values = {m[0].value for m in members}
         if len(values) == 1:
-            # Same value across sources -> collapse, accumulate provenance
-            chosen = members[0][0]
-            chosen.provenance["sources"] = [_source_entry(m[1], accession_map) for m in members]
+            # P5-F8: if multiple members exist and any carries v4 metadata,
+            # prefer that one as the chosen row so its provenance is the
+            # natural target for merge. Falls back to members[0] otherwise.
+            preferred_idx = next(
+                (i for i, m in enumerate(members) if _v4_metadata_present(m[0])),
+                0,
+            )
+            chosen_pair = members[preferred_idx]
+            chosen = chosen_pair[0]
+            other_rows = [m[0] for i, m in enumerate(members) if i != preferred_idx]
+            try:
+                _merge_v4_channels(chosen, other_rows, dk)
+            except ValueError as e:
+                rejected.append({
+                    "source": "supplement",
+                    "row": {"dedupe_key": dk},
+                    "reason": str(e),
+                })
+                continue
+            chosen.provenance["sources"] = [
+                _source_entry(m[1], accession_map) for m in members
+            ]
             final_rows.append(chosen)
             dedupe_count += len(members) - 1
             continue
@@ -636,8 +696,37 @@ def adapt_supplement_facts(
         sorted_members = sorted(members, key=_prec_key)
         precisions = [m[0].decimals for m in sorted_members]
         if precisions[0] != precisions[-1]:
-            # Differing precisions present — pick most precise, drop rest
+            # P5-F8: if a less-precise duplicate carries v4 metadata, never
+            # silently drop it — surface as conflict instead (audit takes
+            # precedence over precision-based dedupe). Manual review required.
+            dropped_with_v4 = [
+                m[0] for m in sorted_members[1:] if _v4_metadata_present(m[0])
+            ]
+            chosen_has_v4 = _v4_metadata_present(sorted_members[0][0])
+            if dropped_with_v4 and not chosen_has_v4:
+                rejected.append({
+                    "source": "supplement",
+                    "row": {"dedupe_key": dk},
+                    "reason": (
+                        f"precision dedupe would silently drop v4 metadata "
+                        f"(audit/classification/preservation) from non-most-"
+                        f"precise duplicate. Resolve manually."
+                    ),
+                })
+                continue
             chosen = sorted_members[0][0]
+            # If chosen has its own v4 metadata, sanity-check no conflict
+            # with dropped rows (they could all be parser-rounded duplicates).
+            other_rows = [m[0] for m in sorted_members[1:]]
+            try:
+                _merge_v4_channels(chosen, other_rows, dk)
+            except ValueError as e:
+                rejected.append({
+                    "source": "supplement",
+                    "row": {"dedupe_key": dk},
+                    "reason": str(e),
+                })
+                continue
             chosen.provenance["sources"] = [_source_entry(sorted_members[0][1], accession_map)]
             chosen.provenance["precision_dedupe"] = {
                 "kept_decimals": precisions[0],

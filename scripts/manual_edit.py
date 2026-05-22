@@ -202,24 +202,17 @@ def stamp_edit(
     """Mutate `row` in place: set new value + v4 audit metadata.
 
     If `is_override`, also writes accepted_new_value_replaces_audit forensic.
+
     P5-F7: when args specify classification_source (not audit_source),
     write classification channel via stamp_classification instead.
+
+    P5-F9: classification mode MUST NOT modify row.value / row.unit —
+    classification is row metadata (bucket assignment), not value evidence.
+    Value changes require audit channel.
     """
     is_classification_edit = bool(args.classification_source)
-    evidence = build_audit_evidence(args) if not is_classification_edit else None
-    if is_override:
-        # Clear prior audit provenance before stamping new (Phase 2 F5 / §11)
-        clear_audit_provenance(row)
-        row["accepted_new_value_replaces_audit"] = {
-            "prior_audit_value":   prior_value,
-            "new_extracted_value": args.new_value,
-        }
-    row["value"] = args.new_value
-    if args.unit is not None:
-        row["unit"] = args.unit
     if is_classification_edit:
-        # P5-F7: classification path (MANUAL_RECLASSIFIED). Does NOT write
-        # audit channel; long_tail_metadata optional.
+        # P5-F9: classification mode is metadata-only — no value/unit mutation.
         ltm = None
         if args.long_tail_metadata_json:
             try:
@@ -233,15 +226,27 @@ def stamp_edit(
             classified_at=audited_at_iso,
             long_tail_metadata=ltm,
         )
-    else:
-        stamp_audit_provenance(
-            row,
-            audit_source=args.audit_source,
-            audit_note=args.audit_note,
-            audited_at=audited_at_iso,
-            audited_by=audited_by,
-            audit_evidence=evidence,
-        )
+        return
+    # Audit mode
+    evidence = build_audit_evidence(args)
+    if is_override:
+        # Clear prior audit provenance before stamping new (Phase 2 F5 / §11)
+        clear_audit_provenance(row)
+        row["accepted_new_value_replaces_audit"] = {
+            "prior_audit_value":   prior_value,
+            "new_extracted_value": args.new_value,
+        }
+    row["value"] = args.new_value
+    if args.unit is not None:
+        row["unit"] = args.unit
+    stamp_audit_provenance(
+        row,
+        audit_source=args.audit_source,
+        audit_note=args.audit_note,
+        audited_at=audited_at_iso,
+        audited_by=audited_by,
+        audit_evidence=evidence,
+    )
 
 
 # P5-F3: per-target default `type` so re-extract preservation identity matches.
@@ -372,11 +377,20 @@ def run(args) -> int:
     prior_value: Any = None
     stamped_row: dict[str, Any]
     if existing_row is None:
-        # Brand new row
+        # P5-F9: classification mode cannot stamp a brand-new numeric row.
+        # Without audit provenance there's nothing backing the value.
+        if is_classification_edit:
+            sys.exit(
+                "❌ Classification mode found no matching row. Refusing to "
+                "create a new numeric fact without audit provenance — a row's "
+                "value requires audit channel evidence. Either supply "
+                "--audit-source for a fresh stamp, or pre-create the row "
+                "through the normal parse / apply_audit flow first."
+            )
+        # Brand new row (audit mode)
         new_row = build_new_row(target, args)
         stamp_edit(new_row, args, audited_at_iso, audited_by)
-        operation = ("stamp_new_classification_row" if is_classification_edit
-                     else "stamp_new_row")
+        operation = "stamp_new_row"
         stamped_row = new_row
         if not args.dry_run:
             facts.append(new_row)
@@ -392,6 +406,20 @@ def run(args) -> int:
                 f"accepted_new_value_replaces_audit forensic field."
             )
         if is_classification_edit:
+            # P5-F9: classification mode is metadata-only. If caller passed
+            # --new-value, it MUST equal the existing value (defensive: the
+            # CLI requires --new-value as a positional sanity check, but
+            # the row value MUST NOT change).
+            if args.new_value is not None and prior_value is not None:
+                if float(args.new_value) != float(prior_value):
+                    sys.exit(
+                        f"❌ Classification mode cannot change row value "
+                        f"(existing={prior_value}, --new-value={args.new_value}). "
+                        f"Classification is row metadata (bucket assignment); "
+                        f"value changes require --audit-source. Pass "
+                        f"--new-value {prior_value} to acknowledge the "
+                        f"existing value, or use --audit-source for a value edit."
+                    )
             operation = "stamp_classification_existing_row"
         else:
             operation = "override_existing_audit" if was_audited else "stamp_existing_row"
