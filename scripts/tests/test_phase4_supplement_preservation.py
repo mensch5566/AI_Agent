@@ -392,28 +392,67 @@ def test_values_match_just_outside_tolerance_is_conflict(tmp_path):
 # P4-F2: stale conflict.json cleanup on normal rerun (no audit conflicts)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_stale_conflict_json_cleaned_when_classification_only_conflict(tmp_path, monkeypatch):
-    """P4-F2 + P4-F1 combined: previous run wrote conflict.json; this run
-    has classification-only conflict (no audit conflict). Stale conflict.json
-    must be cleaned up."""
+def test_finalize_clears_stale_conflict_when_no_audit_conflicts(tmp_path):
+    """P4-F2: rerun with no audit conflicts must DELETE stale conflict.json.
+    Directly exercises the production cleanup branch — same code path main()
+    uses, no mirror logic."""
     import extract_supplement_v3 as e3
-
-    # Pre-stage stale conflict.json from a "previous" run
     stale = tmp_path / "LITE_supplement_conflict.json"
     stale.write_text(json.dumps({
         "metadata": {"audit_conflicts_unresolved": True, "conflict_count": 1},
         "conflicts": [{"period": "Q1_FY2025"}],
     }))
     assert stale.exists()
-
-    # Simulate the main() cleanup path: no audit conflict this run
-    conflicts_for_json = []
-    # Mirror the main() else branch (P4-F2):
-    if not conflicts_for_json:
-        if stale.exists():
-            stale.unlink()
+    result = e3.finalize_supplement_conflict_file(tmp_path, "LITE", [])
+    assert result is None
     assert not stale.exists()
-    # Also use helper to verify it would produce empty conflict doc
-    p = e3.write_supplement_conflict_json(tmp_path, "LITE", conflicts_for_json)
-    doc = json.loads(p.read_text())
-    assert doc["metadata"]["audit_conflicts_unresolved"] is False
+
+
+def test_finalize_writes_conflict_file_when_audit_conflicts_present(tmp_path):
+    """P4-F2 inverse: when this run has unresolved audit conflicts,
+    finalize writes the conflict.json."""
+    import extract_supplement_v3 as e3
+    conflicts = [{
+        "period": "Q1_FY2026", "axis": "business_segment",
+        "uni_account": "revenue", "source_account": "CCG",
+        "prior_audit_value": 100.0, "new_extracted_value": 999.0,
+        "unit": "USD_millions", "has_audit": True, "has_classification": False,
+        "identity": ["Q1_FY2026", "single_quarter", "ax", "mb", "rev", "", "USD_millions"],
+    }]
+    result = e3.finalize_supplement_conflict_file(tmp_path, "LITE", conflicts)
+    assert result is not None
+    assert result.exists()
+    doc = json.loads(result.read_text())
+    assert doc["metadata"]["audit_conflicts_unresolved"] is True
+    assert doc["metadata"]["conflict_count"] == 1
+
+
+def test_finalize_no_op_when_no_conflicts_and_no_stale_file(tmp_path):
+    """P4-F2 corner case: clean rerun with no prior stale file. Should
+    leave the directory untouched (no spurious empty conflict.json)."""
+    import extract_supplement_v3 as e3
+    result = e3.finalize_supplement_conflict_file(tmp_path, "LITE", [])
+    assert result is None
+    assert not (tmp_path / "LITE_supplement_conflict.json").exists()
+
+
+def test_finalize_overwrites_existing_conflict_with_fresh_audit_conflicts(tmp_path):
+    """If a prior run had different audit conflicts, the new run's set
+    overwrites the file (doesn't merge / append)."""
+    import extract_supplement_v3 as e3
+    old = tmp_path / "LITE_supplement_conflict.json"
+    old.write_text(json.dumps({
+        "metadata": {"audit_conflicts_unresolved": True, "conflict_count": 5},
+        "conflicts": [{"period": "OLD"} for _ in range(5)],
+    }))
+    new_conflicts = [{
+        "period": "Q2_FY2026", "axis": "geography",
+        "uni_account": "revenue", "source_account": "US",
+        "prior_audit_value": 200.0, "new_extracted_value": 888.0,
+        "unit": "USD_millions", "has_audit": True, "has_classification": False,
+        "identity": ["Q2_FY2026", "single_quarter", "ax", "mb", "rev", "", "USD_millions"],
+    }]
+    result = e3.finalize_supplement_conflict_file(tmp_path, "LITE", new_conflicts)
+    doc = json.loads(result.read_text())
+    assert doc["metadata"]["conflict_count"] == 1
+    assert doc["conflicts"][0]["period"] == "Q2_FY2026"
