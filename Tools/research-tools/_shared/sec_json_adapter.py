@@ -696,37 +696,32 @@ def adapt_supplement_facts(
         sorted_members = sorted(members, key=_prec_key)
         precisions = [m[0].decimals for m in sorted_members]
         if precisions[0] != precisions[-1]:
-            # P5-F8: if a less-precise duplicate carries v4 metadata, never
-            # silently drop it — surface as conflict instead (audit takes
-            # precedence over precision-based dedupe). Manual review required.
+            # P5-F10: precision-dedupe means values differ (this branch is
+            # only reached when len(values) > 1). Audit provenance is value
+            # evidence — it CANNOT be merged across different numeric values.
+            # Classification could in theory be value-independent, but to
+            # keep the channel boundary clean and follow GPT's
+            # recommendation #3, we reject any v4 metadata on dropped rows,
+            # regardless of what the chosen row carries.
             dropped_with_v4 = [
                 m[0] for m in sorted_members[1:] if _v4_metadata_present(m[0])
             ]
-            chosen_has_v4 = _v4_metadata_present(sorted_members[0][0])
-            if dropped_with_v4 and not chosen_has_v4:
+            if dropped_with_v4:
                 rejected.append({
                     "source": "supplement",
                     "row": {"dedupe_key": dk},
                     "reason": (
                         f"precision dedupe would silently drop v4 metadata "
-                        f"(audit/classification/preservation) from non-most-"
-                        f"precise duplicate. Resolve manually."
+                        f"(audit/classification/preservation) from a "
+                        f"less-precise duplicate with a different numeric "
+                        f"value. Cannot merge value-bound provenance across "
+                        f"different values. Resolve manually."
                     ),
                 })
                 continue
             chosen = sorted_members[0][0]
-            # If chosen has its own v4 metadata, sanity-check no conflict
-            # with dropped rows (they could all be parser-rounded duplicates).
-            other_rows = [m[0] for m in sorted_members[1:]]
-            try:
-                _merge_v4_channels(chosen, other_rows, dk)
-            except ValueError as e:
-                rejected.append({
-                    "source": "supplement",
-                    "row": {"dedupe_key": dk},
-                    "reason": str(e),
-                })
-                continue
+            # No v4 metadata on dropped rows; chosen's own v4 metadata (if
+            # any) stays untouched. Nothing to merge.
             chosen.provenance["sources"] = [_source_entry(sorted_members[0][1], accession_map)]
             chosen.provenance["precision_dedupe"] = {
                 "kept_decimals": precisions[0],

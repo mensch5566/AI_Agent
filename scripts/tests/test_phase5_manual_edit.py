@@ -838,6 +838,109 @@ def test_supplement_dedupe_no_audit_no_change_in_behavior():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# P5-F10: precision-dedupe must not merge v4 metadata across different values
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_precision_dedupe_chosen_classification_dropped_audit_rejected():
+    """P5-F10 core: chosen has classification, dropped less-precise row has
+    audit metadata. Audit is value-evidence — must NOT be transplanted onto
+    a row with a different numeric value."""
+    from _shared.sec_json_adapter import adapt_supplement_facts
+    supp_doc = {
+        "metadata": {"ticker": "LITE"},
+        "facts": [
+            # Chosen: more precise (decimals=0), value=100.12, classification only
+            _supp_row(100.12, decimals=0,
+                      classification_source="AGENT_CLASSIFIED"),
+            # Dropped: less precise (decimals=-1), different value=100.0, audited
+            _supp_row(100.0, decimals=-1,
+                      audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+                      audit_note="audited less precise value",
+                      audit_evidence={"source_doc": "manual.htm"}),
+        ],
+    }
+    rows, rejected, _, _ = adapt_supplement_facts(supp_doc)
+    # Entire group rejected — won't silently transplant audit metadata
+    assert len(rows) == 0
+    assert len(rejected) == 1
+    assert "less-precise duplicate" in rejected[0]["reason"]
+
+
+def test_precision_dedupe_dropped_audit_only_rejected():
+    """P5-F10: even if chosen has no v4 metadata at all, a dropped audited
+    row should not be silently lost — reject so reviewer decides."""
+    from _shared.sec_json_adapter import adapt_supplement_facts
+    supp_doc = {
+        "metadata": {"ticker": "LITE"},
+        "facts": [
+            _supp_row(100.12, decimals=0),   # no v4
+            _supp_row(100.0, decimals=-1,
+                      audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+                      audit_evidence={"source_doc": "manual.htm"}),
+        ],
+    }
+    rows, rejected, _, _ = adapt_supplement_facts(supp_doc)
+    assert len(rows) == 0
+    assert len(rejected) == 1
+
+
+def test_precision_dedupe_dropped_classification_only_rejected():
+    """P5-F10: also reject if only classification (not audit) is on the
+    dropped row — keeps the channel-boundary rule simple/uniform."""
+    from _shared.sec_json_adapter import adapt_supplement_facts
+    supp_doc = {
+        "metadata": {"ticker": "LITE"},
+        "facts": [
+            _supp_row(100.12, decimals=0),
+            _supp_row(100.0, decimals=-1,
+                      classification_source="AGENT_CLASSIFIED"),
+        ],
+    }
+    rows, rejected, _, _ = adapt_supplement_facts(supp_doc)
+    assert len(rows) == 0
+    assert len(rejected) == 1
+
+
+def test_precision_dedupe_no_v4_metadata_still_works():
+    """P5-F10 regression: precision-dedupe with no v4 metadata on either
+    side still collapses to most-precise row (no spurious rejection)."""
+    from _shared.sec_json_adapter import adapt_supplement_facts
+    supp_doc = {
+        "metadata": {"ticker": "LITE"},
+        "facts": [
+            _supp_row(100.12, decimals=0),
+            _supp_row(100.0, decimals=-1),
+        ],
+    }
+    rows, rejected, _, _ = adapt_supplement_facts(supp_doc)
+    assert not rejected
+    assert len(rows) == 1
+    assert rows[0].value == 100.12   # most precise wins
+    assert rows[0].provenance["precision_dedupe"]["kept_decimals"] == 0
+
+
+def test_precision_dedupe_chosen_audit_no_dropped_v4_still_works():
+    """P5-F10: chosen has audit, dropped has NO v4. Chosen's own audit
+    metadata stays; dropped rounds collapse normally."""
+    from _shared.sec_json_adapter import adapt_supplement_facts
+    supp_doc = {
+        "metadata": {"ticker": "LITE"},
+        "facts": [
+            _supp_row(100.12, decimals=0,
+                      audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+                      audit_evidence={"source_doc": "x.htm"}),
+            _supp_row(100.0, decimals=-1),   # rounded duplicate, no v4
+        ],
+    }
+    rows, rejected, _, _ = adapt_supplement_facts(supp_doc)
+    assert not rejected
+    assert len(rows) == 1
+    assert rows[0].value == 100.12
+    # Chosen's own audit metadata stays (was never about merging)
+    assert rows[0].provenance["audit_source"] == "MANUAL_AUDIT_FROM_OFFICIAL_FILING"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Legacy enum input
 # ─────────────────────────────────────────────────────────────────────────────
 
