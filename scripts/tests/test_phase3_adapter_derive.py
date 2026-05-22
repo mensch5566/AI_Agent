@@ -120,6 +120,61 @@ def test_adapter_no_audit_source_no_field_polluted():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# P3-F1: allowlist guard + legacy AGENT_CLASSIFIED promotion
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_adapter_promotes_legacy_agent_classified_to_classification_source():
+    """P3-F1: legacy row with audit_source=AGENT_CLASSIFIED (pre-v4 parser
+    wrote classification into audit_source field) must be promoted to
+    classification_source, NOT pass-through to provenance.audit_source."""
+    from _shared.sec_json_adapter import adapt_gaap_facts
+    j = _make_gaap_json(audit_source="AGENT_CLASSIFIED")
+    rows, _ = adapt_gaap_facts(j, pe_map={})
+    prov = rows[0].provenance
+    # MUST NOT pollute audit channel
+    assert "audit_source" not in prov
+    assert "audit_source_raw" not in prov
+    # Promoted to classification channel
+    assert prov["classification_source"] == "AGENT_CLASSIFIED"
+
+
+def test_adapter_drops_unknown_audit_source_value():
+    """P3-F1: unknown audit_source string (not in MANUAL_AUDIT_SOURCES, not
+    a classification source either) must not be written to audit channel."""
+    from _shared.sec_json_adapter import adapt_gaap_facts
+    j = _make_gaap_json(audit_source="SOME_UNKNOWN_STRING")
+    rows, _ = adapt_gaap_facts(j, pe_map={})
+    prov = rows[0].provenance
+    assert "audit_source" not in prov
+    assert "audit_source_raw" not in prov
+    # And not promoted (it's not a classification enum either)
+    assert "classification_source" not in prov
+
+
+def test_adapter_does_not_overwrite_existing_classification_source():
+    """P3-F1 legacy promotion must NOT clobber an explicit classification_source."""
+    from _shared.sec_json_adapter import adapt_gaap_facts
+    j = _make_gaap_json(
+        audit_source="AGENT_CLASSIFIED",            # legacy
+        classification_source="MANUAL_RECLASSIFIED",  # explicit override
+    )
+    rows, _ = adapt_gaap_facts(j, pe_map={})
+    prov = rows[0].provenance
+    assert prov["classification_source"] == "MANUAL_RECLASSIFIED"  # not overwritten
+
+
+def test_adapter_legacy_pdf_still_writes_to_audit_channel():
+    """Sanity: MANUAL_AUDIT_FROM_PDF (legacy AUDIT enum) still goes to
+    audit channel — only non-audit strings are blocked from audit_source."""
+    from _shared.sec_json_adapter import adapt_gaap_facts
+    j = _make_gaap_json(audit_source="MANUAL_AUDIT_FROM_PDF")
+    rows, _ = adapt_gaap_facts(j, pe_map={})
+    prov = rows[0].provenance
+    assert prov["audit_source"] == "MANUAL_AUDIT_FROM_OFFICIAL_FILING"
+    assert prov["audit_source_raw"] == "MANUAL_AUDIT_FROM_PDF"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Phase 3.2: adapter Non-GAAP
 # ─────────────────────────────────────────────────────────────────────────────
 

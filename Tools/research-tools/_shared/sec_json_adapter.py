@@ -25,7 +25,9 @@ from . import cell_id as _id
 from .audit_metadata import (
     AUDIT_PROVENANCE_KEYS,
     CLASSIFICATION_KEYS,
+    MANUAL_CLASSIFICATION_SOURCES,
     PRESERVATION_EVENT_KEYS,
+    is_manual_audit_source,
     normalize_audit_source,
 )
 from .dimensional_aliases import build_axis_key, build_member_key
@@ -212,24 +214,27 @@ def _carry_audit_metadata_to_provenance(row: dict, provenance: dict[str, Any]) -
     reads.
 
     Schema v4 §7.1 canonical contract:
-      - `audit_source` → normalized via legacy enum map (canonical only)
-      - `audit_source_raw` → preserves whatever the row had (forensic)
+      - `audit_source` → normalized via legacy enum map; **only written if
+        the value is in MANUAL_AUDIT_SOURCES** (allowlist-guarded, P3-F1
+        fix). Non-audit strings like `AGENT_CLASSIFIED` / `NotebookLM_PDF_read`
+        never leak into `provenance.audit_source`.
+      - `audit_source_raw` → preserves the row's original audit_source value
+        ONLY when the canonical value is in the audit allowlist (forensic).
       - audit_note / audited_at / audited_by / audit_evidence carried as-is
       - classification_source / classification_note / classified_at /
-        long_tail_metadata carried (independent channel)
+        long_tail_metadata carried (independent channel).
+      - **Legacy promotion** (P3-F1): if row has `audit_source="AGENT_CLASSIFIED"`
+        and no `classification_source`, promote it to classification channel.
       - preservation_event keys carried (downstream may need to inspect)
     """
     raw_audit_source = row.get("audit_source")
     raw_audit_source_raw = row.get("audit_source_raw")
-    # Canonical: normalize whatever audit_source carries (legacy or canonical
-    # already). If row only has audit_source_raw (DB legacy fallback),
-    # use that as the input to normalize.
+    # Canonical normalization
     canonical = normalize_audit_source(raw_audit_source or raw_audit_source_raw)
-    if canonical is not None:
+    # P3-F1: allowlist-guard audit channel writes. Only canonical values in
+    # MANUAL_AUDIT_SOURCES get written to provenance.audit_source.
+    if is_manual_audit_source(canonical):
         provenance["audit_source"] = canonical
-        # audit_source_raw: prefer explicit field; fall back to whatever the
-        # row had in audit_source (since that's the raw legacy enum on
-        # legacy rows). Schema §2.2: write-side preserves the original.
         provenance["audit_source_raw"] = (
             raw_audit_source_raw if raw_audit_source_raw is not None
             else raw_audit_source
@@ -248,6 +253,15 @@ def _carry_audit_metadata_to_provenance(row: dict, provenance: dict[str, Any]) -
         v = row.get(key)
         if v is not None:
             provenance[key] = v
+    # P3-F1: legacy promotion — pre-v4 parsers wrote AGENT_CLASSIFIED into
+    # audit_source field. Promote to classification_source if no canonical
+    # classification_source set. Do NOT write into audit_source/raw (that
+    # would re-pollute the v4 contract).
+    if not provenance.get("classification_source"):
+        for legacy_field in (raw_audit_source, raw_audit_source_raw):
+            if legacy_field in MANUAL_CLASSIFICATION_SOURCES:
+                provenance["classification_source"] = legacy_field
+                break
     # Preservation event channel
     for key in PRESERVATION_EVENT_KEYS:
         v = row.get(key)
