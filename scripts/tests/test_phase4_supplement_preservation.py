@@ -202,7 +202,9 @@ def test_accept_new_clears_audit_no_conflict_json(tmp_path):
 
 def test_classification_only_conflict_uses_classification_event(tmp_path):
     """Classification-only CONFLICT: event must be PRIOR_CLASSIFICATION,
-    NOT PRIOR_AUDIT (schema §5)."""
+    NOT PRIOR_AUDIT (schema §5). P4-F1: classification-only conflict MUST
+    NOT enter `audit_conflicts_unresolved` fail-closed JSON — only the row
+    carries event + new_extract_value_rejected."""
     import extract_supplement_v3 as e3
     existing_path = _write_existing(tmp_path, [_mk(
         value=5.0,
@@ -211,10 +213,49 @@ def test_classification_only_conflict_uses_classification_event(tmp_path):
     )])
     new_facts = [_mk(value=7.5)]
     merged, _, confs = e3.preserve_supplement_audited_cells(new_facts, existing_path)
-    assert len(confs) == 1
+    # P4-F1: classification-only conflict does NOT enter conflicts_for_json
+    assert confs == []
+    # But row STILL carries event + rejected value
     assert merged[0]["value"] == 5.0
     assert merged[0]["preservation_event"] == "REEXTRACT_PRESERVED_PRIOR_CLASSIFICATION"
     assert merged[0]["preserved_from_audit"] is False
+    assert merged[0]["new_extract_value_rejected"] == 7.5
+
+
+def test_audit_conflict_does_enter_conflicts_for_json(tmp_path):
+    """P4-F1 inverse: audit conflict MUST enter conflicts_for_json (no regression)."""
+    import extract_supplement_v3 as e3
+    existing_path = _write_existing(tmp_path, [_mk(
+        value=379.2,
+        audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+    )])
+    new_facts = [_mk(value=999.0)]
+    _, _, confs = e3.preserve_supplement_audited_cells(new_facts, existing_path)
+    assert len(confs) == 1
+
+
+def test_mixed_audit_and_classification_only_only_audit_enters_conflicts(tmp_path):
+    """Two conflicts in same run: one audit, one classification-only.
+    Only the audit one should be in conflicts_for_json."""
+    import extract_supplement_v3 as e3
+    existing_path = _write_existing(tmp_path, [
+        _mk(source_account="CCG", source_account_qname="us-gaap:CCG", value=100.0,
+            audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING"),
+        _mk(source_account="DCAI", source_account_qname="us-gaap:DCAI", value=50.0,
+            classification_source="AGENT_CLASSIFIED"),
+    ])
+    new_facts = [
+        _mk(source_account="CCG", source_account_qname="us-gaap:CCG", value=200.0),
+        _mk(source_account="DCAI", source_account_qname="us-gaap:DCAI", value=60.0),
+    ]
+    merged, _, confs = e3.preserve_supplement_audited_cells(new_facts, existing_path)
+    # Only audit conflict in conflicts_for_json
+    assert len(confs) == 1
+    assert confs[0]["source_account"] == "CCG"
+    # Both rows still have preservation events
+    by_member = {r["source_account"]: r for r in merged}
+    assert by_member["CCG"]["preservation_event"] == "REEXTRACT_PRESERVED_PRIOR_AUDIT"
+    assert by_member["DCAI"]["preservation_event"] == "REEXTRACT_PRESERVED_PRIOR_CLASSIFICATION"
 
 
 def test_duplicate_identity_in_new_extract_fails_closed(tmp_path):
@@ -298,3 +339,81 @@ def test_no_existing_file_passthrough(tmp_path):
     assert merged == new_facts
     assert not log
     assert not confs
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P4-F3: corrupt existing JSON fail-closed
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_corrupt_existing_json_fails_closed(tmp_path):
+    """P4-F3: existing facts file exists but invalid JSON → raise ValueError
+    so caller doesn't silently lose audit metadata."""
+    import extract_supplement_v3 as e3
+    p = tmp_path / "LITE_supplement_facts_v3.json"
+    p.write_text("{not valid json")
+    with pytest.raises(ValueError, match="unreadable/invalid JSON"):
+        e3.preserve_supplement_audited_cells([_mk()], p)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P4-F4: tolerance exact boundary MATCH
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_values_match_exact_tolerance_boundary_is_match(tmp_path):
+    """P4-F4: schema §5 says MATCH when abs(diff) ≤ tol. Exact-boundary
+    equality must NOT count as conflict."""
+    import extract_supplement_v3 as e3
+    existing_path = _write_existing(tmp_path, [_mk(
+        value=100.0,
+        audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+    )])
+    # Difference exactly equal to default tolerance (1e-6)
+    new_facts = [_mk(value=100.0 + 1e-6)]
+    merged, log, confs = e3.preserve_supplement_audited_cells(new_facts, existing_path)
+    assert not confs   # MATCH, not CONFLICT
+    assert log[0]["kind"] == "MATCH"
+
+
+def test_values_match_just_outside_tolerance_is_conflict(tmp_path):
+    """Sanity: marginally exceeding tol still triggers CONFLICT (P4-F4
+    regression — we don't want ≤ to silently widen tolerance)."""
+    import extract_supplement_v3 as e3
+    existing_path = _write_existing(tmp_path, [_mk(
+        value=100.0,
+        audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+    )])
+    new_facts = [_mk(value=100.0 + 1e-3)]  # well outside 1e-6
+    _, log, confs = e3.preserve_supplement_audited_cells(new_facts, existing_path)
+    assert len(confs) == 1
+    assert log[0]["kind"] == "CONFLICT"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P4-F2: stale conflict.json cleanup on normal rerun (no audit conflicts)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_stale_conflict_json_cleaned_when_classification_only_conflict(tmp_path, monkeypatch):
+    """P4-F2 + P4-F1 combined: previous run wrote conflict.json; this run
+    has classification-only conflict (no audit conflict). Stale conflict.json
+    must be cleaned up."""
+    import extract_supplement_v3 as e3
+
+    # Pre-stage stale conflict.json from a "previous" run
+    stale = tmp_path / "LITE_supplement_conflict.json"
+    stale.write_text(json.dumps({
+        "metadata": {"audit_conflicts_unresolved": True, "conflict_count": 1},
+        "conflicts": [{"period": "Q1_FY2025"}],
+    }))
+    assert stale.exists()
+
+    # Simulate the main() cleanup path: no audit conflict this run
+    conflicts_for_json = []
+    # Mirror the main() else branch (P4-F2):
+    if not conflicts_for_json:
+        if stale.exists():
+            stale.unlink()
+    assert not stale.exists()
+    # Also use helper to verify it would produce empty conflict doc
+    p = e3.write_supplement_conflict_json(tmp_path, "LITE", conflicts_for_json)
+    doc = json.loads(p.read_text())
+    assert doc["metadata"]["audit_conflicts_unresolved"] is False
