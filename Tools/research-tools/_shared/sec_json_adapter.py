@@ -27,7 +27,9 @@ from .audit_metadata import (
     CLASSIFICATION_KEYS,
     MANUAL_CLASSIFICATION_SOURCES,
     PRESERVATION_EVENT_KEYS,
+    PRESERVATION_EVENTS,
     is_manual_audit_source,
+    is_manual_classification_source,
     normalize_audit_source,
 )
 from .dimensional_aliases import build_axis_key, build_member_key
@@ -299,7 +301,14 @@ def _carry_audit_metadata_to_provenance(row: dict, provenance: dict[str, Any]) -
             v = row.get(key)
             if v is not None:
                 provenance[key] = v
-    # Classification channel
+    # Classification channel — P3-F3: strict allowlist on classification_source.
+    raw_cls_source = row.get("classification_source")
+    if raw_cls_source is not None and not is_manual_classification_source(raw_cls_source):
+        raise ValueError(
+            f"invalid classification_source: {raw_cls_source!r} is not in "
+            f"MANUAL_CLASSIFICATION_SOURCES allowlist. Schema §3.2."
+        )
+    # Carry classification fields
     for key in CLASSIFICATION_KEYS:
         v = row.get(key)
         if v is not None:
@@ -313,7 +322,25 @@ def _carry_audit_metadata_to_provenance(row: dict, provenance: dict[str, Any]) -
             if legacy_field in MANUAL_CLASSIFICATION_SOURCES:
                 provenance["classification_source"] = legacy_field
                 break
-    # Preservation event channel
+
+    # P3-F3 classification orphan: classification_note / classified_at without
+    # classification_source is malformed. (long_tail_metadata can stand alone
+    # for backward compat with legacy long-tail rows.)
+    cls_detail_keys = ("classification_note", "classified_at")
+    has_cls_detail = any(row.get(k) is not None for k in cls_detail_keys)
+    if has_cls_detail and not provenance.get("classification_source"):
+        raise ValueError(
+            f"orphan classification metadata: classification_note/classified_at "
+            f"present but no valid classification_source. Schema §3.2."
+        )
+
+    # Preservation event channel — P3-F3: strict allowlist on preservation_event.
+    raw_event = row.get("preservation_event")
+    if raw_event is not None and raw_event not in PRESERVATION_EVENTS:
+        raise ValueError(
+            f"invalid preservation_event: {raw_event!r} is not in "
+            f"PRESERVATION_EVENTS allowlist. Schema §3.3."
+        )
     for key in PRESERVATION_EVENT_KEYS:
         v = row.get(key)
         if v is not None:

@@ -266,6 +266,70 @@ def test_adapter_classification_with_audit_evidence_rejected():
     assert "channel violation" in rejected[0]["reason"]
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# P3-F3: classification_source / preservation_event strict allowlist
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_adapter_rejects_invalid_classification_source():
+    """P3-F3: classification_source not in MANUAL_CLASSIFICATION_SOURCES
+    must reject. Schema §3.2 strict allowlist."""
+    from _shared.sec_json_adapter import adapt_gaap_facts
+    j = _make_gaap_json(classification_source="SOME_UNKNOWN_CLASS")
+    rows, rejected = adapt_gaap_facts(j, pe_map={})
+    assert not rows
+    assert len(rejected) == 1
+    assert "invalid classification_source" in rejected[0]["reason"]
+
+
+def test_adapter_rejects_orphan_classification_note():
+    """P3-F3: classification_note without classification_source is malformed."""
+    from _shared.sec_json_adapter import adapt_gaap_facts
+    j = _make_gaap_json(classification_note="some reasoning")
+    rows, rejected = adapt_gaap_facts(j, pe_map={})
+    assert not rows
+    assert len(rejected) == 1
+    assert "orphan classification metadata" in rejected[0]["reason"]
+
+
+def test_adapter_long_tail_metadata_without_classification_source_accepted():
+    """Backward compat: pure long_tail_metadata without classification_source
+    is still accepted (legacy long-tail rows may not have classification_source
+    set)."""
+    from _shared.sec_json_adapter import adapt_gaap_facts
+    j = _make_gaap_json(
+        long_tail_metadata={"rolls_up_to": "operating_expenses"},
+    )
+    rows, rejected = adapt_gaap_facts(j, pe_map={})
+    assert rows
+    assert not rejected
+
+
+def test_adapter_rejects_invalid_preservation_event():
+    """P3-F3: preservation_event not in PRESERVATION_EVENTS must reject.
+    Schema §3.3 strict allowlist."""
+    from _shared.sec_json_adapter import adapt_gaap_facts
+    j = _make_gaap_json(preservation_event="SOME_UNKNOWN_EVENT")
+    rows, rejected = adapt_gaap_facts(j, pe_map={})
+    assert not rows
+    assert len(rejected) == 1
+    assert "invalid preservation_event" in rejected[0]["reason"]
+
+
+def test_adapter_valid_classification_source_and_preservation_event_pass():
+    """Sanity: valid v4 enums pass through P3-F3 checks."""
+    from _shared.sec_json_adapter import adapt_gaap_facts
+    j = _make_gaap_json(
+        classification_source="MANUAL_RECLASSIFIED",
+        preservation_event="REEXTRACT_PRESERVED_PRIOR_CLASSIFICATION",
+    )
+    rows, rejected = adapt_gaap_facts(j, pe_map={})
+    assert rows
+    assert not rejected
+    prov = rows[0].provenance
+    assert prov["classification_source"] == "MANUAL_RECLASSIFIED"
+    assert prov["preservation_event"] == "REEXTRACT_PRESERVED_PRIOR_CLASSIFICATION"
+
+
 def test_adapter_valid_audit_with_full_metadata_still_works():
     """Sanity: well-formed row with valid audit_source + all audit fields
     must NOT be rejected by P3-F2 stricter check."""
