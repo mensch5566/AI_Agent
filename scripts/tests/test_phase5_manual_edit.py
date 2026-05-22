@@ -38,30 +38,36 @@ def _write_supplement(tmp_path, facts):
 def _run(json_path, **overrides):
     """Invoke manual_edit.run() with default args + overrides."""
     defaults = {
-        "ticker":            "LITE",
-        "target":            "gaap",
-        "period":            "Q1_FY2026",
-        "uni_account":       "income_before_taxes",
-        "new_value":         -172.1,
-        "source_account":    None,
-        "row_type":          None,
-        "unit":              "USD_millions",
-        "period_kind":       None,
-        "axis":              None,
-        "axis_qname":        None,
-        "member_qname":      None,
-        "audit_source":      "MANUAL_AUDIT_FROM_OFFICIAL_FILING",
-        "source_doc":        "lite-20250927.htm",
-        "page_or_section":   None,
-        "quote":             None,
-        "accession_number":  None,
-        "period_scope":      None,
-        "audit_note":        "10-Q income statement",
-        "audited_by":        "test@example.com",
-        "accept_new_values": False,
-        "dry_run":           False,
-        "json_path":         str(json_path),
-        "facts_key":         None,
+        "ticker":                 "LITE",
+        "target":                 "gaap",
+        "period":                 "Q1_FY2026",
+        "uni_account":            "income_before_taxes",
+        "new_value":              -172.1,
+        "source_account":         None,
+        "row_type":               None,
+        "unit":                   "USD_millions",
+        "period_kind":            None,
+        "axis":                   None,
+        "axis_qname":             None,
+        "member_qname":           None,
+        "period_end":             None,
+        "decimals":               None,
+        "other_dimensions_json":  None,
+        "audit_source":           "MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+        "source_doc":             "lite-20250927.htm",
+        "page_or_section":        None,
+        "quote":                  None,
+        "accession_number":       None,
+        "period_scope":           None,
+        "audit_note":             "10-Q income statement",
+        "audited_by":             "test@example.com",
+        "accept_new_values":      False,
+        "dry_run":                False,
+        "json_path":              str(json_path),
+        "facts_key":              None,
+        "classification_source":  None,
+        "classification_note":    None,
+        "long_tail_metadata_json": None,
     }
     defaults.update(overrides)
     return manual_edit.run(_NS(**defaults))
@@ -306,7 +312,8 @@ def test_supplement_target_match_and_stamp(tmp_path):
 
 
 def test_supplement_target_no_match_creates_new_row(tmp_path):
-    """Supplement: no matching dimensional identity → create new fact."""
+    """Supplement: no matching dimensional identity → create new fact.
+    P5-F2: must supply --period-end (adapter rejects rows without it)."""
     p = _write_supplement(tmp_path, [])
     _run(p,
          target="supplement",
@@ -315,15 +322,343 @@ def test_supplement_target_no_match_creates_new_row(tmp_path):
          new_value=379.2,
          source_account="Components",
          period_kind="single_quarter",
+         period_end="2025-09-27",     # P5-F2 required
          axis="business_segment",
          axis_qname="us-gaap:StatementBusinessSegmentsAxis",
          member_qname="us-gaap:ComponentsMember",
          source_doc="lite-Q1-FY26.htm")
     facts = json.loads(p.read_text())["facts"]
     assert len(facts) == 1
-    assert facts[0]["value"] == 379.2
-    assert facts[0]["axis_qname"] == "us-gaap:StatementBusinessSegmentsAxis"
+    fact = facts[0]
+    assert fact["value"] == 379.2
+    assert fact["axis_qname"] == "us-gaap:StatementBusinessSegmentsAxis"
+    assert fact["audit_source"] == "MANUAL_AUDIT_FROM_OFFICIAL_FILING"
+    # P5-F2: adapter-required fields
+    assert fact["period_end"] == "2025-09-27"
+    assert fact["type"] == "GAAP_SEGMENT"  # P5-F3 default
+    assert fact["source_doc"] == "lite-Q1-FY26.htm"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P5-F1: supplement adapter carries v4 audit metadata
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_supplement_adapter_carries_audit_metadata():
+    """P5-F1: a supplement fact with audit metadata must surface in adapter
+    output's provenance, not get dropped."""
+    from _shared.sec_json_adapter import adapt_supplement_facts
+    supp_doc = {
+        "metadata": {"ticker": "LITE"},
+        "facts": [{
+            "period":               "Q1_FY2026",
+            "period_end":           "2025-09-27",
+            "period_kind":          "single_quarter",
+            "axis":                 "product",
+            "axis_qname":           "srt:ProductOrServiceAxis",
+            "source_account":       "Components",
+            "source_account_qname": "us-gaap:ComponentsMember",
+            "uni_account":          "revenue",
+            "value":                379.2,
+            "unit":                 "USD_millions",
+            "type":                 "GAAP_SEGMENT",
+            "source_doc":           "lite-q1.htm",
+            "audit_source":         "MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+            "audit_source_raw":     "MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+            "audit_note":           "10-Q Note 15",
+            "audit_evidence":       {"source_doc": "lite-q1.htm"},
+        }],
+    }
+    rows, rejected, _, _ = adapt_supplement_facts(supp_doc)
+    assert not rejected
+    assert len(rows) == 1
+    prov = rows[0].provenance
+    assert prov["audit_source"] == "MANUAL_AUDIT_FROM_OFFICIAL_FILING"
+    assert prov["audit_source_raw"] == "MANUAL_AUDIT_FROM_OFFICIAL_FILING"
+    assert prov["audit_note"] == "10-Q Note 15"
+    assert prov["audit_evidence"] == {"source_doc": "lite-q1.htm"}
+
+
+def test_supplement_adapter_legacy_audit_source_normalized():
+    """P5-F1: legacy MANUAL_AUDIT_FROM_PDF on supplement also gets normalized."""
+    from _shared.sec_json_adapter import adapt_supplement_facts
+    supp_doc = {
+        "metadata": {"ticker": "LITE"},
+        "facts": [{
+            "period":               "Q1_FY2026",
+            "period_end":           "2025-09-27",
+            "period_kind":          "single_quarter",
+            "axis":                 "product",
+            "axis_qname":           "srt:ProductOrServiceAxis",
+            "source_account":       "Components",
+            "source_account_qname": "us-gaap:ComponentsMember",
+            "uni_account":          "revenue",
+            "value":                379.2,
+            "unit":                 "USD_millions",
+            "type":                 "GAAP_SEGMENT",
+            "source_doc":           "lite-q1.htm",
+            "audit_source":         "MANUAL_AUDIT_FROM_PDF",  # legacy
+            "audit_evidence":       {"source_doc": "lite-q1.htm"},
+        }],
+    }
+    rows, _, _, _ = adapt_supplement_facts(supp_doc)
+    prov = rows[0].provenance
+    assert prov["audit_source"] == "MANUAL_AUDIT_FROM_OFFICIAL_FILING"
+    assert prov["audit_source_raw"] == "MANUAL_AUDIT_FROM_PDF"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P5-F2: supplement new row requires --period-end (fail-closed)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_supplement_new_row_without_period_end_rejected(tmp_path):
+    """P5-F2: stamp_new_row for supplement without --period-end raises."""
+    p = _write_supplement(tmp_path, [])
+    with pytest.raises(ValueError, match="--period-end"):
+        _run(p,
+             target="supplement",
+             period="Q1_FY2026",
+             uni_account="revenue",
+             new_value=379.2,
+             source_account="Components",
+             period_kind="single_quarter",
+             axis="business_segment",
+             axis_qname="us-gaap:StatementBusinessSegmentsAxis",
+             member_qname="us-gaap:ComponentsMember")
+
+
+def test_supplement_new_row_without_period_kind_rejected(tmp_path):
+    """P5-F2: same fail-closed for missing --period-kind."""
+    p = _write_supplement(tmp_path, [])
+    with pytest.raises(ValueError, match="--period-kind"):
+        _run(p,
+             target="supplement",
+             period="Q1_FY2026",
+             uni_account="revenue",
+             new_value=379.2,
+             source_account="Components",
+             period_end="2025-09-27",
+             axis="business_segment",
+             axis_qname="us-gaap:StatementBusinessSegmentsAxis",
+             member_qname="us-gaap:ComponentsMember")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P5-F3: GAAP / 8K new row default type
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_gaap_new_row_defaults_to_type_GAAP(tmp_path):
+    """P5-F3: GAAP new row carries type='GAAP' by default."""
+    p = _write_gaap(tmp_path, [])
+    _run(p)
+    row = json.loads(p.read_text())["income_statement"][0]
+    assert row["type"] == "GAAP"
+
+
+def test_nongaap_new_row_defaults_to_type_NON_GAAP(tmp_path):
+    """P5-F3: nongaap new row carries type='NON_GAAP'."""
+    p = tmp_path / "LITE_nongaap.json"
+    p.write_text(json.dumps({"metadata": {"ticker": "LITE"}, "income_statement": []}))
+    _run(p, target="nongaap", uni_account="adj_eps", unit="USD_per_share",
+         new_value=0.48)
+    row = json.loads(p.read_text())["income_statement"][0]
+    assert row["type"] == "NON_GAAP"
+
+
+def test_row_type_override_wins(tmp_path):
+    p = _write_gaap(tmp_path, [])
+    _run(p, row_type="CUSTOM_TYPE")
+    row = json.loads(p.read_text())["income_statement"][0]
+    assert row["type"] == "CUSTOM_TYPE"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P5-F4: --other-dimensions-json for supplement multi-dim
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_supplement_locate_uses_other_dimensions(tmp_path):
+    """P5-F4: existing multi-dim supplement row matches when caller supplies
+    --other-dimensions-json."""
+    p = _write_supplement(tmp_path, [{
+        "period":               "Q1_FY2026",
+        "period_kind":          "single_quarter",
+        "axis":                 "product",
+        "axis_qname":           "srt:ProductOrServiceAxis",
+        "source_account":       "Components",
+        "source_account_qname": "us-gaap:ComponentsMember",
+        "uni_account":          "revenue",
+        "value":                300.0,
+        "unit":                 "USD_millions",
+        "type":                 "GAAP_SEGMENT",
+        "other_dimensions":     [{"axis": "srt:Geo", "member": "country:US"}],
+    }])
+    _run(p,
+         target="supplement",
+         period="Q1_FY2026",
+         uni_account="revenue",
+         new_value=350.0,
+         source_account="Components",
+         period_kind="single_quarter",
+         axis="product",
+         axis_qname="srt:ProductOrServiceAxis",
+         member_qname="us-gaap:ComponentsMember",
+         other_dimensions_json='[{"axis": "srt:Geo", "member": "country:US"}]',
+         source_doc="x.htm")
+    facts = json.loads(p.read_text())["facts"]
+    assert len(facts) == 1   # didn't create a duplicate empty-dim row
+    assert facts[0]["value"] == 350.0
     assert facts[0]["audit_source"] == "MANUAL_AUDIT_FROM_OFFICIAL_FILING"
+
+
+def test_supplement_no_match_when_other_dimensions_differ(tmp_path):
+    """P5-F4: caller's other_dimensions doesn't match → no match (creates
+    new row). Critical that this NOT silently overwrite the existing row."""
+    p = _write_supplement(tmp_path, [{
+        "period":               "Q1_FY2026",
+        "period_kind":          "single_quarter",
+        "axis":                 "product",
+        "axis_qname":           "srt:ProductOrServiceAxis",
+        "source_account":       "Components",
+        "source_account_qname": "us-gaap:ComponentsMember",
+        "uni_account":          "revenue",
+        "value":                300.0,
+        "unit":                 "USD_millions",
+        "type":                 "GAAP_SEGMENT",
+        "other_dimensions":     [{"axis": "srt:Geo", "member": "country:US"}],
+    }])
+    _run(p,
+         target="supplement",
+         period="Q1_FY2026",
+         uni_account="revenue",
+         new_value=50.0,
+         source_account="Components",
+         period_kind="single_quarter",
+         period_end="2025-09-27",
+         axis="product",
+         axis_qname="srt:ProductOrServiceAxis",
+         member_qname="us-gaap:ComponentsMember",
+         other_dimensions_json='[{"axis": "srt:Geo", "member": "country:JP"}]',
+         source_doc="x.htm")
+    facts = json.loads(p.read_text())["facts"]
+    assert len(facts) == 2  # two distinct rows for US vs JP
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P5-F5: GAAP/8K locate uses --unit
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_gaap_locate_requires_unit_match_when_unit_given(tmp_path):
+    """P5-F5: caller passes --unit; row with different unit must NOT match
+    (would otherwise overwrite the wrong row)."""
+    p = _write_gaap(tmp_path, [{
+        "period": "Q1_FY2026", "uni_account": "shares_basic",
+        "value": 1_000_000.0, "unit": "shares", "type": "GAAP",
+    }])
+    # Caller mistakenly passes unit=millions_shares — must NOT match the row
+    _run(p,
+         uni_account="shares_basic",
+         unit="millions_shares",
+         new_value=1.0)
+    rows = json.loads(p.read_text())["income_statement"]
+    # Should have appended a NEW row, not overwritten the existing shares row
+    assert len(rows) == 2
+    by_unit = {r["unit"]: r for r in rows}
+    assert by_unit["shares"]["value"] == 1_000_000.0   # unchanged
+    assert by_unit["millions_shares"]["value"] == 1.0   # new audit row
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P5-F6: log records canonical + raw audit_source pair
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_log_records_canonical_and_raw_for_legacy_input(tmp_path):
+    """P5-F6: caller passes legacy MANUAL_AUDIT_FROM_PDF → log has both
+    canonical and raw fields."""
+    p = _write_gaap(tmp_path, [{
+        "period": "Q1_FY2026", "uni_account": "income_before_taxes",
+        "value": -150.0, "unit": "USD_millions", "type": "GAAP",
+    }])
+    _run(p, audit_source="MANUAL_AUDIT_FROM_PDF")
+    log_entry = json.loads(
+        (tmp_path / "manual_edit_audit_log.jsonl").read_text().strip()
+    )
+    assert log_entry["audit_source"] == "MANUAL_AUDIT_FROM_OFFICIAL_FILING"  # canonical
+    assert log_entry["audit_source_raw"] == "MANUAL_AUDIT_FROM_PDF"          # raw preserved
+
+
+def test_log_records_forensic_field_on_override(tmp_path):
+    """P5-F6: override path log includes accepted_new_value_replaces_audit."""
+    p = _write_gaap(tmp_path, [{
+        "period": "Q1_FY2026", "uni_account": "income_before_taxes",
+        "value": -150.0, "unit": "USD_millions", "type": "GAAP",
+        "audit_source": "MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+        "audit_source_raw": "MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+    }])
+    _run(p, new_value=-180.0, accept_new_values=True,
+         source_doc="amended.htm")
+    log_entry = json.loads(
+        (tmp_path / "manual_edit_audit_log.jsonl").read_text().strip()
+    )
+    assert log_entry["operation"] == "override_existing_audit"
+    assert log_entry["accepted_new_value_replaces_audit"]["prior_audit_value"] == -150.0
+    assert log_entry["accepted_new_value_replaces_audit"]["new_extracted_value"] == -180.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P5-F7: classification path (MANUAL_RECLASSIFIED)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_classification_stamp_writes_classification_source(tmp_path):
+    """P5-F7: --classification-source path writes classification channel,
+    not audit channel."""
+    p = _write_gaap(tmp_path, [{
+        "period": "Q1_FY2026", "uni_account": "operating_expense_long_tail",
+        "source_account": "Goodwill Impairment", "value": 100.0,
+        "unit": "USD_millions", "type": "GAAP",
+        "classification_source": "AGENT_CLASSIFIED",
+        "long_tail_metadata": {"rolls_up_to": "operating_expenses"},
+    }])
+    _run(p,
+         audit_source=None,
+         classification_source="MANUAL_RECLASSIFIED",
+         classification_note="re-bucketed after review",
+         uni_account="operating_expense_long_tail",
+         source_account="Goodwill Impairment",
+         new_value=100.0,
+         long_tail_metadata_json='{"rolls_up_to": "selling_general_administrative"}')
+    row = json.loads(p.read_text())["income_statement"][0]
+    # Classification channel updated
+    assert row["classification_source"] == "MANUAL_RECLASSIFIED"
+    assert row["classification_note"] == "re-bucketed after review"
+    assert row["long_tail_metadata"]["rolls_up_to"] == "selling_general_administrative"
+    # Audit channel untouched
+    assert "audit_source" not in row
+    # log uses classification_source
+    log_entry = json.loads(
+        (tmp_path / "manual_edit_audit_log.jsonl").read_text().strip()
+    )
+    assert log_entry["classification_source"] == "MANUAL_RECLASSIFIED"
+    assert "audit_source" not in log_entry
+
+
+def test_audit_and_classification_mutually_exclusive(tmp_path):
+    """P5-F7: passing both --audit-source and --classification-source raises."""
+    p = _write_gaap(tmp_path, [])
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        _run(p,
+             audit_source="MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+             classification_source="MANUAL_RECLASSIFIED")
+
+
+def test_neither_audit_nor_classification_source_raises(tmp_path):
+    p = _write_gaap(tmp_path, [])
+    with pytest.raises(ValueError, match="must specify either"):
+        _run(p, audit_source=None, classification_source=None)
+
+
+def test_invalid_classification_source_rejected(tmp_path):
+    p = _write_gaap(tmp_path, [])
+    with pytest.raises(ValueError, match="invalid --classification-source"):
+        _run(p, audit_source=None, classification_source="SOMETHING_ELSE")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

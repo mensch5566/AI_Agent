@@ -735,6 +735,13 @@ def _adapt_one_supplement_fact(
         other_dimensions=other_dims,
     )
 
+    # P5-F1: supplement provenance carries v4 audit metadata through the
+    # adapter, same as GAAP / Non-GAAP. The downstream dedupe pass later
+    # appends `sources[]`; the audit channel writes must happen first so
+    # they survive collapse.
+    provenance: dict[str, Any] = {}
+    _carry_audit_metadata_to_provenance(f, provenance)
+
     row = DimensionalRow(
         cell_id=cid,
         ticker=ticker,
@@ -755,7 +762,7 @@ def _adapt_one_supplement_fact(
         unit=canon_unit,
         decimals=int(f["decimals"]) if f.get("decimals") not in (None, "") else None,
         other_dimensions=other_dims,
-        provenance={"audit_source": None},  # sources[] filled in dedupe pass
+        provenance=provenance,
     )
 
     dedupe_key = "|".join([
