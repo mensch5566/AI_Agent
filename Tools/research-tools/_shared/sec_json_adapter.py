@@ -250,16 +250,28 @@ def _carry_audit_metadata_to_provenance(row: dict, provenance: dict[str, Any]) -
         )
         audit_channel_written = True
 
-    # P3-F2: orphan audit metadata fail-closed. If the row carries any of the
-    # audit-detail fields but we DIDN'T write a valid audit_source above,
-    # that's malformed input — better to surface as rejected than to ship
-    # orphan note/evidence with no source.
     audit_detail_keys = ("audit_note", "audited_at", "audited_by", "audit_evidence")
     has_audit_detail = any(row.get(k) is not None for k in audit_detail_keys)
     is_promotable_classification = (
         raw_audit_source in MANUAL_CLASSIFICATION_SOURCES
         or raw_audit_source_raw in MANUAL_CLASSIFICATION_SOURCES
     )
+    audit_source_present = (raw_audit_source is not None
+                            or raw_audit_source_raw is not None)
+
+    # P3-F2a: invalid audit_source enum fail-closed REGARDLESS of audit_detail.
+    # If row has any audit_source value at all, it must be in MANUAL_AUDIT_SOURCES
+    # or be a promotable classification enum. Unknown / malformed strings reject.
+    if (audit_source_present and not audit_channel_written
+            and not is_promotable_classification):
+        raise ValueError(
+            f"invalid audit_source: {raw_audit_source!r} (raw={raw_audit_source_raw!r}) "
+            f"is not in MANUAL_AUDIT_SOURCES allowlist nor a promotable "
+            f"classification enum. Schema §3.1 is strict allowlist."
+        )
+
+    # P3-F2 (original): orphan audit metadata without any audit_source at all.
+    # E.g. audit_note set but no audit_source field → malformed.
     if has_audit_detail and not audit_channel_written and not is_promotable_classification:
         raise ValueError(
             f"orphan audit metadata: audit_note/audited_at/audited_by/audit_evidence "
@@ -268,7 +280,19 @@ def _carry_audit_metadata_to_provenance(row: dict, provenance: dict[str, Any]) -
             f"Either supply a valid audit_source enum or remove the detail fields."
         )
 
-    # Carry remaining audit fields verbatim — only when audit_channel_written
+    # P3-F2b: classification row carrying audit-channel detail fields is a
+    # channel violation. audit_note is audit provenance, not classification
+    # reasoning — for the latter, source side should write `classification_note`.
+    if is_promotable_classification and has_audit_detail:
+        offending = [k for k in audit_detail_keys if row.get(k) is not None]
+        raise ValueError(
+            f"channel violation: row with classification source "
+            f"({raw_audit_source or raw_audit_source_raw!r}) carries audit-channel "
+            f"fields {offending}. Use `classification_note` instead, or supply "
+            f"a valid manual audit_source enum."
+        )
+
+    # Carry audit detail keys verbatim — only when audit_channel_written
     # (P3-F2: don't ship orphan note/evidence without a valid source).
     if audit_channel_written:
         for key in audit_detail_keys:

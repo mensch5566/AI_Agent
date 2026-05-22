@@ -138,17 +138,16 @@ def test_adapter_promotes_legacy_agent_classified_to_classification_source():
     assert prov["classification_source"] == "AGENT_CLASSIFIED"
 
 
-def test_adapter_drops_unknown_audit_source_value():
-    """P3-F1: unknown audit_source string (not in MANUAL_AUDIT_SOURCES, not
-    a classification source either) must not be written to audit channel."""
+def test_adapter_rejects_unknown_audit_source_value():
+    """P3-F2a (tightened from P3-F1): unknown audit_source string is
+    invalid enum — schema §3.1 strict allowlist requires reject, NOT
+    silent drop."""
     from _shared.sec_json_adapter import adapt_gaap_facts
     j = _make_gaap_json(audit_source="SOME_UNKNOWN_STRING")
-    rows, _ = adapt_gaap_facts(j, pe_map={})
-    prov = rows[0].provenance
-    assert "audit_source" not in prov
-    assert "audit_source_raw" not in prov
-    # And not promoted (it's not a classification enum either)
-    assert "classification_source" not in prov
+    rows, rejected = adapt_gaap_facts(j, pe_map={})
+    assert not rows
+    assert len(rejected) == 1
+    assert "invalid audit_source" in rejected[0]["reason"]
 
 
 def test_adapter_does_not_overwrite_existing_classification_source():
@@ -189,9 +188,9 @@ def test_adapter_orphan_audit_note_without_audit_source_rejected():
     assert "orphan audit metadata" in rejected[0]["reason"]
 
 
-def test_adapter_orphan_audit_evidence_with_invalid_source_rejected():
-    """audit_source=UNKNOWN_STRING + audit_evidence → reject, not silently
-    drop audit_source and keep evidence."""
+def test_adapter_invalid_source_plus_audit_evidence_rejected():
+    """audit_source=UNKNOWN_STRING + audit_evidence → reject. With P3-F2a
+    tightening, invalid-enum check fires first; either rejection reason OK."""
     from _shared.sec_json_adapter import adapt_gaap_facts
     j = _make_gaap_json(
         audit_source="SOME_UNKNOWN_STRING",
@@ -200,7 +199,8 @@ def test_adapter_orphan_audit_evidence_with_invalid_source_rejected():
     rows, rejected = adapt_gaap_facts(j, pe_map={})
     assert not rows
     assert len(rejected) == 1
-    assert "orphan audit metadata" in rejected[0]["reason"]
+    assert ("invalid audit_source" in rejected[0]["reason"]
+            or "orphan audit metadata" in rejected[0]["reason"])
 
 
 def test_adapter_classification_promotion_not_falsely_rejected_by_p3f2():
@@ -221,28 +221,49 @@ def test_adapter_classification_promotion_not_falsely_rejected_by_p3f2():
     assert "audit_source" not in prov
 
 
-def test_adapter_classification_with_audit_detail_still_rejected():
-    """Edge case: row has AGENT_CLASSIFIED (promotable) AND audit_note —
-    the audit_note has no valid audit_source backing, so still orphan.
-    P3-F2: reject; classification promotion happens but audit_note is orphan."""
+def test_adapter_classification_with_audit_detail_rejected():
+    """P3-F2b: row with classification source + audit_note is a channel
+    violation. audit_note is audit channel; for classification reasoning,
+    source side must write classification_note instead."""
     from _shared.sec_json_adapter import adapt_gaap_facts
     j = _make_gaap_json(
-        audit_source="AGENT_CLASSIFIED",   # promotable
-        audit_note="some note",            # orphan audit detail
+        audit_source="AGENT_CLASSIFIED",
+        audit_note="some note",
     )
     rows, rejected = adapt_gaap_facts(j, pe_map={})
-    # GPT's preferred policy: fail-closed when audit-detail orphan even if
-    # classification is promotable (the classification doesn't justify the
-    # audit_note). However if a row has audit_note legitimately, it should
-    # also have a valid audit_source. We choose: this is rejected too.
-    # NOTE: the is_promotable_classification short-circuit lets this pass —
-    # so this test documents the current behavior, which is: row is NOT
-    # rejected (classification promote is the dominant signal).
-    assert rows  # current behavior: not rejected
+    assert not rows
+    assert len(rejected) == 1
+    assert "channel violation" in rejected[0]["reason"]
+
+
+def test_adapter_classification_with_classification_note_accepted():
+    """P3-F2b sanity: classification + classification_note is correct
+    channel — should pass through (no audit channel involved)."""
+    from _shared.sec_json_adapter import adapt_gaap_facts
+    j = _make_gaap_json(
+        audit_source="AGENT_CLASSIFIED",
+        classification_note="agent reasoning text",
+    )
+    rows, rejected = adapt_gaap_facts(j, pe_map={})
+    assert rows
+    assert not rejected
     prov = rows[0].provenance
     assert prov["classification_source"] == "AGENT_CLASSIFIED"
-    # The audit_note didn't get written (audit_channel_written=False guard)
+    assert prov["classification_note"] == "agent reasoning text"
+    assert "audit_source" not in prov
     assert "audit_note" not in prov
+
+
+def test_adapter_classification_with_audit_evidence_rejected():
+    """P3-F2b: same channel violation for audit_evidence."""
+    from _shared.sec_json_adapter import adapt_gaap_facts
+    j = _make_gaap_json(
+        audit_source="AGENT_CLASSIFIED",
+        audit_evidence={"source_doc": "x.htm"},
+    )
+    rows, rejected = adapt_gaap_facts(j, pe_map={})
+    assert not rows
+    assert "channel violation" in rejected[0]["reason"]
 
 
 def test_adapter_valid_audit_with_full_metadata_still_works():
