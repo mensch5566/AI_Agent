@@ -7,7 +7,7 @@ Updated: 2026-05-23
 - `Financials Viewer` now includes a `Valuation` tab for historical TTM P/E with `日 / 月 / 季` switching.
 - Weekly research workflow is being standardized through reusable skills such as `macro-weekly-news`.
 - TWSE XBRL ingestion now also supports onboarding new tickers such as `7769 鴻勁` into `Financials Viewer`.
-- **Audit Metadata Schema v4 contract shipped end-to-end** across all parse paths (10QK GAAP / 8K Non-GAAP / SEC-supplement v3) → adapter (with dedupe-safe v4 channel merge) → upsert → derive-base, plus an ad-hoc edit CLI (`scripts/manual_edit.py`) for one-off cell corrections. Every audited / classified / preserved cell carries v4 channels through the full pipeline; 226 regression tests cover the contract.
+- **Audit Metadata Schema v4 contract shipped end-to-end** across all parse paths (10QK GAAP / 8K Non-GAAP / SEC-supplement v3) → adapter (with dedupe-safe v4 channel merge) → upsert → derive-base, plus an ad-hoc edit CLI (`scripts/manual_edit.py`) for one-off cell corrections and a one-shot DB legacy migration script (`scripts/migrate_db_audit_source_v4.py`). Frontend `Financials Viewer` cells now render audit / classification indicator badges (✓ / ·) with tooltip showing audit_source, note, evidence, preservation event. 258 regression tests cover the contract; shared preservation helper (`_shared/preservation.py`) DRYs the three parse skills' re-extract matrix into one tested module.
 
 ## Stable Areas
 - `app/page.tsx` portal card layout is the top-level navigation surface.
@@ -34,6 +34,11 @@ Updated: 2026-05-23
 - Prefer adding new portal-facing features behind an existing module/page when possible, instead of creating duplicate entrypoints.
 
 ## Latest Changes
+- **Audit Metadata Schema v4 — Phase 6 closed** (2026-05-23, single round of in-session implementation).
+  - **6.1 Preservation refactor**: pulled three copy-pasted `_preserve_*_cells` functions from `parse-10QK-gaap/xbrl_extract.py`, `parse-8k-nongaap/extract_8k_nongaap.py`, and `parse-SEC-supplement/extract_supplement_v3.py` into a single `_shared/preservation.py` (`preserve_audited_rows` + `values_match` + `row_has_audit` + `row_has_classification` + `PreservationResult` dataclass). Each parse skill now calls the shared helper with its own `identity_fn` (`build_preservation_identity` for GAAP/8K, `build_supplement_identity` for supplement) and prints the report. ~340 net lines removed, future matrix changes touch one file.
+  - **6.2 Frontend audit indicator**: `StatementMatrix.tsx` displays "✓" badge on cells whose `provenance.audit_source` (canonical or legacy raw) is in `MANUAL_AUDIT_SOURCES`, or derived cells where `has_audited_inputs=true`. Classification-only cells get "·" badge. Tooltip extended with audit_source / audit_note / audited_by / audited_at / audit_evidence (source_doc + page_or_section) / preservation_event / new_extract_value_rejected / derived row's audited_input_cell_ids count. Both GAAP and Non-GAAP columns wired.
+  - **6.3 DB legacy migration script**: `scripts/migrate_db_audit_source_v4.py` for one-shot normalize of pre-v4 enums in existing Supabase data. CLI dry-runs by default; `--apply` requires explicit flag; no-`--ticker` apply prompts `'YES'` confirmation. Two operations: `audit_normalize` (`MANUAL_AUDIT_FROM_PDF` / `MANUAL_AUDIT_FROM_8K_PDF` → canonical + `audit_source_raw` preserve) and `classification_promote` (`AGENT_CLASSIFIED` / `MANUAL_RECLASSIFIED` in audit_source → `classification_source`, mirrors Phase 2 F14 ADDED_BACK pattern). Per-row UPDATE (no batch) for granular failure diagnosis. 17 helper unit tests; **production data not yet migrated** — user runs per-ticker after frontend visual verification.
+  - 32 new regression tests (15 preservation helper + 17 migration helper); full suite 258 passed.
 - **Audit Metadata Schema v4 — Phase 5 closed** (2026-05-23, 3 rounds of Codex review).
   - `scripts/manual_edit.py` — ad-hoc audit edit CLI for one-off cell corrections outside `apply_audit.py` batch flow. Targets: `gaap` / `nongaap` / `supplement`. Operations: `stamp_new_row` / `stamp_existing_row` / `override_existing_audit` / `stamp_classification_existing_row`. Identity locate uses (period, uni_account, source_account, type, unit) for GAAP/8K and full dimensional tuple (via `build_supplement_identity`) for supplement; ambiguous match raises.
   - Strict channel boundary: `--audit-source` and `--classification-source` are mutually exclusive; classification mode is metadata-only (cannot change value, cannot create new numeric row without audit provenance); override of existing audit requires `--accept-new-values` and writes `accepted_new_value_replaces_audit` forensic.
@@ -107,7 +112,8 @@ Updated: 2026-05-23
   - `docs/financials-view-schema.md` is the `key -> meaning/source` metric dictionary
 
 ## Next Suggested Steps
-- **Phase 6 (audit schema)**: frontend audit indicator on cells with `provenance.audit_source != null` or derived rows with `has_audited_inputs=true`; DB legacy row migration (one-shot normalize of pre-v4 `audit_source` enums in existing Supabase data); optional `_shared/preservation.py` refactor to dedupe the now-three copy-pasted `_preserve_*_cells` functions across 10QK / 8K / supplement.
+- **Visual verify Phase 6.2 audit indicator** in dev server (`pnpm dev` / `npm run dev`) against existing audited tickers (LITE FY24Q4 IBT, AAOI revenue, INTC ratios). Confirm "✓" badge renders + tooltip shows audit_source / note / evidence on cells whose JSON already has audit metadata.
+- **Run Phase 6.3 DB migration per-ticker** after visual verify: `python3 scripts/migrate_db_audit_source_v4.py --ticker LITE` (dry-run) then `--apply` once count looks right. Repeat per ticker.
 - Add lightweight regression coverage for `/api/valuation/[ticker]`.
 - Decide whether valuation should stay Yahoo-based or move to a first-party normalized market-data pipeline.
 - Create a small architecture note for portal module boundaries if feature count keeps growing.
