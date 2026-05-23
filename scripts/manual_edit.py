@@ -496,8 +496,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--period", required=True)
     ap.add_argument("--uni-account", required=True)
     ap.add_argument("--new-value", required=True, type=float,
-                    help="The corrected value (always required — even for "
-                         "classification edits, the row's value field is set).")
+                    help="Audit mode: the corrected value (replaces row value). "
+                         "Classification mode: MUST match existing row value "
+                         "(classification is row metadata, not value evidence — "
+                         "value changes require --audit-source).")
     ap.add_argument("--audit-source",
                     help="One of MANUAL_AUDIT_FROM_OFFICIAL_FILING / "
                          "MANUAL_RESTATEMENT_FROM_AMENDED_FILING (legacy "
