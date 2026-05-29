@@ -112,8 +112,8 @@ Updated: 2026-05-23
   - `docs/financials-view-schema.md` is the `key -> meaning/source` metric dictionary
 
 ## Next Suggested Steps
-- **Visual verify Phase 6.2 audit indicator** in dev server (`pnpm dev` / `npm run dev`) against existing audited tickers (LITE FY24Q4 IBT, AAOI revenue, INTC ratios). Confirm "✓" badge renders + tooltip shows audit_source / note / evidence on cells whose JSON already has audit metadata.
-- **Run Phase 6.3 DB migration per-ticker** after visual verify: `python3 scripts/migrate_db_audit_source_v4.py --ticker LITE` (dry-run) then `--apply` once count looks right. Repeat per ticker.
+- **Phase 6.2 audit indicator visual verify — DONE** (2026-05-29). Confirmed in dev server: LITE `Pretax Income` cells render "✓" badge + tooltip (`source` + `audit`). AAOI/INTC have no manually-audited cells so no badge (expected).
+- **Phase 6.3 DB legacy enum migration — DONE** (2026-05-29). Ran `migrate_db_audit_source_v4.py`: LITE 24 `sec_financial_facts` rows normalized `MANUAL_AUDIT_FROM_PDF` → `MANUAL_AUDIT_FROM_OFFICIAL_FILING` (raw preserved); AAOI/INTC/SNDK + full-table scan all 0 legacy rows. Frontend tooltip now shows canonical value. Audit schema v4 fully complete end-to-end including production data.
 - Add lightweight regression coverage for `/api/valuation/[ticker]`.
 - Decide whether valuation should stay Yahoo-based or move to a first-party normalized market-data pipeline.
 - Create a small architecture note for portal module boundaries if feature count keeps growing.
