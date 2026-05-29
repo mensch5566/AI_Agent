@@ -29,7 +29,7 @@ export default function Viewer({ ticker }: { ticker: string }) {
   const { loading, error, data } = useFinancialData(ticker);
   const [view, setView] = useState<View>("IS");
   const [frequency, setFrequency] = useState<Frequency>("quarterly");
-  const [showNonGaap, setShowNonGaap] = useState(true);
+  const [showNonGaap, setShowNonGaap] = useState(false);
 
   const cells = data?.cells ?? [];
   const dimensional = data?.dimensional ?? [];
@@ -200,14 +200,29 @@ export default function Viewer({ ticker }: { ticker: string }) {
             )}
 
             {view === "IS" && (
-              <label className="inline-flex items-center gap-1 text-sm ml-2">
-                <input
-                  type="checkbox"
-                  checked={showNonGaap}
-                  onChange={(e) => setShowNonGaap(e.target.checked)}
-                />
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showNonGaap}
+                onClick={() => setShowNonGaap((v) => !v)}
+                className="inline-flex items-center gap-2 text-sm ml-2 select-none cursor-pointer"
+                title={showNonGaap ? "Hide Non-GAAP spotlight" : "Show Non-GAAP spotlight"}
+              >
+                <span
+                  className={
+                    "relative inline-block w-9 h-5 rounded-full transition-colors " +
+                    (showNonGaap ? "bg-primary" : "bg-muted-foreground/30")
+                  }
+                >
+                  <span
+                    className={
+                      "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform " +
+                      (showNonGaap ? "translate-x-4" : "translate-x-0")
+                    }
+                  />
+                </span>
                 Non-GAAP spotlight
-              </label>
+              </button>
             )}
           </div>
 

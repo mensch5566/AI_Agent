@@ -8,10 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-// Pre-onboarded tickers. Expand as we ingest more SEC filings.
-// Should match docs/STATUS.md ticker registry.
-export const KNOWN_TICKERS = ["AAOI", "INTC", "LITE", "SNDK"] as const;
+import { KNOWN_TICKERS } from "./constants";
 
 type Props = {
   current: string;

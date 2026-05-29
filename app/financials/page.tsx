@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import ThemeToggle from "@/app/components/ThemeToggle";
-import { KNOWN_TICKERS } from "@/app/components/financials-v2/TickerPicker";
+import { KNOWN_TICKERS } from "@/app/components/financials-v2/constants";
 import { Button } from "@/components/ui/button";
 
 export default function FinancialsLandingPage() {

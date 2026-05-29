@@ -4,6 +4,10 @@
 
 import type { Statement } from "./types";
 
+// Pre-onboarded tickers. Expand as we ingest more SEC filings.
+// Should match docs/STATUS.md ticker registry.
+export const KNOWN_TICKERS = ["AAOI", "INTC", "LITE", "SNDK"] as const;
+
 export type MetricSpec = {
   key: string;            // uni_account
   label: string;          // display label
