@@ -35,14 +35,94 @@ function displayValue(c: Cell | undefined, signFlipConcepts: Set<string>): strin
   if (!c) return "—";
   const flip = !!c.xbrl_tag && signFlipConcepts.has(c.xbrl_tag);
   const v = flip ? -Math.abs(c.value) : c.value;
-  if (v < 0) return `(${fmtValue(Math.abs(v), c.unit)})`;
-  return fmtValue(v, c.unit);
+  if (v < 0) return `(${fmtValue(Math.abs(v), c.unit, c.uni_account)})`;
+  return fmtValue(v, c.unit, c.uni_account);
+}
+
+// Phase 6.2: schema v4 manual audit / classification badge + tooltip suffix.
+// Cells whose provenance carries `audit_source` (canonical or legacy raw)
+// display a "✓" badge; derived cells with `has_audited_inputs=true` get the
+// same indicator since their value traces back to audited inputs.
+// `classification_source` (without audit) gets a separate "·" marker.
+const MANUAL_AUDIT_SOURCES = new Set([
+  "MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+  "MANUAL_RESTATEMENT_FROM_AMENDED_FILING",
+  // Legacy enums still recognized while DB migration is pending (Phase 6.3)
+  "MANUAL_AUDIT_FROM_PDF",
+  "MANUAL_AUDIT_FROM_8K_PDF",
+]);
+
+function isAuditedProvenance(prov: Record<string, unknown> | null | undefined): boolean {
+  if (!prov) return false;
+  const src = prov.audit_source as string | undefined;
+  const rawSrc = prov.audit_source_raw as string | undefined;
+  if (src && MANUAL_AUDIT_SOURCES.has(src)) return true;
+  if (rawSrc && MANUAL_AUDIT_SOURCES.has(rawSrc)) return true;
+  // Derived row schema §8.2
+  if (prov.has_audited_inputs === true) return true;
+  return false;
+}
+
+function isClassifiedProvenance(prov: Record<string, unknown> | null | undefined): boolean {
+  if (!prov) return false;
+  const cs = prov.classification_source as string | undefined;
+  return cs === "AGENT_CLASSIFIED" || cs === "MANUAL_RECLASSIFIED";
+}
+
+function auditBadge(c?: Cell): string {
+  if (!c) return "";
+  const prov = c.provenance as Record<string, unknown> | null;
+  if (isAuditedProvenance(prov)) return "✓";
+  if (isClassifiedProvenance(prov)) return "·";
+  return "";
+}
+
+function auditTooltipSuffix(c?: Cell): string {
+  if (!c) return "";
+  const prov = c.provenance as Record<string, unknown> | null;
+  if (!prov) return "";
+  const parts: string[] = [];
+  if (isAuditedProvenance(prov)) {
+    const src = (prov.audit_source as string | undefined) ?? (prov.audit_source_raw as string | undefined);
+    if (src) parts.push(`audit: ${src}`);
+    const note = prov.audit_note as string | undefined;
+    if (note) parts.push(`note: ${note}`);
+    const by = prov.audited_by as string | undefined;
+    if (by) parts.push(`by: ${by}`);
+    const at = prov.audited_at as string | undefined;
+    if (at) parts.push(`at: ${at}`);
+    const ev = prov.audit_evidence as Record<string, unknown> | undefined;
+    if (ev) {
+      const doc = ev.source_doc as string | undefined;
+      const sec = ev.page_or_section as string | undefined;
+      if (doc) parts.push(`source: ${doc}`);
+      if (sec) parts.push(`section: ${sec}`);
+    }
+    // Derived row lineage
+    if (prov.has_audited_inputs === true) {
+      const ids = prov.audited_input_cell_ids as string[] | undefined;
+      if (ids && ids.length) parts.push(`derived from ${ids.length} audited input(s)`);
+    }
+  } else if (isClassifiedProvenance(prov)) {
+    const cs = prov.classification_source as string;
+    parts.push(`classification: ${cs}`);
+    const cn = prov.classification_note as string | undefined;
+    if (cn) parts.push(`note: ${cn}`);
+  }
+  // Preservation event (Phase 4 / 5): show only when set
+  const evt = prov.preservation_event as string | undefined;
+  if (evt) parts.push(`preserved: ${evt}`);
+  if (prov.new_extract_value_rejected !== undefined) {
+    parts.push(`rejected new extract: ${prov.new_extract_value_rejected}`);
+  }
+  return parts.length ? "\n" + parts.join("\n") : "";
 }
 
 function statusTooltip(status: CellStatus, c?: Cell): string {
   if (!c) return "pending — not derived yet";
   // Aggregated long-tail bucket — list children with their values.
   const prov = c.provenance as Record<string, unknown> | null;
+  let base = "";
   if (prov && prov.aggregation === "long_tail_sum") {
     const children = (prov.children as Array<Record<string, unknown>>) ?? [];
     const lines = children.map((ch) => {
@@ -50,19 +130,18 @@ function statusTooltip(status: CellStatus, c?: Cell): string {
       const rolls = ch.rolls_up_to ? ` → ${ch.rolls_up_to}` : "";
       return `${sign} ${ch.source_account}: ${ch.value}${rolls}`;
     });
-    return `long-tail bucket (${children.length} child${children.length === 1 ? "" : "ren"}):\n${lines.join("\n")}`;
-  }
-  if (status === "DERIVED_FROM_DISCLOSED") {
+    base = `long-tail bucket (${children.length} child${children.length === 1 ? "" : "ren"}):\n${lines.join("\n")}`;
+  } else if (status === "DERIVED_FROM_DISCLOSED") {
     const f = prov?.formula;
-    return f ? `derived: ${f}` : "derived";
-  }
-  if (status === "EXCLUDED_FROM_NONGAAP") return "excluded by Non-GAAP definition";
-  if (status === "SOURCE_OF_TRUTH") {
+    base = f ? `derived: ${f}` : "derived";
+  } else if (status === "EXCLUDED_FROM_NONGAAP") {
+    base = "excluded by Non-GAAP definition";
+  } else if (status === "SOURCE_OF_TRUTH") {
     const f = prov?.source_filing;
     const a = prov?.accession_number;
-    return `source: ${f ?? "filing"}${a ? ` (${a})` : ""}`;
+    base = `source: ${f ?? "filing"}${a ? ` (${a})` : ""}`;
   }
-  return "";
+  return base + auditTooltipSuffix(c);
 }
 
 export function StatementMatrix({
@@ -157,7 +236,6 @@ export function StatementMatrix({
                 }
                 style={{
                   background: isSelected ? undefined : rowBg,
-                  boxShadow: selColor ? `inset 3px 0 0 ${selColor}` : undefined,
                 }}
                 onClick={clickable ? () => onToggleRow!(row.key) : undefined}
                 title={
@@ -177,7 +255,12 @@ export function StatementMatrix({
                   }
                   style={{
                     paddingLeft: 12 + indentPx,
-                    background: isSelected ? "transparent" : rowBg,
+                    // Always opaque so the sticky Metric column hides scrolled-away
+                    // numbers underneath. The selection indicator is rendered as an
+                    // inset left bar here (moved from <tr>) so the opaque td doesn't
+                    // mask it.
+                    background: rowBg,
+                    boxShadow: selColor ? `inset 3px 0 0 ${selColor}` : undefined,
                   }}
                 >
                   {selColor && (
@@ -194,12 +277,21 @@ export function StatementMatrix({
                   const ngCellWrap = showNgForThisRow ? nongaap?.cells[row.key]?.[p] : undefined;
                   const ng = ngCellWrap?.cell;
                   const pres = statusPresentation(m?.status ?? "PENDING");
+                  const gBadge = auditBadge(c);
                   const cells = [
                     <td
                       key={`${row.key}-${p}-g`}
                       className={`text-right px-3 py-1.5 whitespace-nowrap ${pres.className}`}
                       title={statusTooltip(m?.status ?? "PENDING", c)}
                     >
+                      {gBadge && (
+                        <span
+                          className="text-emerald-600 dark:text-emerald-400 mr-1 select-none"
+                          aria-label="manually audited"
+                        >
+                          {gBadge}
+                        </span>
+                      )}
                       {displayValue(c, flipSet)}
                     </td>,
                   ];
@@ -210,6 +302,7 @@ export function StatementMatrix({
                   if (showNongaapColumn) {
                     if (showNgForThisRow) {
                       const npres = statusPresentation(ngCellWrap?.status ?? "PENDING");
+                      const nBadge = auditBadge(ng);
                       cells.push(
                         <td
                           key={`${row.key}-${p}-n`}
@@ -220,6 +313,14 @@ export function StatementMatrix({
                               : "not disclosed by management"
                           }
                         >
+                          {nBadge && (
+                            <span
+                              className="text-emerald-600 dark:text-emerald-400 mr-1 select-none"
+                              aria-label="manually audited"
+                            >
+                              {nBadge}
+                            </span>
+                          )}
                           {displayValue(ng, flipSet)}
                         </td>,
                       );

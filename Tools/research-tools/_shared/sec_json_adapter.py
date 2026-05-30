@@ -22,6 +22,16 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import cell_id as _id
+from .audit_metadata import (
+    AUDIT_PROVENANCE_KEYS,
+    CLASSIFICATION_KEYS,
+    MANUAL_CLASSIFICATION_SOURCES,
+    PRESERVATION_EVENT_KEYS,
+    PRESERVATION_EVENTS,
+    is_manual_audit_source,
+    is_manual_classification_source,
+    normalize_audit_source,
+)
 from .dimensional_aliases import build_axis_key, build_member_key
 from .period_kind import infer_period_kind, normalize_supplement_period_kind
 from .unit_canonicalize import (
@@ -200,6 +210,143 @@ def adapt_company(metadata: dict, sign_flip_concepts: list[str] | None = None) -
     )
 
 
+def _carry_audit_metadata_to_provenance(row: dict, provenance: dict[str, Any]) -> None:
+    """Copy v4 audit metadata channels from a parse-skill row into the
+    FactRow.provenance dict that downstream (derive-base / upsert / API)
+    reads.
+
+    Schema v4 §7.1 canonical contract:
+      - `audit_source` → normalized via legacy enum map; **only written if
+        the value is in MANUAL_AUDIT_SOURCES** (allowlist-guarded, P3-F1
+        fix). Non-audit strings like `AGENT_CLASSIFIED` / `NotebookLM_PDF_read`
+        never leak into `provenance.audit_source`.
+      - `audit_source_raw` → preserves the row's original audit_source value
+        ONLY when the canonical value is in the audit allowlist (forensic).
+      - audit_note / audited_at / audited_by / audit_evidence carried as-is,
+        BUT only if a valid `audit_source` was also written (P3-F2 fix:
+        orphan audit metadata raises ValueError → row goes to rejected list).
+      - classification_source / classification_note / classified_at /
+        long_tail_metadata carried (independent channel).
+      - **Legacy promotion** (P3-F1): if row has `audit_source="AGENT_CLASSIFIED"`
+        and no `classification_source`, promote it to classification channel.
+      - preservation_event keys carried (downstream may need to inspect)
+
+    Raises:
+        ValueError: row carries audit metadata fields (audit_note / audited_at /
+            audited_by / audit_evidence) but the `audit_source` is invalid /
+            absent / not a promotable classification — half-set audit
+            metadata can't be silently accepted (P3-F2).
+    """
+    raw_audit_source = row.get("audit_source")
+    raw_audit_source_raw = row.get("audit_source_raw")
+    # Canonical normalization
+    canonical = normalize_audit_source(raw_audit_source or raw_audit_source_raw)
+    # P3-F1: allowlist-guard audit channel writes. Only canonical values in
+    # MANUAL_AUDIT_SOURCES get written to provenance.audit_source.
+    audit_channel_written = False
+    if is_manual_audit_source(canonical):
+        provenance["audit_source"] = canonical
+        provenance["audit_source_raw"] = (
+            raw_audit_source_raw if raw_audit_source_raw is not None
+            else raw_audit_source
+        )
+        audit_channel_written = True
+
+    audit_detail_keys = ("audit_note", "audited_at", "audited_by", "audit_evidence")
+    has_audit_detail = any(row.get(k) is not None for k in audit_detail_keys)
+    is_promotable_classification = (
+        raw_audit_source in MANUAL_CLASSIFICATION_SOURCES
+        or raw_audit_source_raw in MANUAL_CLASSIFICATION_SOURCES
+    )
+    audit_source_present = (raw_audit_source is not None
+                            or raw_audit_source_raw is not None)
+
+    # P3-F2a: invalid audit_source enum fail-closed REGARDLESS of audit_detail.
+    # If row has any audit_source value at all, it must be in MANUAL_AUDIT_SOURCES
+    # or be a promotable classification enum. Unknown / malformed strings reject.
+    if (audit_source_present and not audit_channel_written
+            and not is_promotable_classification):
+        raise ValueError(
+            f"invalid audit_source: {raw_audit_source!r} (raw={raw_audit_source_raw!r}) "
+            f"is not in MANUAL_AUDIT_SOURCES allowlist nor a promotable "
+            f"classification enum. Schema §3.1 is strict allowlist."
+        )
+
+    # P3-F2 (original): orphan audit metadata without any audit_source at all.
+    # E.g. audit_note set but no audit_source field → malformed.
+    if has_audit_detail and not audit_channel_written and not is_promotable_classification:
+        raise ValueError(
+            f"orphan audit metadata: audit_note/audited_at/audited_by/audit_evidence "
+            f"present but audit_source={raw_audit_source!r} (raw={raw_audit_source_raw!r}) "
+            f"is not in MANUAL_AUDIT_SOURCES allowlist. "
+            f"Either supply a valid audit_source enum or remove the detail fields."
+        )
+
+    # P3-F2b: classification row carrying audit-channel detail fields is a
+    # channel violation. audit_note is audit provenance, not classification
+    # reasoning — for the latter, source side should write `classification_note`.
+    if is_promotable_classification and has_audit_detail:
+        offending = [k for k in audit_detail_keys if row.get(k) is not None]
+        raise ValueError(
+            f"channel violation: row with classification source "
+            f"({raw_audit_source or raw_audit_source_raw!r}) carries audit-channel "
+            f"fields {offending}. Use `classification_note` instead, or supply "
+            f"a valid manual audit_source enum."
+        )
+
+    # Carry audit detail keys verbatim — only when audit_channel_written
+    # (P3-F2: don't ship orphan note/evidence without a valid source).
+    if audit_channel_written:
+        for key in audit_detail_keys:
+            v = row.get(key)
+            if v is not None:
+                provenance[key] = v
+    # Classification channel — P3-F3: strict allowlist on classification_source.
+    raw_cls_source = row.get("classification_source")
+    if raw_cls_source is not None and not is_manual_classification_source(raw_cls_source):
+        raise ValueError(
+            f"invalid classification_source: {raw_cls_source!r} is not in "
+            f"MANUAL_CLASSIFICATION_SOURCES allowlist. Schema §3.2."
+        )
+    # Carry classification fields
+    for key in CLASSIFICATION_KEYS:
+        v = row.get(key)
+        if v is not None:
+            provenance[key] = v
+    # P3-F1: legacy promotion — pre-v4 parsers wrote AGENT_CLASSIFIED into
+    # audit_source field. Promote to classification_source if no canonical
+    # classification_source set. Do NOT write into audit_source/raw (that
+    # would re-pollute the v4 contract).
+    if not provenance.get("classification_source"):
+        for legacy_field in (raw_audit_source, raw_audit_source_raw):
+            if legacy_field in MANUAL_CLASSIFICATION_SOURCES:
+                provenance["classification_source"] = legacy_field
+                break
+
+    # P3-F3 classification orphan: classification_note / classified_at without
+    # classification_source is malformed. (long_tail_metadata can stand alone
+    # for backward compat with legacy long-tail rows.)
+    cls_detail_keys = ("classification_note", "classified_at")
+    has_cls_detail = any(row.get(k) is not None for k in cls_detail_keys)
+    if has_cls_detail and not provenance.get("classification_source"):
+        raise ValueError(
+            f"orphan classification metadata: classification_note/classified_at "
+            f"present but no valid classification_source. Schema §3.2."
+        )
+
+    # Preservation event channel — P3-F3: strict allowlist on preservation_event.
+    raw_event = row.get("preservation_event")
+    if raw_event is not None and raw_event not in PRESERVATION_EVENTS:
+        raise ValueError(
+            f"invalid preservation_event: {raw_event!r} is not in "
+            f"PRESERVATION_EVENTS allowlist. Schema §3.3."
+        )
+    for key in PRESERVATION_EVENT_KEYS:
+        v = row.get(key)
+        if v is not None:
+            provenance[key] = v
+
+
 def adapt_gaap_facts(gaap_json: dict, pe_map: dict[str, str]) -> tuple[list[FactRow], list[dict]]:
     """parse-10QK-gaap facts -> FactRow list."""
     ticker = gaap_json["metadata"]["ticker"].upper()
@@ -264,8 +411,12 @@ def _adapt_one_gaap_fact(
     provenance: dict[str, Any] = {
         "source_filing": form.get(period),
         "accession_number": accession.get(period),
-        "audit_source": None,
     }
+    # Phase 3.1: audit metadata v4 — read raw row, dual-write canonical +
+    # raw, carry full v4 channel set (audit / classification / preservation
+    # event). Reading downstream MUST use `provenance.audit_source` for
+    # canonical decisions; `audit_source_raw` is forensic only.
+    _carry_audit_metadata_to_provenance(f, provenance)
 
     cid = _id.facts_cell_id(
         ticker=ticker,
@@ -365,8 +516,18 @@ def _adapt_one_nongaap_fact(
     provenance: dict[str, Any] = {
         "source_filing": "8-K",
         "accession_number": accession_8k.get(period),
-        "audit_source": "NotebookLM_PDF_read",
+        # Phase 3.2: provenance.data_source replaces legacy
+        # `audit_source: "NotebookLM_PDF_read"`. That string was NEVER a v4
+        # manual audit source (not in MANUAL_AUDIT_SOURCES) — using
+        # `audit_source` for it would let `is_manual_audit_source` return
+        # False but still pollute the field semantics. Move to its own
+        # parser-extraction lineage field.
+        "data_source": "NotebookLM_PDF_read",
     }
+    # Phase 3.2: carry v4 audit metadata (canonical + raw) from row if present.
+    # Manual audits written by parse-8k-nongaap.apply_audit will populate
+    # these via stamp_audit_provenance; plain extracted rows have nothing.
+    _carry_audit_metadata_to_provenance(r, provenance)
 
     cid = _id.facts_cell_id(
         ticker=ticker,
@@ -446,6 +607,47 @@ def adapt_supplement_facts(
     value_conflicts: list[dict] = []
     dedupe_count = 0
     precision_dedupe_count = 0
+
+    def _v4_metadata_present(row: DimensionalRow) -> bool:
+        """True if row's provenance carries any v4 audit/classification/
+        preservation channel (independent of `sources[]`/`source_filing`/etc.)."""
+        p = row.provenance
+        return (
+            p.get("audit_source") is not None
+            or p.get("audit_source_raw") is not None
+            or p.get("classification_source") is not None
+            or p.get("preservation_event") is not None
+        )
+
+    def _merge_v4_channels(chosen_row: DimensionalRow,
+                            other_rows: list[DimensionalRow],
+                            dk: str) -> None:
+        """P5-F8: ensure any v4 audit/classification/preservation metadata on
+        non-chosen duplicates survives dedupe. If chosen already has v4 data,
+        any other member with conflicting v4 data fails the batch (we won't
+        silently pick one)."""
+        chosen_prov = chosen_row.provenance
+        for other in other_rows:
+            for key in (
+                "audit_source", "audit_source_raw", "audit_note",
+                "audited_at", "audited_by", "audit_evidence",
+                "classification_source", "classification_note",
+                "classified_at", "long_tail_metadata",
+                "preservation_event", "preserved_from_audit", "preserved_at",
+            ):
+                v = other.provenance.get(key)
+                if v is None:
+                    continue
+                existing = chosen_prov.get(key)
+                if existing is None:
+                    chosen_prov[key] = v
+                elif existing != v:
+                    raise ValueError(
+                        f"supplement dedupe: conflicting v4 metadata for "
+                        f"key={dk!r}, field={key!r}: chosen={existing!r} "
+                        f"vs other={v!r}. Resolve manually before re-running."
+                    )
+
     for dk, members in groups.items():
         if len(members) == 1:
             row, raw_meta = members[0]
@@ -455,9 +657,28 @@ def adapt_supplement_facts(
 
         values = {m[0].value for m in members}
         if len(values) == 1:
-            # Same value across sources -> collapse, accumulate provenance
-            chosen = members[0][0]
-            chosen.provenance["sources"] = [_source_entry(m[1], accession_map) for m in members]
+            # P5-F8: if multiple members exist and any carries v4 metadata,
+            # prefer that one as the chosen row so its provenance is the
+            # natural target for merge. Falls back to members[0] otherwise.
+            preferred_idx = next(
+                (i for i, m in enumerate(members) if _v4_metadata_present(m[0])),
+                0,
+            )
+            chosen_pair = members[preferred_idx]
+            chosen = chosen_pair[0]
+            other_rows = [m[0] for i, m in enumerate(members) if i != preferred_idx]
+            try:
+                _merge_v4_channels(chosen, other_rows, dk)
+            except ValueError as e:
+                rejected.append({
+                    "source": "supplement",
+                    "row": {"dedupe_key": dk},
+                    "reason": str(e),
+                })
+                continue
+            chosen.provenance["sources"] = [
+                _source_entry(m[1], accession_map) for m in members
+            ]
             final_rows.append(chosen)
             dedupe_count += len(members) - 1
             continue
@@ -475,8 +696,32 @@ def adapt_supplement_facts(
         sorted_members = sorted(members, key=_prec_key)
         precisions = [m[0].decimals for m in sorted_members]
         if precisions[0] != precisions[-1]:
-            # Differing precisions present — pick most precise, drop rest
+            # P5-F10: precision-dedupe means values differ (this branch is
+            # only reached when len(values) > 1). Audit provenance is value
+            # evidence — it CANNOT be merged across different numeric values.
+            # Classification could in theory be value-independent, but to
+            # keep the channel boundary clean and follow GPT's
+            # recommendation #3, we reject any v4 metadata on dropped rows,
+            # regardless of what the chosen row carries.
+            dropped_with_v4 = [
+                m[0] for m in sorted_members[1:] if _v4_metadata_present(m[0])
+            ]
+            if dropped_with_v4:
+                rejected.append({
+                    "source": "supplement",
+                    "row": {"dedupe_key": dk},
+                    "reason": (
+                        f"precision dedupe would silently drop v4 metadata "
+                        f"(audit/classification/preservation) from a "
+                        f"less-precise duplicate with a different numeric "
+                        f"value. Cannot merge value-bound provenance across "
+                        f"different values. Resolve manually."
+                    ),
+                })
+                continue
             chosen = sorted_members[0][0]
+            # No v4 metadata on dropped rows; chosen's own v4 metadata (if
+            # any) stays untouched. Nothing to merge.
             chosen.provenance["sources"] = [_source_entry(sorted_members[0][1], accession_map)]
             chosen.provenance["precision_dedupe"] = {
                 "kept_decimals": precisions[0],
@@ -574,6 +819,13 @@ def _adapt_one_supplement_fact(
         other_dimensions=other_dims,
     )
 
+    # P5-F1: supplement provenance carries v4 audit metadata through the
+    # adapter, same as GAAP / Non-GAAP. The downstream dedupe pass later
+    # appends `sources[]`; the audit channel writes must happen first so
+    # they survive collapse.
+    provenance: dict[str, Any] = {}
+    _carry_audit_metadata_to_provenance(f, provenance)
+
     row = DimensionalRow(
         cell_id=cid,
         ticker=ticker,
@@ -594,7 +846,7 @@ def _adapt_one_supplement_fact(
         unit=canon_unit,
         decimals=int(f["decimals"]) if f.get("decimals") not in (None, "") else None,
         other_dimensions=other_dims,
-        provenance={"audit_source": None},  # sources[] filled in dedupe pass
+        provenance=provenance,
     )
 
     dedupe_key = "|".join([

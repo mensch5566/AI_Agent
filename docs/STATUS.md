@@ -1,12 +1,13 @@
 # AI_Agent Status
 
-Updated: 2026-05-14
+Updated: 2026-05-23
 
 ## Current Focus
 - Portal remains the main entrypoint for internal tools.
 - `Financials Viewer` now includes a `Valuation` tab for historical TTM P/E with `日 / 月 / 季` switching.
 - Weekly research workflow is being standardized through reusable skills such as `macro-weekly-news`.
 - TWSE XBRL ingestion now also supports onboarding new tickers such as `7769 鴻勁` into `Financials Viewer`.
+- **Audit Metadata Schema v4 contract shipped end-to-end** across all parse paths (10QK GAAP / 8K Non-GAAP / SEC-supplement v3) → adapter (with dedupe-safe v4 channel merge) → upsert → derive-base, plus an ad-hoc edit CLI (`scripts/manual_edit.py`) for one-off cell corrections and a one-shot DB legacy migration script (`scripts/migrate_db_audit_source_v4.py`). Frontend `Financials Viewer` cells now render audit / classification indicator badges (✓ / ·) with tooltip showing audit_source, note, evidence, preservation event. 258 regression tests cover the contract; shared preservation helper (`_shared/preservation.py`) DRYs the three parse skills' re-extract matrix into one tested module.
 
 ## Stable Areas
 - `app/page.tsx` portal card layout is the top-level navigation surface.
@@ -33,6 +34,40 @@ Updated: 2026-05-14
 - Prefer adding new portal-facing features behind an existing module/page when possible, instead of creating duplicate entrypoints.
 
 ## Latest Changes
+- **Audit Metadata Schema v4 — Phase 6 closed** (2026-05-23, single round of in-session implementation).
+  - **6.1 Preservation refactor**: pulled three copy-pasted `_preserve_*_cells` functions from `parse-10QK-gaap/xbrl_extract.py`, `parse-8k-nongaap/extract_8k_nongaap.py`, and `parse-SEC-supplement/extract_supplement_v3.py` into a single `_shared/preservation.py` (`preserve_audited_rows` + `values_match` + `row_has_audit` + `row_has_classification` + `PreservationResult` dataclass). Each parse skill now calls the shared helper with its own `identity_fn` (`build_preservation_identity` for GAAP/8K, `build_supplement_identity` for supplement) and prints the report. ~340 net lines removed, future matrix changes touch one file.
+  - **6.2 Frontend audit indicator**: `StatementMatrix.tsx` displays "✓" badge on cells whose `provenance.audit_source` (canonical or legacy raw) is in `MANUAL_AUDIT_SOURCES`, or derived cells where `has_audited_inputs=true`. Classification-only cells get "·" badge. Tooltip extended with audit_source / audit_note / audited_by / audited_at / audit_evidence (source_doc + page_or_section) / preservation_event / new_extract_value_rejected / derived row's audited_input_cell_ids count. Both GAAP and Non-GAAP columns wired.
+  - **6.3 DB legacy migration script**: `scripts/migrate_db_audit_source_v4.py` for one-shot normalize of pre-v4 enums in existing Supabase data. CLI dry-runs by default; `--apply` requires explicit flag; no-`--ticker` apply prompts `'YES'` confirmation. Two operations: `audit_normalize` (`MANUAL_AUDIT_FROM_PDF` / `MANUAL_AUDIT_FROM_8K_PDF` → canonical + `audit_source_raw` preserve) and `classification_promote` (`AGENT_CLASSIFIED` / `MANUAL_RECLASSIFIED` in audit_source → `classification_source`, mirrors Phase 2 F14 ADDED_BACK pattern). Per-row UPDATE (no batch) for granular failure diagnosis. 17 helper unit tests; **production data not yet migrated** — user runs per-ticker after frontend visual verification.
+  - 32 new regression tests (15 preservation helper + 17 migration helper); full suite 258 passed.
+- **Audit Metadata Schema v4 — Phase 5 closed** (2026-05-23, 3 rounds of Codex review).
+  - `scripts/manual_edit.py` — ad-hoc audit edit CLI for one-off cell corrections outside `apply_audit.py` batch flow. Targets: `gaap` / `nongaap` / `supplement`. Operations: `stamp_new_row` / `stamp_existing_row` / `override_existing_audit` / `stamp_classification_existing_row`. Identity locate uses (period, uni_account, source_account, type, unit) for GAAP/8K and full dimensional tuple (via `build_supplement_identity`) for supplement; ambiguous match raises.
+  - Strict channel boundary: `--audit-source` and `--classification-source` are mutually exclusive; classification mode is metadata-only (cannot change value, cannot create new numeric row without audit provenance); override of existing audit requires `--accept-new-values` and writes `accepted_new_value_replaces_audit` forensic.
+  - Logger appends one JSON line per edit to `manual_edit_audit_log.jsonl` in the target dir; reads canonical + raw `audit_source` from the stamped row so legacy enum input (e.g. `MANUAL_AUDIT_FROM_PDF`) is recorded as both canonical and raw.
+  - Adapter `_adapt_one_supplement_fact` now carries v4 channels (P5-F1); supplement dedupe (`adapt_supplement_facts`) merges v4 metadata across same-value duplicates (preferred chosen = the audited row), rejects when v4 metadata conflicts, and rejects when precision-dedupe would silently drop v4 metadata onto a row with a different numeric value (P5-F8 / P5-F10) — audit provenance never gets transplanted across values.
+  - 44 regression tests covering all 3 targets, override forensic, classification-only safety, dimensional locate / no-match fail-closed, supplement dedupe v4 merge + conflict + precision boundary.
+- **Audit Metadata Schema v4 — Phase 4 closed** (2026-05-22 → 2026-05-23, 2 rounds of Codex review).
+  - `parse-SEC-supplement/extract_supplement_v3.py` now preserves dimensional audit/classification cells across re-extracts. Identity tuple `(period, period_kind, axis_key, member_key, uni_account, canonical_json(other_dimensions), unit)` per schema §6.2 — uses `_shared/dimensional_aliases.build_axis_key()` / `build_member_key()` (xbrl qname preferred, local-label fallback).
+  - Behavior matrix mirrors GAAP/8K (MATCH / ADDED_BACK / CONFLICT / ACCEPT_NEW) with same audit vs classification-only branch, legacy `AGENT_CLASSIFIED` canonicalization on ADDED_BACK, and `DuplicateIdentityError` fail-closed.
+  - Supplement-specific fail-closed mechanism: AUDIT conflicts (not classification-only) get written to `{TICKER}_supplement_conflict.json` with `audit_conflicts_unresolved=true` flag (schema §5 supplement clause). User reviews each conflict, then re-runs extract with `--accept-new-values` to drop preserved audit metadata.
+  - Stale conflict.json is cleaned on any rerun that produces no audit conflicts (not just `--accept-new-values`).
+  - Corrupt existing facts JSON raises `ValueError` rather than silently dropping prior audit metadata.
+  - `_values_match` uses `≤ tol` per schema §5 wording (exact-boundary equality counts as MATCH).
+  - 23 regression tests for Phase 4 (identity tuple variants, full preservation matrix, classification-only / mixed conflicts, duplicate fail-closed, corrupt JSON, tolerance boundaries, stale cleanup).
+- **Audit Metadata Schema v4 — Phase 2 + Phase 3 closed** (2026-05-21 → 2026-05-22, 11 rounds of Codex review).
+  - Canonical contract: `docs/audit-metadata-schema.md` v4.1 — three semantic channels (audit / classification / preservation event), strict allowlists for each, legacy enum normalization, re-extract behavior matrix.
+  - Shared helper: `Tools/research-tools/_shared/audit_metadata.py` — allowlist constants, predicates (`is_manual_audit_source` / `is_manual_classification_source`), write helpers (`stamp_audit_provenance` / `stamp_classification` with locator / accession_number enforcement), copy helpers (`copy_audit_provenance` / `copy_classification_metadata` / `set_preservation_event`), preservation identity builder (`build_preservation_identity` + `DuplicateIdentityError`), unit normalization (`normalize_unit_label` / `expected_unit_family` / `resolve_unit_for_uni_account` — recognizes `$ thousands` / `thousands of USD` / `%` / `per share` etc.).
+  - Parse skills updated (`CC_Switch_Config` mirrored 4-way to `~/.claude` / `~/.codex` / `~/.cc-switch`):
+    - `parse-sec-cross-check/scripts/apply_audit.py` — writes canonical `MANUAL_AUDIT_FROM_OFFICIAL_FILING` + raw dual-write + audit_evidence dict (source_doc / notebooklm_source_id / period_scope / pdf_label) + classification path for long-tail rows.
+    - `parse-8k-nongaap/scripts/apply_audit.py` — same canonical write path; review-table unit canonicalized before adopting; family compatibility check vs `expected_unit_family(uni_account)`.
+    - `parse-8k-nongaap/scripts/extract_8k_nongaap.py` — `is_audit_value_filled` rewritten header-aware (no longer treats NLM Non-GAAP numbers as filled audit values); `resolve_8k_unit` promoted to module-level routes through `normalize_unit_label` (removes `$`-substring bug that mapped `$ thousands` to `USD_millions`); ADDED_BACK canonicalizes legacy `audit_source=AGENT_CLASSIFIED` to `classification_source`.
+    - `parse-10QK-gaap/scripts/xbrl_extract.py` — same v4 preservation matrix (MATCH / ADDED_BACK / CONFLICT / ACCEPT_NEW with audit vs classification-only branches); duplicate identity fail-closed via `DuplicateIdentityError`.
+  - Adapter / upsert / derive-base (`Tools/research-tools/_shared/sec_json_adapter.py`, `scripts/upsert_sec_financials.py`, `CC_Switch_Config/skills/derive-base/scripts/*`):
+    - `_carry_audit_metadata_to_provenance` — v4 three-channel allowlist-guarded carry-through. Audit channel writes only allow MANUAL_AUDIT_SOURCES; legacy `AGENT_CLASSIFIED` in `audit_source` field auto-promotes to `classification_source`; invalid enum or orphan audit detail raises `ValueError` → row goes to `rejected` list; classification channel and preservation event channel also strict allowlist.
+    - `derive_types.input_dict_from_fact` — carries `audit_source` / `audit_source_raw` / `audit_evidence` from FactRow provenance for derive-base lineage.
+    - `audit.to_derived_metric_row` — computes `has_audited_inputs` + `audited_input_cell_ids` so derived rows declare audit lineage back to source cells.
+    - `rules_q4._concepts_match` — upgraded from truthy `audit_source` check to `is_manual_audit_source` predicate; classification rows no longer falsely trigger Q4 concept relaxation.
+  - Non-GAAP adapter: hardcoded `audit_source="NotebookLM_PDF_read"` removed (it was never a v4 audit source); replaced with `provenance.data_source` so it doesn't pollute audit predicate.
+  - 156 regression tests, full suite passing. Test split: 62 helper / 17 10QK preservation / 4 8K preservation / 22 8K parse / 34 adapter+derive integration / 17 misc.
 - **Phase 3 vendor-grade SEC parse pipeline merged to production** (CC_Switch_Config `0e2d9ef`). `parse-10QK-gaap` and `parse-SEC-supplement` now produce vendor-grade separated outputs using all four XBRL linkbases (cal / pre / lab / def) plus the raw instance document, alongside the existing inline `{T}_gaap.json` (which `parse-sec-cross-check` still reads).
   - `parse-10QK-gaap` adds three scripts: `full_linkbase.py` (fetches `_cal.xml` / `_pre.xml` / `_lab.xml`, emits `_gaap_edges_cal.json` / `_gaap_edges_pre.json` / `_gaap_labels.json` / `_sign_flip_concepts.json`), `build_separated.py` (orchestrates inline → separated facts + injects long-tail roll-up edges into cal), `cal_sum_sanity.py` (validates Σ(child × weight) = parent against companyfacts API, per-role to avoid duplicate-role double-count).
   - `parse-SEC-supplement` switches default flow from NLM-primary to XBRL-primary: `parse_def_xml.py` (Definition Linkbase → canonical axis / domain / member hierarchy per filing role), `parse_instance_xbrl.py` (instance doc → raw dimensional facts, period-filtered to single quarter 60-100d or FY 350-380d, prior-year / YTD discarded), `extract_supplement_v3.py` (def + instance + parse-10QK-gaap labels + legacy NLM validator → facts_v3 + edges_v3 + validation.md). NLM-only fallback workflow retained for cases XBRL lacks dimensional tags (small filers, carve-out periods).
@@ -77,6 +112,8 @@ Updated: 2026-05-14
   - `docs/financials-view-schema.md` is the `key -> meaning/source` metric dictionary
 
 ## Next Suggested Steps
+- **Phase 6.2 audit indicator visual verify — DONE** (2026-05-29). Confirmed in dev server: LITE `Pretax Income` cells render "✓" badge + tooltip (`source` + `audit`). AAOI/INTC have no manually-audited cells so no badge (expected).
+- **Phase 6.3 DB legacy enum migration — DONE** (2026-05-29). Ran `migrate_db_audit_source_v4.py`: LITE 24 `sec_financial_facts` rows normalized `MANUAL_AUDIT_FROM_PDF` → `MANUAL_AUDIT_FROM_OFFICIAL_FILING` (raw preserved); AAOI/INTC/SNDK + full-table scan all 0 legacy rows. Frontend tooltip now shows canonical value. Audit schema v4 fully complete end-to-end including production data.
 - Add lightweight regression coverage for `/api/valuation/[ticker]`.
 - Decide whether valuation should stay Yahoo-based or move to a first-party normalized market-data pipeline.
 - Create a small architecture note for portal module boundaries if feature count keeps growing.
