@@ -31,8 +31,25 @@ function statusPresentation(status: CellStatus): { className: string } {
   }
 }
 
+// Effective tax rate = income_tax_expense / income_before_taxes. When pre-tax
+// income is <= 0 (loss period) the quotient is mathematically defined but
+// financially meaningless — a tiny tax expense over a large loss reads as
+// "0.0%" and a tax benefit reads as a misleading negative rate. Detect this
+// from the derived cell's own provenance.inputs and render "N/M" instead.
+// Directly-disclosed (Non-GAAP) tax rates carry no inputs; we trust the value
+// management reported and never override those.
+function etrNotMeaningful(c: Cell): boolean {
+  if (c.uni_account !== "effective_tax_rate") return false;
+  const prov = c.provenance as Record<string, unknown> | null;
+  const inputs = prov?.inputs as Array<{ uni_account?: string; value?: number }> | undefined;
+  if (!inputs) return false;
+  const ibt = inputs.find((i) => i.uni_account === "income_before_taxes");
+  return !!ibt && typeof ibt.value === "number" && ibt.value <= 0;
+}
+
 function displayValue(c: Cell | undefined, signFlipConcepts: Set<string>): string {
   if (!c) return "—";
+  if (etrNotMeaningful(c)) return "N/M";
   const flip = !!c.xbrl_tag && signFlipConcepts.has(c.xbrl_tag);
   const v = flip ? -Math.abs(c.value) : c.value;
   if (v < 0) return `(${fmtValue(Math.abs(v), c.unit, c.uni_account)})`;
@@ -141,7 +158,10 @@ function statusTooltip(status: CellStatus, c?: Cell): string {
     const a = prov?.accession_number;
     base = `source: ${f ?? "filing"}${a ? ` (${a})` : ""}`;
   }
-  return base + auditTooltipSuffix(c);
+  const etrNote = etrNotMeaningful(c)
+    ? "\nN/M — effective tax rate not meaningful (pre-tax income ≤ 0)"
+    : "";
+  return base + etrNote + auditTooltipSuffix(c);
 }
 
 export function StatementMatrix({

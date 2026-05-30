@@ -83,6 +83,13 @@ function isFyPeriod(p: string): boolean {
 function isQuarterPeriod(p: string): boolean {
   return /^Q\d_FY\d{4}$/.test(p);
 }
+function isYearEndQuarterPeriod(p: string): boolean {
+  return /^Q4_FY\d{4}$/.test(p);
+}
+function q4ToFy(p: string): string {
+  const m = /^Q4_FY(\d{4})$/.exec(p);
+  return m ? `FY${m[1]}` : p;
+}
 
 export function buildMatrix(
   cells: Cell[],
@@ -92,8 +99,24 @@ export function buildMatrix(
 ): Matrix {
   const rows = ROWS_BY_STATEMENT[statement];
 
+  // Year-end balance-sheet snapshots are stored as `Q4_FYyyyy` / instant_period_end
+  // (a balance sheet is point-in-time; the fiscal-year-end snapshot IS the
+  // Q4-end snapshot — there is no separate `FYyyyy` instant row). In annual
+  // mode, remap those Q4 instant periods to `FYyyyy` so the year-end snapshot
+  // (BS rows + BS-derived ratios like current_ratio) aligns under the annual
+  // column next to the `fy_annual_duration` IS/CF data. Quarterly mode keeps
+  // `Q4_FYyyyy` as-is so the snapshot lands in the Q4 column.
+  const sourceCells =
+    frequency === "annual"
+      ? cells.map((c) =>
+          c.period_kind === "instant_period_end" && isYearEndQuarterPeriod(c.period)
+            ? { ...c, period: q4ToFy(c.period) }
+            : c,
+        )
+      : cells;
+
   // Filter cells by statement + version + period_kind/period
-  const filtered = cells.filter((c) => {
+  const filtered = sourceCells.filter((c) => {
     if (c.statement !== statement) return false;
     if (c.version !== version) return false;
     if (statement === "BS") {
