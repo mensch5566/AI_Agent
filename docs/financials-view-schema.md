@@ -44,7 +44,7 @@
 - **pct value 一律存小數**（DB 0.392；UI fmtPct → 39.2%）
 - **unit canonical**：`USD_thousands` / `USD_millions` / `USD_per_share` / `millions_shares` / `Pure` 五種
 - **period_kind**：`quarter_duration` / `fy_annual_duration` / `ytd_duration` / `instant_period_end` / `derived_q4`（後者 metrics-only）
-- **BS 一律 `instant_period_end`**；IS/CF/RATIO 一律 duration
+- **BS 一律 `instant_period_end`**；IS/CF 一律 duration。RATIO 分兩種：margin / ETR 是 IS-derived（duration），current_ratio / cash_ratio / 未來 debt_to_equity 是 BS-derived（`instant_period_end`，annual 時 `Q4_FYyyyy` remap 成 `FYyyyy`）
 - **uni_account 新增 / 改名 / 刪除**：先在 `sec-financials-v2-schema.md` 登記並打勾，未確認不可入庫
 
 v2 完整 uni_account 清單見 [`sec-financials-v2-schema.md`](./sec-financials-v2-schema.md)。

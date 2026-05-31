@@ -545,28 +545,34 @@ def test_main_apply_fails_closed_on_analytics_incomplete(tmp_path, monkeypatch):
 
 def test_analytics_fallback_matches_skill_registry():
     """P2.2 drift guard: upsert's DERIVE_ANALYTICS_RULE_IDS_FALLBACK must equal
-    the derive-analytics skill's ALL_RULE_IDS. They live in different repos and
-    are hand-synced, so this catches a rule added to the skill but not the
-    upsert fallback (which would let that rule's stale rows survive)."""
+    the derive-analytics skill's ALL_RULE_IDS in EVERY deployed mirror, not just
+    the first one found. They live in different repos and are hand-synced, so a
+    rule added to the skill but not the upsert fallback (or a mirror left behind)
+    would let that rule's stale rows survive. Checking all mirrors catches drift
+    even when the dev prototype happens to match but a runtime mirror does not."""
     import importlib.util
     upsert = _import_upsert()
-    # Locate the skill's rules_ratios across known dev/runtime mirrors.
-    candidates = [
+    fallback = set(upsert.DERIVE_ANALYTICS_RULE_IDS_FALLBACK)
+    mirrors = [
         Path.home() / "AI_Agent" / "tmp" / "derive-analytics" / "rules_ratios.py",
-        Path.home() / ".claude" / "skills" / "derive-analytics" / "scripts" / "rules_ratios.py",
         Path.home() / "CC_Switch_Config" / "skills" / "derive-analytics" / "scripts" / "rules_ratios.py",
+        Path.home() / ".claude" / "skills" / "derive-analytics" / "scripts" / "rules_ratios.py",
+        Path.home() / ".codex" / "skills" / "derive-analytics" / "scripts" / "rules_ratios.py",
+        Path.home() / ".cc-switch" / "skills" / "derive-analytics" / "scripts" / "rules_ratios.py",
     ]
-    src = next((p for p in candidates if p.is_file()), None)
-    if src is None:
+    found = [p for p in mirrors if p.is_file()]
+    if not found:
         pytest.skip("derive-analytics skill rules_ratios.py not found in any known mirror")
-    spec = importlib.util.spec_from_file_location("ra_rules", str(src))
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["ra_rules"] = mod  # required for dataclass KW_ONLY detection under `from __future__ import annotations`
-    spec.loader.exec_module(mod)
-    assert set(mod.ALL_RULE_IDS) == set(upsert.DERIVE_ANALYTICS_RULE_IDS_FALLBACK), (
-        f"registry drift: skill ALL_RULE_IDS={set(mod.ALL_RULE_IDS)} != "
-        f"upsert fallback={set(upsert.DERIVE_ANALYTICS_RULE_IDS_FALLBACK)}"
-    )
+    for i, src in enumerate(found):
+        modname = f"ra_rules_{i}"
+        spec = importlib.util.spec_from_file_location(modname, str(src))
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[modname] = mod  # required for dataclass KW_ONLY under `from __future__ import annotations`
+        spec.loader.exec_module(mod)
+        assert set(mod.ALL_RULE_IDS) == fallback, (
+            f"registry drift in mirror {src}: ALL_RULE_IDS={set(mod.ALL_RULE_IDS)} "
+            f"!= upsert fallback={fallback}"
+        )
 
 
 def test_filter_ratio_rows_against_facts_drops_collisions():

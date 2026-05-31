@@ -100,10 +100,16 @@ adapter 必須將 raw unit 映射到下列五種之一（其他 → validation e
 
 | view | statement | 撈 period_kind |
 |---|---|---|
-| quarterly IS / CF / RATIO | IS / CF / RATIO | `quarter_duration` ∪ `derived_q4` |
+| quarterly IS / CF | IS / CF | `quarter_duration` ∪ `derived_q4` |
+| quarterly RATIO — duration（margins / ETR）| RATIO | `quarter_duration` ∪ `derived_q4` |
+| quarterly RATIO — BS-derived（current_ratio / cash_ratio）| RATIO | `instant_period_end`（period = Qx_FYyyyy） |
 | quarterly BS | BS | `instant_period_end`（period = Qx_FYyyyy） |
-| annual IS / CF / RATIO | IS / CF / RATIO | `fy_annual_duration` |
-| annual BS | BS | `instant_period_end`（period = FY year-end） |
+| annual IS / CF | IS / CF | `fy_annual_duration` |
+| annual RATIO — duration | RATIO | `fy_annual_duration` |
+| annual RATIO — BS-derived | RATIO | `instant_period_end`，`Q4_FYyyyy` remap 成 `FYyyyy` |
+| annual BS | BS | `instant_period_end`，`Q4_FYyyyy` remap 成 `FYyyyy` |
+
+> RATIO 有兩種 period 語意：margin / ETR 是 IS-derived（duration，跟 IS/CF 同）；current_ratio / cash_ratio / 未來 debt_to_equity 是 BS-derived（instant，跟 BS 同，annual 時 `Q4_FYyyyy` instant remap 成 `FYyyyy`）。前端 `useFinancialMatrix` 已照此實作。
 
 Status-aware render：
 
