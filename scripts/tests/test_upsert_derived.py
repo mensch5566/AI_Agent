@@ -584,3 +584,57 @@ def test_filter_ratio_rows_against_facts_drops_collisions():
     facts_keys = {("Q1_FY2025", "quarter_duration", "GAAP", "RATIO", "gross_margin_pct")}
     kept = upsert.filter_ratio_rows_against_facts(ratio_rows, facts_keys)
     assert [r["cell_id"] for r in kept] == ["ng"]  # GAAP collides → dropped; NON_GAAP kept
+
+
+def test_analytics_required_keys_includes_derive_base_when_derive_loaded():
+    """P1 (2nd-pass): when derive-base is loaded, the analytics freshness gate
+    must require the derive_base lineage too — otherwise analytics that ran
+    WITHOUT derive-base passes the gate and ships raw-only ratios alongside
+    fresh derive-base Q4 metrics (mixed-vintage)."""
+    upsert = _import_upsert()
+    assert "derive_base" in upsert.analytics_required_keys("loaded")
+    assert "gaap_facts" in upsert.analytics_required_keys("loaded")
+    # parse-only / no-derive-base refresh must NOT require derive_base lineage
+    assert "derive_base" not in upsert.analytics_required_keys("missing_run")
+    assert "derive_base" not in upsert.analytics_required_keys("incomplete_run")
+
+
+def _make_fresh_derive_base_run(vault, ticker, tmp_path):
+    """Build a 'loaded' + fresh derive-base run (input_files hashes match)."""
+    import hashlib
+    files = {}
+    for key, suffix in (("gaap_inline", "_gaap.json"),
+                        ("gaap_facts", "_gf.json"),
+                        ("gaap_edges_cal", "_edges.json")):
+        f = tmp_path / f"{ticker}{suffix}"
+        f.write_text("{}")
+        files[key] = {"path": str(f), "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
+    run = (vault / "Khouse" / "Semiconductors" / ticker / "01_Source" / "SEC Filings"
+           / "Skill_Output" / "derive-base" / "2026-05-31-0000")
+    run.mkdir(parents=True)
+    (run / f"{ticker}_derived.json").write_text(json.dumps({
+        "metadata": {"ticker": ticker, "managed_rule_ids": ["Q4_FY_MINUS_9M"],
+                     "input_files": files},
+        "derived_metrics": [],
+    }))
+
+
+def test_main_apply_fails_closed_when_analytics_missing_derive_base_lineage(tmp_path, monkeypatch):
+    """P1 (2nd-pass): derive-base loaded + analytics loaded but its input_files
+    lacks derive_base → the analytics ran before derive-base existed → mixed
+    vintage. Must exit BEFORE apply(batch)."""
+    upsert = _import_upsert()
+    vault = tmp_path / "vault"; vault.mkdir()
+    _make_fresh_derive_base_run(vault, "LIN", tmp_path)
+    _make_fresh_analytics_run(vault, "LIN", tmp_path)  # input_files = gaap_facts only
+    monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
+    monkeypatch.setattr(upsert, "load_sources", lambda t: {})
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "print_report", lambda b: True)
+    apply_called = {"n": 0}
+    monkeypatch.setattr(upsert, "apply", lambda b: apply_called.__setitem__("n", apply_called["n"] + 1))
+    monkeypatch.setattr(upsert, "supabase_client", lambda: (_ for _ in ()).throw(AssertionError("must not hit DB before analytics lineage gate")))
+    monkeypatch.setattr(sys, "argv", ["upsert_sec_financials.py", "LIN", "--apply"])
+    with pytest.raises(SystemExit):
+        upsert.main()
+    assert apply_called["n"] == 0, "apply(batch) MUST NOT run when analytics lacks derive_base lineage"

@@ -101,6 +101,22 @@ def analytics_delete_scope(payload_managed_rule_ids) -> list[str]:
     )
 
 
+def analytics_required_keys(derive_status: str) -> set:
+    """Minimum input_files lineage the analytics freshness gate must require.
+
+    derive-analytics consumes parse facts + derive-base (Q4/identity). When
+    derive-base is currently loaded, the analytics run MUST have consulted it —
+    so require `derive_base` lineage. Otherwise an analytics run produced before
+    derive-base existed (input_files lacks derive_base) would pass the gate and
+    ship raw-only ratios next to fresh derive-base Q4 metrics (mixed-vintage).
+    In a parse-only / no-derive-base refresh we don't require derive_base.
+    """
+    keys = {"gaap_facts"}
+    if derive_status == "loaded":
+        keys.add("derive_base")
+    return keys
+
+
 def _ratio_logical_key(r) -> tuple:
     return (r.get("period"), r.get("period_kind"), r.get("version"),
             r.get("statement"), r.get("uni_account"))
@@ -592,7 +608,7 @@ def main():
                 sys.exit(4)
         if _afresh_status == "loaded" and _afresh_payload is not None:
             a_mismatches = verify_derived_freshness(
-                _afresh_payload, required_keys={"gaap_facts"}
+                _afresh_payload, required_keys=analytics_required_keys(derive_status)
             )
             if a_mismatches:
                 print(f"\n  ✗ Refusing --apply: derive-analytics output is STALE for {ticker}.")
