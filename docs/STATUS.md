@@ -1,6 +1,6 @@
 # AI_Agent Status
 
-Updated: 2026-05-23
+Updated: 2026-05-31
 
 ## Current Focus
 - Portal remains the main entrypoint for internal tools.
@@ -34,6 +34,14 @@ Updated: 2026-05-23
 - Prefer adding new portal-facing features behind an existing module/page when possible, instead of creating duplicate entrypoints.
 
 ## Latest Changes
+- **derive-analytics expansion — Phase 0 (MVP contract hardening) shipped + deployed** (2026-05-31). Roadmap in `docs/derive-analytics-expansion-plan.md` (Codex-reviewed ×2). Before adding any new analyst metrics, the existing 5-ratio MVP was hardened to the same metrics contract as derive-base:
+  - **0.1 Row schema**: `audit.py` now emits canonical `metrics_cell_id` (was a human-readable `derived::…` string), and `provenance` carries `formula` + `target_table`. `rules_ratios.py` `RatioCandidate` carries `formula` ("{num} / {den}") and each input records the source fact's `cell_id` (lineage; `facts_cell_id` for raw facts, `metrics_cell_id` for derived inputs — supplied free by the shared adapter).
+  - **0.2 Owned-scope delete**: `derive_analytics.build_managed_rule_ids()` returns the full `ALL_RULE_IDS` registry (not reverse-derived from emitted rows); `upsert_sec_financials.py` adds `DERIVE_ANALYTICS_RULE_IDS_FALLBACK` + `analytics_delete_scope()` (union payload+fallback) so a rule that emits 0 rows this run no longer leaves stale Supabase rows.
+  - **0.3 YTD skip**: ratios are no longer computed on `ytd_duration` (6M/9M) periods — those were orphan rows the frontend never renders. Production row counts dropped accordingly (LITE 213→159, AAOI 101→77, INTC 29, SNDK 32→24).
+  - **0.4 facts-wins guardrail**: `/api/financials/[ticker]` drops any derived (metrics) row whose logical identity (`period|period_kind|version|statement|uni_account`) collides with a direct-disclosed (facts) row. Zero overlap today (disclosed RATIO are NON_GAAP, derived are GAAP); forward guardrail for Non-GAAP derived ratios.
+  - **0.5 Freshness gate**: `verify_derived_freshness()` gained a `required_keys` param; an analytics `--apply` gate (required `{gaap_facts}`) fails closed when the latest analytics run's parse inputs changed since it ran.
+  - Deployed: prototype synced to CC_Switch_Config (`974af9a`) + 3 runtimes; backend in AI_Agent (`bf6d246`). All 4 tickers (LITE/AAOI/INTC/SNDK) re-run + re-upserted to production; verified 0 YTD orphans / 0 legacy cell_id / 0 missing formula. Tests: scripts 261 + prototype 20, 0 regression.
+  - **FCF/EBITDA boundary correction** (per Codex P1.5): FCF/EBITDA materialization will live in derive-analytics, NOT derive-base (derive-base stays a gap-filler). Pending phases: A (Cash Ratio first; Debt/Equity, Interest Coverage, BVPS need schema-registered definitions + period-end shares), B (Quick Ratio + FCF), C (EBITDA), D (EL2 cross-period engine: ROE/ROA/turnover/YoY/Net-Debt-EBITDA — needs TTM/avg-balance storage contract decision), E (segment margin).
 - **Audit Metadata Schema v4 — Phase 6 closed** (2026-05-23, single round of in-session implementation).
   - **6.1 Preservation refactor**: pulled three copy-pasted `_preserve_*_cells` functions from `parse-10QK-gaap/xbrl_extract.py`, `parse-8k-nongaap/extract_8k_nongaap.py`, and `parse-SEC-supplement/extract_supplement_v3.py` into a single `_shared/preservation.py` (`preserve_audited_rows` + `values_match` + `row_has_audit` + `row_has_classification` + `PreservationResult` dataclass). Each parse skill now calls the shared helper with its own `identity_fn` (`build_preservation_identity` for GAAP/8K, `build_supplement_identity` for supplement) and prints the report. ~340 net lines removed, future matrix changes touch one file.
   - **6.2 Frontend audit indicator**: `StatementMatrix.tsx` displays "✓" badge on cells whose `provenance.audit_source` (canonical or legacy raw) is in `MANUAL_AUDIT_SOURCES`, or derived cells where `has_audited_inputs=true`. Classification-only cells get "·" badge. Tooltip extended with audit_source / audit_note / audited_by / audited_at / audit_evidence (source_doc + page_or_section) / preservation_event / new_extract_value_rejected / derived row's audited_input_cell_ids count. Both GAAP and Non-GAAP columns wired.
