@@ -243,6 +243,29 @@ unit 一律 `Pure`，value 一律存小數（0~1）。
 | `roa` | GAAP | `net_income_TTM / avg_total_assets` | ⬜ |
 | `current_ratio` | GAAP | `total_current_assets / total_current_liabilities` | ✅ |
 | `cash_ratio` | GAAP | `cash_and_cash_equivalents / total_current_liabilities` | ✅ |
+| `debt_to_equity` | GAAP | `(short_term_borrowings + current_portion_of_long_term_debt + long_term_debt) / total_equity` | ✅ schema-defined; EL1 pending |
+| `interest_coverage` | GAAP | `(income_before_taxes + interest_expense) / interest_expense` | ✅ schema-defined; EL1 pending |
+
+#### debt_to_equity / interest_coverage 口徑（EL1 composite，2026-06-01）
+
+需要 **EL1 線性組合引擎**，不是 single (num,den) tuple。EL1 rule schema 應讓 numerator / denominator 都可由 linear terms 組成；本批兩個指標的 denominator 仍是單一 required term，對稱設計是為避免未來 `net_debt / EBITDA` 等指標 refactor，不代表目前 denominator 已有 composite 需求。
+
+- **`debt_to_equity` = interest-bearing debt / total_equity**（不是 total_liabilities — 後者是 liabilities-to-equity）
+  - numerator terms（皆 BS，coefficient +1，**optional**：缺項視為 0，因為公司可能真的沒有該類債）：
+    `short_term_borrowings`、`current_portion_of_long_term_debt`、`long_term_debt`
+  - denominator：`total_equity`（BS，**required**）
+  - lease 暫不含（`*_lease_*` 留給未來 `lease_adjusted_debt_to_equity`）
+  - period_kind：BS-derived → `instant_period_end`（annual Q4→FY remap）；unit `Pure`，顯示倍數 `x`
+  - skip/NM policy：`total_equity <= 0`（負權益）→ skip（比率無意義）；numerator 全缺（無任何 debt）→ skip（不是 0 債就硬給 0）
+  - ⚠️ 已知限制：`short_term_borrowings`(10) / `current_portion_of_long_term_debt`(25) 覆蓋不全；optional-as-0 在公司有短債但 parse 未抽到時會低估 debt。LTD 為主項。
+- **`interest_coverage` = EBIT / interest_expense**，EBIT = `income_before_taxes + interest_expense`（**不是 operating_income 冒充**）
+  - numerator terms（皆 IS，+1，required）：`income_before_taxes`、`interest_expense`
+  - denominator：`interest_expense`（IS，required）
+  - period_kind：IS-derived → duration（quarterly `quarter_duration ∪ derived_q4`；annual `fy_annual_duration`）；unit `Pure`，顯示倍數 `x`
+  - skip/NM policy：`interest_expense <= 0`（無利息費用 / 符號異常）→ skip（除以 0 或負無意義）
+  - ⚠️ interest_expense 符號：需確認 parse 端存正值（費用）。EBIT = IBT + interest_expense 假設 interest_expense 為正。
+  - ⚠️ convention caveat：這是教科書 / vendor 常見的 times-interest-earned 口徑，但 `income_before_taxes` 已包含 interest income 與其他非營業損益；現金多或非營業收入大的公司會被墊高，可能高估「營業償息能力」。若需要更保守的 operating view，未來另設 `operating_interest_coverage = operating_income / interest_expense`，不可混稱為標準 interest coverage。
+- **`book_value_per_share` 暫緩**：需 period-end shares outstanding（instant），現只有 `shares_*_millions`（加權平均 duration）。等 parse 抽 instant shares contract 再做。
 
 ### 4.1 `RATIO_UNI_ACCOUNTS` allowlist
 
