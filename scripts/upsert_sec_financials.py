@@ -101,6 +101,39 @@ def analytics_delete_scope(payload_managed_rule_ids) -> list[str]:
     )
 
 
+def latest_run_json_path(vault: Path, ticker: str, skill_dir: str, json_filename: str):
+    """Path to the CURRENT latest run's JSON for a skill, or None if absent.
+    Mirrors _load_skill_run's latest-folder selection so callers can compare a
+    recorded input path against what the upsert would actually consume now."""
+    base = (vault / "Khouse" / "Semiconductors" / ticker
+            / "01_Source" / "SEC Filings" / "Skill_Output" / skill_dir)
+    if not base.exists():
+        return None
+    runs = sorted(p for p in base.iterdir() if p.is_dir())
+    if not runs:
+        return None
+    p = runs[-1] / json_filename
+    return p if p.exists() else None
+
+
+def analytics_derive_base_is_current(analytics_payload: dict, latest_db_json_path) -> bool:
+    """True if the analytics run consumed the CURRENT latest derive-base run.
+
+    Guards the path-version drift case the freshness hash misses: a newer
+    derive-base run exists but the old folder is still on disk, so analytics'
+    recorded old derive_base path still hashes correctly. If derive-base is
+    loaded, analytics' derive_base input path must resolve to the current latest
+    derive-base JSON; otherwise it's stale (fresh derive-base + old ratios).
+    """
+    if latest_db_json_path is None:
+        return True  # no current derive-base → nothing to be stale against
+    info = ((analytics_payload or {}).get("metadata", {}) or {}).get("input_files", {}) or {}
+    db = info.get("derive_base")
+    if not isinstance(db, dict) or not db.get("path"):
+        return False  # derive-base exists but analytics recorded no derive_base lineage
+    return Path(db["path"]).resolve() == Path(latest_db_json_path).resolve()
+
+
 def analytics_required_keys(derive_status: str) -> set:
     """Minimum input_files lineage the analytics freshness gate must require.
 
@@ -625,6 +658,22 @@ def main():
                               f"current={str(m['current_sha256'])[:12]}…")
                 print(f"     Re-run derive-analytics for {ticker} and retry. Existing DB rows preserved.")
                 sys.exit(3)
+            # P1 (3rd-pass): path-version drift. The hash check above re-hashes
+            # the recorded derive_base path, which still matches if an OLDER
+            # derive-base run is on disk. When derive-base is loaded, the
+            # analytics run must point to the CURRENT latest derive-base run,
+            # else it shipped ratios from an older derive-base than the one this
+            # upsert writes (fresh derive-base + stale ratios).
+            if derive_status == "loaded":
+                latest_db = latest_run_json_path(
+                    OBSIDIAN_BASE, ticker, "derive-base", f"{ticker}_derived.json"
+                )
+                if not analytics_derive_base_is_current(_afresh_payload, latest_db):
+                    print(f"\n  ✗ Refusing --apply: derive-analytics ran against an older "
+                          f"derive-base run than the current latest for {ticker}.")
+                    print(f"     Re-run derive-analytics for {ticker} (so it consumes the "
+                          f"latest derive-base) and retry. Existing DB rows preserved.")
+                    sys.exit(3)
 
     if args.apply:
         print(f"\n=== Real upsert to Supabase ===")

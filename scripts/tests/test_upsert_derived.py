@@ -638,3 +638,74 @@ def test_main_apply_fails_closed_when_analytics_missing_derive_base_lineage(tmp_
     with pytest.raises(SystemExit):
         upsert.main()
     assert apply_called["n"] == 0, "apply(batch) MUST NOT run when analytics lacks derive_base lineage"
+
+
+def test_analytics_derive_base_is_current_path_match(tmp_path):
+    """P1 (3rd-pass): the analytics run's recorded derive_base path must equal
+    the CURRENT latest derive-base run JSON. A newer derive-base run (old folder
+    still on disk) means analytics is stale even though its old-path hash still
+    matches."""
+    upsert = _import_upsert()
+    latest = tmp_path / "derive-base" / "2026-05-31-0900" / "T_derived.json"
+    older = tmp_path / "derive-base" / "2026-05-21-1419" / "T_derived.json"
+    # analytics pointing at the current latest → current
+    pay_ok = {"metadata": {"input_files": {"derive_base": {"path": str(latest), "sha256": "x"}}}}
+    assert upsert.analytics_derive_base_is_current(pay_ok, latest) is True
+    # analytics pointing at an older run → stale
+    pay_old = {"metadata": {"input_files": {"derive_base": {"path": str(older), "sha256": "x"}}}}
+    assert upsert.analytics_derive_base_is_current(pay_old, latest) is False
+    # no current derive-base → nothing to be stale against
+    assert upsert.analytics_derive_base_is_current(pay_old, None) is True
+    # claims no derive_base lineage while derive-base exists → stale
+    pay_none = {"metadata": {"input_files": {}}}
+    assert upsert.analytics_derive_base_is_current(pay_none, latest) is False
+
+
+def test_main_apply_fails_closed_when_analytics_points_to_older_derive_base(tmp_path, monkeypatch):
+    """P1 (3rd-pass): a newer derive-base run exists but analytics' recorded
+    derive_base path points to an OLDER run still on disk (old-path hash still
+    matches). Must exit BEFORE apply — fresh derive-base + stale ratios."""
+    import hashlib
+    upsert = _import_upsert()
+    vault = tmp_path / "vault"; vault.mkdir()
+    db_base = (vault / "Khouse" / "Semiconductors" / "OLD" / "01_Source" / "SEC Filings"
+               / "Skill_Output" / "derive-base")
+    # Older derive-base run A (still on disk)
+    runA = db_base / "2026-05-21-1419"; runA.mkdir(parents=True)
+    a_json = runA / "OLD_derived.json"
+    a_json.write_text(json.dumps({"metadata": {"ticker": "OLD"}, "derived_metrics": []}))
+    a_sha = hashlib.sha256(a_json.read_bytes()).hexdigest()
+    # Newer derive-base run B (latest, fresh inputs)
+    files = {}
+    for key, suffix in (("gaap_inline", "_gaap.json"), ("gaap_facts", "_gf.json"),
+                        ("gaap_edges_cal", "_edges.json")):
+        f = tmp_path / f"OLD{suffix}"; f.write_text("{}")
+        files[key] = {"path": str(f), "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
+    runB = db_base / "2026-05-31-0900"; runB.mkdir(parents=True)
+    (runB / "OLD_derived.json").write_text(json.dumps({
+        "metadata": {"ticker": "OLD", "managed_rule_ids": ["Q4_FY_MINUS_9M"], "input_files": files},
+        "derived_metrics": []}))
+    # Analytics loaded: gaap_facts fresh, derive_base pointing at the OLDER run A
+    gf = tmp_path / "OLD_gaap_facts.json"; gf.write_text('{"facts": []}')
+    gf_sha = hashlib.sha256(gf.read_bytes()).hexdigest()
+    an = (vault / "Khouse" / "Semiconductors" / "OLD" / "01_Source" / "SEC Filings"
+          / "Skill_Output" / "derive-analytics" / "2026-05-31-1000")
+    an.mkdir(parents=True)
+    (an / "OLD_analytics.json").write_text(json.dumps({
+        "metadata": {"ticker": "OLD", "managed_rule_ids": ["RATIO_GROSS_MARGIN_PCT"],
+                     "input_files": {"gaap_facts": {"path": str(gf), "sha256": gf_sha},
+                                     "derive_base": {"path": str(a_json), "sha256": a_sha}}},
+        "ratio_metrics": [{"cell_id": "r1", "period": "Q1_FY2025", "period_kind": "quarter_duration",
+                           "version": "GAAP", "statement": "RATIO", "uni_account": "gross_margin_pct",
+                           "provenance": {"rule_id": "RATIO_GROSS_MARGIN_PCT"}}]}))
+    monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
+    monkeypatch.setattr(upsert, "load_sources", lambda t: {})
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "print_report", lambda b: True)
+    apply_called = {"n": 0}
+    monkeypatch.setattr(upsert, "apply", lambda b: apply_called.__setitem__("n", apply_called["n"] + 1))
+    monkeypatch.setattr(upsert, "supabase_client", lambda: (_ for _ in ()).throw(AssertionError("no DB before drift gate")))
+    monkeypatch.setattr(sys, "argv", ["upsert_sec_financials.py", "OLD", "--apply"])
+    with pytest.raises(SystemExit):
+        upsert.main()
+    assert apply_called["n"] == 0, "apply MUST NOT run when analytics points to an older derive-base run"
