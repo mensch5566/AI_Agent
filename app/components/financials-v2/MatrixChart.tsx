@@ -14,7 +14,7 @@ import {
 } from "chart.js";
 import { Line } from "react-chartjs-2";
 import type { Matrix } from "./useFinancialMatrix";
-import { CHART_COLORS, CHART_MAX_SELECTION, unitGroupOf, type UnitGroup } from "./constants";
+import { CHART_COLORS, CHART_MAX_SELECTION, chartGroupOf, type UnitGroup } from "./constants";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -53,6 +53,7 @@ function formatValue(value: number | null, unit: string, group: UnitGroup): stri
   const sign = value < 0 ? "-" : "";
   const abs = Math.abs(value);
   if (group === "pct") return `${value < 0 ? "-" : ""}${(abs * 100).toFixed(1)}%`;
+  if (group === "multiple") return `${sign}${abs.toFixed(2)}x`;
   if (group === "per_share") return `${sign}$${abs.toFixed(2)}`;
   if (group === "shares") {
     if (unit === "thousands_shares") return `${sign}${(abs / 1000).toFixed(1)}M`;
@@ -89,7 +90,7 @@ export function MatrixChart({
   const axis = useMemo(() => {
     const first = selectedRows[0];
     if (!first) return { unit: "USD_thousands", group: "monetary" as UnitGroup };
-    return { unit: first.unit, group: unitGroupOf(first.unit) };
+    return { unit: first.unit, group: chartGroupOf(first.unit, first.key) };
   }, [selectedRows]);
 
   const datasets = useMemo(() => {

@@ -9,7 +9,7 @@ import { TickerPicker } from "@/app/components/financials-v2/TickerPicker";
 import {
   CHART_DEFAULT_KEYS,
   CHART_MAX_SELECTION,
-  unitGroupOf,
+  chartGroupOf,
 } from "@/app/components/financials-v2/constants";
 import type { Statement } from "@/app/components/financials-v2/types";
 import ThemeToggle from "@/app/components/ThemeToggle";
@@ -120,8 +120,8 @@ export default function Viewer({ ticker }: { ticker: string }) {
         if (prev.includes(key)) {
           return prev.filter((k) => k !== key);
         }
-        const newGroup = unitGroupOf(unitOfRow(key));
-        const currentGroup = prev.length > 0 ? unitGroupOf(unitOfRow(prev[0])) : null;
+        const newGroup = chartGroupOf(unitOfRow(key), key);
+        const currentGroup = prev.length > 0 ? chartGroupOf(unitOfRow(prev[0]), prev[0]) : null;
         if (currentGroup && newGroup !== currentGroup) {
           // Different unit group → swap modes, keep only the new row.
           return [key];

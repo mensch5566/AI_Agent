@@ -174,7 +174,7 @@ export const CHART_COLORS = [
 // Mixing $ and % on one axis is misleading; mixing $ and shares is also
 // misleading. Per-share lives in its own group too because absolute EPS
 // doesn't compare against revenue dollars.
-export type UnitGroup = "monetary" | "pct" | "per_share" | "shares" | "other";
+export type UnitGroup = "monetary" | "pct" | "multiple" | "per_share" | "shares" | "other";
 
 export function unitGroupOf(unit: string | null | undefined): UnitGroup {
   if (!unit) return "other";
@@ -183,6 +183,18 @@ export function unitGroupOf(unit: string | null | undefined): UnitGroup {
   if (unit === "USD_per_share") return "per_share";
   if (unit === "millions_shares" || unit === "thousands_shares") return "shares";
   return "other";
+}
+
+// Chart/axis grouping that splits the `Pure` unit into percentage ratios
+// (margins / ETR → "45.0%") and multiple ratios (current/cash ratio,
+// debt_to_equity, interest_coverage → "0.45x"). The plain `unitGroupOf` can't
+// tell them apart because both are unit="Pure"; here we use the uni_account to
+// route RATIO_AS_MULTIPLE keys to a separate "multiple" axis so a 2.19x ratio
+// is never plotted as 219% or mixed onto a margin-% axis.
+export function chartGroupOf(unit: string | null | undefined, uniAccount?: string | null): UnitGroup {
+  const base = unitGroupOf(unit);
+  if (base === "pct" && uniAccount && RATIO_AS_MULTIPLE.has(uniAccount)) return "multiple";
+  return base;
 }
 
 // Long-tail rollup hints: when a long-tail bucket child carries one of these
