@@ -184,6 +184,7 @@ v2 完整 uni_account 清單見 [`sec-financials-v2-schema.md`](./sec-financials
 | IS    | `net_margin_pct`       | `net_income / operating_revenue × 100`             | —                     | ✅   |     |
 | IS    | `r_and_d_ratio`        | `r_and_d_expenses / operating_revenue × 100`       | 需抽 `r_and_d_expenses` | ⬜   |     |
 | BS    | `current_ratio`        | `total_current_assets / total_current_liabilities` | —                     | ✅   |     |
+| BS    | `cash_ratio`           | `cash_and_cash_equivalents / total_current_liabilities` | —                     | ✅   |     |
 | BS    | `debt_to_equity`       | `total_liabilities / total_equity`                 | —                     | ✅   |     |
 | BS    | `equity_ratio`         | `total_equity / total_assets`                      | —                     | ✅   |     |
 | IS+BS | `roe`                  | `net_income / total_equity × 100`                  | —                     | ✅   |     |
@@ -319,6 +320,7 @@ v2 完整 uni_account 清單見 [`sec-financials-v2-schema.md`](./sec-financials
 | IS    | `net_margin_pct`       | `net_income / operating_revenue × 100`             | ⬜   |     |
 | IS    | `r_and_d_ratio`        | `r_and_d_expenses / operating_revenue × 100`       | ⬜   |     |
 | BS    | `current_ratio`        | `total_current_assets / total_current_liabilities` | ⬜   |     |
+| BS    | `cash_ratio`           | `cash_and_cash_equivalents / total_current_liabilities` | ⬜   |     |
 | BS    | `debt_to_equity`       | `total_liabilities / total_equity`                 | ⬜   |     |
 | BS    | `equity_ratio`         | `total_equity / total_assets`                      | ⬜   |     |
 | IS+BS | `roe`                  | `net_income / total_equity × 100`                  | ⬜   |     |

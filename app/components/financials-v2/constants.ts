@@ -120,6 +120,7 @@ export const RATIO_ROWS: MetricSpec[] = [
   { key: "roe", label: "Return on Equity", kind: "derived_ratio" },
   { key: "roa", label: "Return on Assets", kind: "derived_ratio" },
   { key: "current_ratio", label: "Current Ratio", kind: "derived_ratio" },
+  { key: "cash_ratio", label: "Cash Ratio", kind: "derived_ratio" },
 ];
 
 export const ROWS_BY_STATEMENT: Record<Statement, MetricSpec[]> = {
@@ -208,8 +209,8 @@ export const LONG_TAIL_ROLLUP_HINTS: Record<string, string> = {
 // default percentage ("449.2%").
 export const RATIO_AS_MULTIPLE = new Set<string>([
   "current_ratio",
-  // Add quick_ratio / cash_ratio / debt_to_equity here when derive-analytics
-  // emits them.
+  "cash_ratio",
+  // Add quick_ratio / debt_to_equity here when derive-analytics emits them.
 ]);
 
 export function fmtValue(

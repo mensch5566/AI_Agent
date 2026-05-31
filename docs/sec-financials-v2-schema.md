@@ -241,7 +241,8 @@ unit 一律 `Pure`，value 一律存小數（0~1）。
 | `effective_tax_rate` | GAAP | `income_tax_expense / income_before_taxes` | ⬜ |
 | `roe` | GAAP | `net_income_TTM / avg_total_equity` | ⬜ |
 | `roa` | GAAP | `net_income_TTM / avg_total_assets` | ⬜ |
-| `current_ratio` | GAAP | `total_current_assets / total_current_liabilities` | ⬜ |
+| `current_ratio` | GAAP | `total_current_assets / total_current_liabilities` | ✅ |
+| `cash_ratio` | GAAP | `cash_and_cash_equivalents / total_current_liabilities` | ✅ |
 
 ### 4.1 `RATIO_UNI_ACCOUNTS` allowlist
 
