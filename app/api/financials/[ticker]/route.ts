@@ -124,11 +124,22 @@ export async function GET(
   }
 
   // Tag cells with source_table; metrics rows fill the gaps that facts left.
+  // facts-wins guardrail (Phase 0 / P0.1): a derived (metrics) row must never
+  // shadow a direct-disclosed (facts) row for the same logical cell. facts and
+  // metrics use different cell_id schemes (facts_cell_id vs metrics_cell_id), so
+  // collisions are keyed on the logical identity tuple, not cell_id. Today there
+  // is zero overlap (disclosed RATIO are NON_GAAP, derived RATIO are GAAP); this
+  // is a forward guardrail for when derived Non-GAAP ratios or disclosed GAAP
+  // ratios land.
+  const identity = (c: { period: string; period_kind: string; version: string; statement: string; uni_account: string }) =>
+    `${c.period}|${c.period_kind}|${c.version}|${c.statement}|${c.uni_account}`;
+  const factKeys = new Set(factsRaw.map(identity));
   const cells: Cell[] = [];
   for (const f of factsRaw) {
     cells.push({ ...f, source_table: "facts" });
   }
   for (const m of metricsRaw) {
+    if (factKeys.has(identity(m))) continue; // facts win — drop colliding derived row
     cells.push({
       ...m,
       source_account: null,

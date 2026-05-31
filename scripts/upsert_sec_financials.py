@@ -74,6 +74,32 @@ DERIVE_BASE_RULE_IDS_FALLBACK = (
     "IDENTITY_IBT_FROM_OP_MINUS_INTEXP_PLUS_NONOP",
 )
 
+# Owned rule registry for derive-analytics. Mirrors derive-base's fallback:
+# the analytics snapshot-replacement delete scope must cover every rule the
+# skill can emit, even when the current run / payload metadata lists a subset,
+# so a rule that produced 0 rows this run still has its stale Supabase rows
+# cleared. Keep in sync with rules_ratios.ALL_RULE_IDS. When a new analytics
+# rule lands, add its rule_id here.
+DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
+    "RATIO_GROSS_MARGIN_PCT",
+    "RATIO_OPERATING_MARGIN_PCT",
+    "RATIO_NET_MARGIN_PCT",
+    "RATIO_EFFECTIVE_TAX_RATE",
+    "RATIO_CURRENT_RATIO",
+)
+
+
+def analytics_delete_scope(payload_managed_rule_ids) -> list[str]:
+    """Delete scope for derive-analytics snapshot replacement.
+
+    Union of the payload's self-declared managed_rule_ids with the owned
+    registry fallback, so legacy/partial payloads can never under-delete and
+    leave stale ratio rows behind.
+    """
+    return sorted(
+        set(payload_managed_rule_ids or ()) | set(DERIVE_ANALYTICS_RULE_IDS_FALLBACK)
+    )
+
 
 # ---- IO helpers --------------------------------------------------------------
 
@@ -347,16 +373,23 @@ def _load_skill_run(vault: Path, ticker: str, skill_dir: str,
 _REQUIRED_INPUT_FILE_KEYS = frozenset({"gaap_inline", "gaap_facts", "gaap_edges_cal"})
 
 
-def verify_derived_freshness(payload: dict) -> list[dict]:
+def verify_derived_freshness(payload: dict, required_keys=None) -> list[dict]:
     """Re-hash every source file referenced in derived payload.metadata
     .input_files and compare to the stored sha256. Returns a list of mismatch
     descriptors (empty = fresh). R6-F1 / R7-F1.
+
+    `required_keys` is the minimum input_files contract for the producing skill
+    (defaults to derive-base's `_REQUIRED_INPUT_FILE_KEYS`; derive-analytics
+    passes its own, e.g. {"gaap_facts"}). A missing required key fails closed so
+    a lineage-poor JSON can't bypass the gate.
 
     Each mismatch: {"key", "path", "stored_sha256", "current_sha256", "reason"}
     reason ∈ {"hash_mismatch", "file_missing", "input_files_missing",
               "input_file_key_missing"}.
     """
     import hashlib
+    if required_keys is None:
+        required_keys = _REQUIRED_INPUT_FILE_KEYS
     metadata = (payload or {}).get("metadata") or {}
     input_files = metadata.get("input_files")
     mismatches: list[dict] = []
@@ -369,7 +402,7 @@ def verify_derived_freshness(payload: dict) -> list[dict]:
             "reason": "input_files_missing",
         })
         return mismatches
-    for required_key in _REQUIRED_INPUT_FILE_KEYS:
+    for required_key in required_keys:
         if required_key not in input_files or input_files[required_key] is None:
             mismatches.append({
                 "key": required_key, "path": None,
@@ -511,6 +544,33 @@ def main():
             print(f"     Re-run derive-base for {ticker} and retry. Existing DB rows preserved.")
             sys.exit(3)
 
+    # Phase 0 P0.3: same source-hash freshness gate for derive-analytics. If the
+    # latest analytics run is loaded but its parse inputs changed since it ran,
+    # refuse --apply — otherwise fresh facts + stale ratios = mixed-vintage
+    # Viewer state. Analytics' minimum input is gaap_facts. Fail-closed before
+    # any write; re-run derive-analytics then retry.
+    if args.apply:
+        _afresh_status, _afresh_payload = load_analytics_run(OBSIDIAN_BASE, ticker)
+        if _afresh_status == "loaded" and _afresh_payload is not None:
+            a_mismatches = verify_derived_freshness(
+                _afresh_payload, required_keys={"gaap_facts"}
+            )
+            if a_mismatches:
+                print(f"\n  ✗ Refusing --apply: derive-analytics output is STALE for {ticker}.")
+                print(f"     {len(a_mismatches)} input source(s) changed since the analytics run:")
+                for m in a_mismatches:
+                    reason = m["reason"]
+                    if reason in ("file_missing", "file_unreadable"):
+                        print(f"       - {m['key']}: {reason} at {m['path']}")
+                    elif reason in ("input_files_missing", "input_file_key_missing",
+                                    "input_file_metadata_invalid"):
+                        print(f"       - {m['key']}: {reason}")
+                    else:
+                        print(f"       - {m['key']}: stored={str(m['stored_sha256'])[:12]}…  "
+                              f"current={str(m['current_sha256'])[:12]}…")
+                print(f"     Re-run derive-analytics for {ticker} and retry. Existing DB rows preserved.")
+                sys.exit(3)
+
     if args.apply:
         print(f"\n=== Real upsert to Supabase ===")
         apply(batch)
@@ -560,16 +620,16 @@ def main():
         if analytics_status == "loaded":
             ratio_rows = analytics_payload.get("ratio_metrics") or []
             a_managed = (analytics_payload.get("metadata", {}) or {}).get("managed_rule_ids")
-            if not a_managed:
-                print(f"  (analytics payload has no managed_rule_ids; skipping delete)")
-            else:
-                a_del = (client.table("sec_financial_metrics")
-                         .delete()
-                         .eq("ticker", ticker)
-                         .in_("provenance->>rule_id", a_managed)
-                         .execute())
-                print(f"  cleared derive-analytics scope (rule_ids={a_managed}): "
-                      f"sec_financial_metrics ({len(a_del.data)} rows deleted)")
+            # Always clear the full owned scope (union payload + fallback) so a
+            # rule that emitted 0 rows this run can't leave stale Supabase rows.
+            a_scope = analytics_delete_scope(a_managed)
+            a_del = (client.table("sec_financial_metrics")
+                     .delete()
+                     .eq("ticker", ticker)
+                     .in_("provenance->>rule_id", a_scope)
+                     .execute())
+            print(f"  cleared derive-analytics scope (rule_ids={a_scope}): "
+                  f"sec_financial_metrics ({len(a_del.data)} rows deleted)")
             if ratio_rows:
                 client.table("sec_financial_metrics").upsert(
                     ratio_rows, on_conflict="cell_id"

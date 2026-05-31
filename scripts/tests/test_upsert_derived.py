@@ -433,3 +433,30 @@ def test_load_derived_metrics_legitimate_empty_returns_loaded(tmp_path):
     status, rows = upsert.load_derived_metrics(vault, "JKL")
     assert status == "loaded"
     assert rows == []
+
+
+def test_analytics_delete_scope_unions_payload_with_fallback():
+    """Phase 0 P0.2: analytics delete scope must cover the full owned rule
+    registry even if a payload lists only a subset, so stale rows for rules
+    that emitted nothing this run still get cleared."""
+    upsert = _import_upsert()
+    scope = set(upsert.analytics_delete_scope(["RATIO_GROSS_MARGIN_PCT"]))
+    assert set(upsert.DERIVE_ANALYTICS_RULE_IDS_FALLBACK) <= scope
+
+
+def test_analytics_delete_scope_empty_payload_uses_full_fallback():
+    upsert = _import_upsert()
+    scope = set(upsert.analytics_delete_scope(None))
+    assert scope == set(upsert.DERIVE_ANALYTICS_RULE_IDS_FALLBACK)
+
+
+def test_verify_freshness_accepts_custom_required_keys(tmp_path):
+    """Phase 0 P0.3: derive-analytics has a different minimum-input set than
+    derive-base, so verify_derived_freshness must accept required_keys to gate
+    both skills with the same hashing logic."""
+    upsert = _import_upsert()
+    payload = {"metadata": {"input_files": {
+        "nongaap": {"path": str(tmp_path / "nope"), "sha256": "abc"},
+    }}}
+    m = upsert.verify_derived_freshness(payload, required_keys={"gaap_facts"})
+    assert any(x["key"] == "gaap_facts" and x["reason"] == "input_file_key_missing" for x in m)
