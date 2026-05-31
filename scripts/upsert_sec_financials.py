@@ -101,6 +101,23 @@ def analytics_delete_scope(payload_managed_rule_ids) -> list[str]:
     )
 
 
+def _ratio_logical_key(r) -> tuple:
+    return (r.get("period"), r.get("period_kind"), r.get("version"),
+            r.get("statement"), r.get("uni_account"))
+
+
+def filter_ratio_rows_against_facts(ratio_rows, facts_logical_keys) -> list:
+    """facts-wins at the STORAGE boundary (P2.1): drop any derived RATIO row
+    whose logical identity collides with a disclosed `sec_financial_facts` row,
+    so the collision is removed before the metrics upsert — not merely hidden by
+    the read-model API. facts/metrics use different cell_id schemes, so the
+    comparison is on the logical tuple (period|period_kind|version|statement|
+    uni_account), per docs/financials-data-rules.md §SEC v2.
+    """
+    keys = set(facts_logical_keys)
+    return [r for r in ratio_rows if _ratio_logical_key(r) not in keys]
+
+
 # ---- IO helpers --------------------------------------------------------------
 
 
@@ -544,13 +561,35 @@ def main():
             print(f"     Re-run derive-base for {ticker} and retry. Existing DB rows preserved.")
             sys.exit(3)
 
-    # Phase 0 P0.3: same source-hash freshness gate for derive-analytics. If the
-    # latest analytics run is loaded but its parse inputs changed since it ran,
-    # refuse --apply — otherwise fresh facts + stale ratios = mixed-vintage
-    # Viewer state. Analytics' minimum input is gaap_facts. Fail-closed before
-    # any write; re-run derive-analytics then retry.
+    # Phase 0 P0.3 + P1.1: derive-analytics apply-path gate. Mirrors derive-base:
+    # every unsafe analytics state must fail closed BEFORE apply(batch), so fresh
+    # facts are never written alongside stale/missing ratio rows (mixed-vintage).
+    #   - incomplete_run → corrupt run, never safe → exit 2.
+    #   - missing_run + DB already has analytics-managed rows → exit 4, unless
+    #     --allow-missing-derived (parse-only refresh; existing ratios preserved).
+    #   - loaded + stale inputs → exit 3.
     if args.apply:
         _afresh_status, _afresh_payload = load_analytics_run(OBSIDIAN_BASE, ticker)
+        if _afresh_status == "incomplete_run":
+            print(f"\n  ✗ Refusing --apply: derive-analytics latest run INCOMPLETE for {ticker} "
+                  f"(folder present, no {ticker}_analytics.json).")
+            print(f"     Re-run derive-analytics for {ticker} and retry. Existing DB rows preserved.")
+            sys.exit(2)
+        if _afresh_status == "missing_run" and not args.allow_missing_derived:
+            client = supabase_client()
+            existing = (client.table("sec_financial_metrics")
+                        .select("cell_id", count="exact")
+                        .eq("ticker", ticker)
+                        .in_("provenance->>rule_id", list(DERIVE_ANALYTICS_RULE_IDS_FALLBACK))
+                        .limit(1)
+                        .execute())
+            if existing.count and existing.count > 0:
+                print(f"\n  ✗ Refusing --apply: derive-analytics output missing for {ticker} "
+                      f"but Supabase has {existing.count} existing analytics-managed row(s).")
+                print(f"     Run derive-analytics for {ticker} first, or pass "
+                      f"--allow-missing-derived to accept parse-only refresh "
+                      f"(existing ratios will not be touched).")
+                sys.exit(4)
         if _afresh_status == "loaded" and _afresh_payload is not None:
             a_mismatches = verify_derived_freshness(
                 _afresh_payload, required_keys={"gaap_facts"}
@@ -573,6 +612,10 @@ def main():
 
     if args.apply:
         print(f"\n=== Real upsert to Supabase ===")
+        # Lazily obtained so the parse-only / no-derived path never opens a DB
+        # connection (and analytics DB ops never UnboundLocalError when the
+        # derive-base branch that used to create `client` is skipped — P1.2).
+        client = None
         apply(batch)
         # Fail-closed snapshot replacement (Codex round-2 F5 + round-3 F2/F3
         # + round-4 F2): only DELETE the derive-base scope when status=loaded.
@@ -623,6 +666,7 @@ def main():
             # Always clear the full owned scope (union payload + fallback) so a
             # rule that emitted 0 rows this run can't leave stale Supabase rows.
             a_scope = analytics_delete_scope(a_managed)
+            client = client or supabase_client()  # P1.2: may be unset if derive-base was skipped
             a_del = (client.table("sec_financial_metrics")
                      .delete()
                      .eq("ticker", ticker)
@@ -631,10 +675,24 @@ def main():
             print(f"  cleared derive-analytics scope (rule_ids={a_scope}): "
                   f"sec_financial_metrics ({len(a_del.data)} rows deleted)")
             if ratio_rows:
-                client.table("sec_financial_metrics").upsert(
-                    ratio_rows, on_conflict="cell_id"
-                ).execute()
-                print(f"  upserted: sec_financial_metrics ({len(ratio_rows)} analytics rows)")
+                # facts-wins at storage boundary (P2.1): never write a derived
+                # RATIO row whose logical identity collides with a disclosed
+                # facts row. RATIO facts per ticker are few (<100) so a single
+                # select is safe (no pagination needed).
+                fres = (client.table("sec_financial_facts")
+                        .select("period,period_kind,version,statement,uni_account")
+                        .eq("ticker", ticker).eq("statement", "RATIO").execute())
+                facts_keys = {_ratio_logical_key(f) for f in (fres.data or [])}
+                kept = filter_ratio_rows_against_facts(ratio_rows, facts_keys)
+                dropped = len(ratio_rows) - len(kept)
+                if dropped:
+                    print(f"  facts-wins: dropped {dropped} derived RATIO row(s) "
+                          f"colliding with disclosed facts")
+                if kept:
+                    client.table("sec_financial_metrics").upsert(
+                        kept, on_conflict="cell_id"
+                    ).execute()
+                print(f"  upserted: sec_financial_metrics ({len(kept)} analytics rows)")
         elif analytics_status == "missing_run":
             print(f"  (no derive-analytics output found for {ticker} — ratios not refreshed)")
         elif analytics_status == "incomplete_run":

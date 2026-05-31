@@ -460,3 +460,127 @@ def test_verify_freshness_accepts_custom_required_keys(tmp_path):
     }}}
     m = upsert.verify_derived_freshness(payload, required_keys={"gaap_facts"})
     assert any(x["key"] == "gaap_facts" and x["reason"] == "input_file_key_missing" for x in m)
+
+
+# ---- Phase 0 P1 fixes: analytics apply-path gating + client scoping ----
+
+def _make_fresh_analytics_run(vault, ticker, tmp_path, rule_id="RATIO_GROSS_MARGIN_PCT"):
+    """Build a 'loaded' analytics run whose input_files hash matches a real file
+    so verify_derived_freshness passes."""
+    import hashlib
+    gaap = tmp_path / f"{ticker}_gaap_facts.json"
+    gaap.write_text('{"facts": []}')
+    sha = hashlib.sha256(gaap.read_bytes()).hexdigest()
+    run = (vault / "Khouse" / "Semiconductors" / ticker / "01_Source" / "SEC Filings"
+           / "Skill_Output" / "derive-analytics" / "2026-05-31-0000")
+    run.mkdir(parents=True)
+    (run / f"{ticker}_analytics.json").write_text(json.dumps({
+        "metadata": {"ticker": ticker, "managed_rule_ids": [rule_id],
+                     "input_files": {"gaap_facts": {"path": str(gaap), "sha256": sha}}},
+        "ratio_metrics": [{"cell_id": "r1", "ticker": ticker, "statement": "RATIO",
+                           "period": "Q1_FY2025", "period_kind": "quarter_duration",
+                           "version": "GAAP", "uni_account": "gross_margin_pct",
+                           "provenance": {"rule_id": rule_id}}],
+    }))
+
+
+class _RecQuery:
+    def __init__(self, ops): self.ops = ops
+    def delete(self): self.ops["delete"] += 1; return self
+    def upsert(self, *a, **k): self.ops["upsert"] += 1; return self
+    def select(self, *a, **k): return self
+    def eq(self, *a, **k): return self
+    def in_(self, *a, **k): return self
+    def limit(self, *a, **k): return self
+    def execute(self):
+        class _E: data = []; count = 0
+        return _E()
+
+
+class _RecClient:
+    def __init__(self, ops): self.ops = ops
+    def table(self, name): return _RecQuery(self.ops)
+
+
+def test_main_allow_missing_derived_with_analytics_loaded_does_not_crash(tmp_path, monkeypatch):
+    """P1.2: --allow-missing-derived (derive-base missing) + analytics loaded must
+    NOT raise UnboundLocalError on `client` when the analytics block runs DB ops."""
+    upsert = _import_upsert()
+    vault = tmp_path / "vault"; vault.mkdir()
+    _make_fresh_analytics_run(vault, "ALCK", tmp_path)
+    monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
+    monkeypatch.setattr(upsert, "load_sources", lambda t: {})
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "print_report", lambda b: True)
+    apply_called = {"n": 0}
+    monkeypatch.setattr(upsert, "apply", lambda b: apply_called.__setitem__("n", apply_called["n"] + 1))
+    ops = {"delete": 0, "upsert": 0}
+    monkeypatch.setattr(upsert, "supabase_client", lambda: _RecClient(ops))
+    monkeypatch.setattr(sys, "argv", ["upsert_sec_financials.py", "ALCK", "--apply", "--allow-missing-derived"])
+    upsert.main()  # must complete, no UnboundLocalError
+    assert apply_called["n"] == 1
+    assert ops["upsert"] >= 1, "analytics rows must be upserted via a valid client"
+
+
+def test_main_apply_fails_closed_on_analytics_incomplete(tmp_path, monkeypatch):
+    """P1.1: analytics incomplete run must fail closed BEFORE apply(batch), so
+    fresh facts are never written alongside stale ratio rows."""
+    upsert = _import_upsert()
+    vault = tmp_path
+    run = (vault / "Khouse" / "Semiconductors" / "AINC" / "01_Source" / "SEC Filings"
+           / "Skill_Output" / "derive-analytics" / "2026-05-31-0000")
+    run.mkdir(parents=True)  # folder but no JSON → incomplete_run
+    monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
+    monkeypatch.setattr(upsert, "load_sources", lambda t: {})
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "print_report", lambda b: True)
+    apply_called = {"n": 0}
+    monkeypatch.setattr(upsert, "apply", lambda b: apply_called.__setitem__("n", apply_called["n"] + 1))
+    monkeypatch.setattr(upsert, "supabase_client", lambda: (_ for _ in ()).throw(AssertionError("no DB on analytics incomplete")))
+    monkeypatch.setattr(sys, "argv", ["upsert_sec_financials.py", "AINC", "--apply", "--allow-missing-derived"])
+    with pytest.raises(SystemExit):
+        upsert.main()
+    assert apply_called["n"] == 0, "apply(batch) MUST NOT run when analytics is incomplete"
+
+
+def test_analytics_fallback_matches_skill_registry():
+    """P2.2 drift guard: upsert's DERIVE_ANALYTICS_RULE_IDS_FALLBACK must equal
+    the derive-analytics skill's ALL_RULE_IDS. They live in different repos and
+    are hand-synced, so this catches a rule added to the skill but not the
+    upsert fallback (which would let that rule's stale rows survive)."""
+    import importlib.util
+    upsert = _import_upsert()
+    # Locate the skill's rules_ratios across known dev/runtime mirrors.
+    candidates = [
+        Path.home() / "AI_Agent" / "tmp" / "derive-analytics" / "rules_ratios.py",
+        Path.home() / ".claude" / "skills" / "derive-analytics" / "scripts" / "rules_ratios.py",
+        Path.home() / "CC_Switch_Config" / "skills" / "derive-analytics" / "scripts" / "rules_ratios.py",
+    ]
+    src = next((p for p in candidates if p.is_file()), None)
+    if src is None:
+        pytest.skip("derive-analytics skill rules_ratios.py not found in any known mirror")
+    spec = importlib.util.spec_from_file_location("ra_rules", str(src))
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["ra_rules"] = mod  # required for dataclass KW_ONLY detection under `from __future__ import annotations`
+    spec.loader.exec_module(mod)
+    assert set(mod.ALL_RULE_IDS) == set(upsert.DERIVE_ANALYTICS_RULE_IDS_FALLBACK), (
+        f"registry drift: skill ALL_RULE_IDS={set(mod.ALL_RULE_IDS)} != "
+        f"upsert fallback={set(upsert.DERIVE_ANALYTICS_RULE_IDS_FALLBACK)}"
+    )
+
+
+def test_filter_ratio_rows_against_facts_drops_collisions():
+    """P2.1 storage facts-wins: a derived RATIO row whose logical identity
+    (period|period_kind|version|statement|uni_account) collides with a disclosed
+    facts row must NOT be written to sec_financial_metrics — facts win at the
+    storage boundary, not just in the API read model."""
+    upsert = _import_upsert()
+    ratio_rows = [
+        {"period": "Q1_FY2025", "period_kind": "quarter_duration", "version": "GAAP",
+         "statement": "RATIO", "uni_account": "gross_margin_pct", "cell_id": "g"},
+        {"period": "Q1_FY2025", "period_kind": "quarter_duration", "version": "NON_GAAP",
+         "statement": "RATIO", "uni_account": "gross_margin_pct", "cell_id": "ng"},
+    ]
+    facts_keys = {("Q1_FY2025", "quarter_duration", "GAAP", "RATIO", "gross_margin_pct")}
+    kept = upsert.filter_ratio_rows_against_facts(ratio_rows, facts_keys)
+    assert [r["cell_id"] for r in kept] == ["ng"]  # GAAP collides → dropped; NON_GAAP kept
