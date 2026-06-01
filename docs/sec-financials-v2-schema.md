@@ -59,7 +59,7 @@
 | `USD_per_share` | `USD_per_share` / `USD/share` / 在 EPS context 下的 `USD` |
 | `millions_shares` | `millions_shares` |
 | `thousands_shares` | `thousands_shares` |
-| `Pure` | `Pure` / `percent` / `Percent`（pct 一律存小數，0~1） |
+| `Pure` | `Pure` / `percent` / `Percent`。pct-style（margins / ETR）存小數 0~1；multiple-style（current/cash ratio、debt_to_equity、interest_coverage）是倍數、**可超過 1 或為負**，前端依 `RATIO_AS_MULTIPLE` 顯示 `x` |
 
 adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validation error。
 
@@ -229,7 +229,7 @@ adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validat
 direct disclosed ratios → `sec_financial_facts` (SOURCE_OF_TRUTH, version=GAAP|NON_GAAP)
 derived ratios → `sec_financial_metrics` (DERIVED_FROM_DISCLOSED)
 
-unit 一律 `Pure`，value 一律存小數（0~1）。
+unit 一律 `Pure`。pct-style（margins / ETR）存小數 0~1；multiple-style（current/cash ratio、debt_to_equity、interest_coverage）是倍數，**可 >1 或為負**（如虧損季 interest_coverage）。前端依 `RATIO_AS_MULTIPLE` 決定 `%` vs `x` 顯示與 chart 分軸。
 
 | uni_account | version | 公式（derived 時） | 確認 |
 |---|---|---|---|
@@ -243,8 +243,8 @@ unit 一律 `Pure`，value 一律存小數（0~1）。
 | `roa` | GAAP | `net_income_TTM / avg_total_assets` | ⬜ |
 | `current_ratio` | GAAP | `total_current_assets / total_current_liabilities` | ✅ |
 | `cash_ratio` | GAAP | `cash_and_cash_equivalents / total_current_liabilities` | ✅ |
-| `debt_to_equity` | GAAP | `(short_term_borrowings + current_portion_of_long_term_debt + long_term_debt) / total_equity` | ✅ schema-defined; EL1 pending |
-| `interest_coverage` | GAAP | `(income_before_taxes + interest_expense) / interest_expense` | ✅ schema-defined; EL1 pending |
+| `debt_to_equity` | GAAP | `(short_term_borrowings + current_portion_of_long_term_debt + long_term_debt) / total_equity` | ✅ |
+| `interest_coverage` | GAAP | `(income_before_taxes + interest_expense) / interest_expense` | ✅ |
 
 #### debt_to_equity / interest_coverage 口徑（EL1 composite，2026-06-01）
 
@@ -257,7 +257,8 @@ unit 一律 `Pure`，value 一律存小數（0~1）。
   - lease 暫不含（`*_lease_*` 留給未來 `lease_adjusted_debt_to_equity`）
   - period_kind：BS-derived → `instant_period_end`（annual Q4→FY remap）；unit `Pure`，顯示倍數 `x`
   - skip/NM policy：`total_equity <= 0`（負權益）→ skip（比率無意義）；numerator 全缺（無任何 debt）→ skip（不是 0 債就硬給 0）
-  - ⚠️ 已知限制：`short_term_borrowings`(10) / `current_portion_of_long_term_debt`(25) 覆蓋不全；optional-as-0 在公司有短債但 parse 未抽到時會低估 debt。LTD 為主項。
+  - **dedup**：部分發行人（LITE）把同一筆 current debt 同時掛在 `ShortTermBorrowings` 和 `LongTermDebtCurrent` 兩個 XBRL tag（數值完全相等）。numerator 對**數值相等**的 term 只計一次（`RatioRule.dedup_numerator_by_value`），避免 double-count。LITE Q2_FY2026 驗證：(3240.2 once + 47.1)/846.6 = 3.88，非雙計 7.71。
+  - ⚠️ 已知限制：(1) `short_term_borrowings`(10) / `current_portion_of_long_term_debt`(25) 覆蓋不全；optional-as-0 在公司有短債但 parse 未抽到時會低估 debt（LTD 為主項）。(2) dedup-by-exact-value 會在「兩筆真的不同的債剛好小數精確相等」時誤合（機率極低）。
 - **`interest_coverage` = EBIT / interest_expense**，EBIT = `income_before_taxes + interest_expense`（**不是 operating_income 冒充**）
   - numerator terms（皆 IS，+1，required）：`income_before_taxes`、`interest_expense`
   - denominator：`interest_expense`（IS，required）

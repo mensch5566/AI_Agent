@@ -74,9 +74,10 @@ Safety net：`unit ∈ PCT_UNITS` 且 `uni_account.endswith('_pct')` 或 `'margi
 
 ### Pct Value Scale (SEC v2)
 
-- DB 一律存小數（0~1）。例如 39.2% 存 `0.392`、35.1% 存 `0.351`。
-- adapter 對 `unit='Pure'` row 跑 `normalize_pct_value()`：`abs(value) > 1` 時 `value/100`，否則保留。
-- UI 顯示一律 `fmtPct(decimal) → "${(decimal*100).toFixed(1)}%"`。
+- **僅適用 pct-style ratio（margins / ETR）**：DB 存小數 0~1，例如 39.2% 存 `0.392`。
+- adapter 對 pct-style `unit='Pure'` row 跑 `normalize_pct_value()`：`abs(value) > 1` 時 `value/100`。
+- **multiple-style ratio（current/cash ratio、debt_to_equity、interest_coverage，在 `RATIO_AS_MULTIPLE`）原樣存**（current_ratio 4.49 存 `4.49`，不可被 normalize 成 0.0449），可 >1 或為負；UI 顯示 `x`。⚠️ 目前無「揭露的倍數 ratio fact」，故 `normalize_pct_value` 對倍數的潛在 /100 尚無實害；若未來新增此類 disclosed fact，adapter 要排除 `RATIO_AS_MULTIPLE` keys。
+- pct-style UI 顯示 `fmtPct(decimal) → "${(decimal*100).toFixed(1)}%"`。
 
 ### Unit Canonicalization (SEC v2)
 
