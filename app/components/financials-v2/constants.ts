@@ -117,6 +117,7 @@ export const RATIO_ROWS: MetricSpec[] = [
   { key: "gross_margin_pct", label: "Gross Margin %", kind: "derived_ratio" },
   { key: "operating_margin_pct", label: "Operating Margin %", kind: "derived_ratio" },
   { key: "net_margin_pct", label: "Net Margin %", kind: "derived_ratio" },
+  { key: "fcf_margin_pct", label: "FCF Margin %", kind: "derived_ratio" },
   { key: "ebitda_margin_pct", label: "EBITDA Margin %", kind: "derived_ratio" },
   { key: "adjusted_ebitda_margin_pct", label: "Adjusted EBITDA Margin %", kind: "derived_ratio" },
   { key: "effective_tax_rate", label: "Effective Tax Rate", kind: "derived_ratio" },

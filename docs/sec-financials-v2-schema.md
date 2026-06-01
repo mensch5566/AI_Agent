@@ -247,6 +247,7 @@ unit 一律 `Pure`。pct-style（margins / ETR）存小數 0~1；multiple-style�
 | `gross_margin_pct` | GAAP / NON_GAAP | `gross_profit / revenue` | ⬜ |
 | `operating_margin_pct` | GAAP / NON_GAAP | `operating_income / revenue` | ⬜ |
 | `net_margin_pct` | GAAP / NON_GAAP | `net_income / revenue` | ⬜ |
+| `fcf_margin_pct` | GAAP | `(net_cash_from_operating - capital_expenditures) / revenue` | ✅ |
 | `ebitda_margin_pct` | GAAP / NON_GAAP | `ebitda / revenue` | ⬜ |
 | `adjusted_ebitda_margin_pct` | NON_GAAP | `adjusted_ebitda / revenue` | ⬜ |
 | `effective_tax_rate` | GAAP | `income_tax_expense / income_before_taxes` | ⬜ |
@@ -277,6 +278,11 @@ unit 一律 `Pure`。pct-style（margins / ETR）存小數 0~1；multiple-style�
   - skip/NM policy：`interest_expense <= 0`（無利息費用 / 符號異常）→ skip（除以 0 或負無意義）
   - ⚠️ interest_expense 符號：需確認 parse 端存正值（費用）。EBIT = IBT + interest_expense 假設 interest_expense 為正。
   - ⚠️ convention caveat：這是教科書 / vendor 常見的 times-interest-earned 口徑，但 `income_before_taxes` 已包含 interest income 與其他非營業損益；現金多或非營業收入大的公司會被墊高，可能高估「營業償息能力」。若需要更保守的 operating view，未來另設 `operating_interest_coverage = operating_income / interest_expense`，不可混稱為標準 interest coverage。
+- **`fcf_margin_pct` = (net_cash_from_operating − capital_expenditures) / revenue**（EL1 **跨 statement** composite，2026-06-01）
+  - numerator terms：`net_cash_from_operating`(+1, CF)、`capital_expenditures`(−1, CF)；denominator：`revenue`(IS)。
+  - **直接從 CFO/capex/revenue 算**（不依賴 materialize FCF 再除；代數等價、無兩段式 dependency）。
+  - CF 與 IS 同期同為 duration、共享 period_kind/period_end → 一致性 guard 通過；YTD skip。pct-style（存小數，**可為負**），unit `Pure`，顯示 `%`（非 `RATIO_AS_MULTIPLE`）。
+  - GAAP-only（無 NON_GAAP CF facts，引擎自動 skip 該 version）。skip policy：`revenue == 0` → skip。
 - **`book_value_per_share` 暫緩**：需 period-end shares outstanding（instant），現只有 `shares_*_millions`（加權平均 duration）。等 parse 抽 instant shares contract 再做。
 
 ### 4.1 `RATIO_UNI_ACCOUNTS` allowlist

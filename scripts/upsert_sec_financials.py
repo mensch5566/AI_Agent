@@ -89,6 +89,7 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_CASH_RATIO",
     "RATIO_DEBT_TO_EQUITY",
     "RATIO_INTEREST_COVERAGE",
+    "RATIO_FCF_MARGIN_PCT",
     # Phase B absolute-value (numerator-only) derivations.
     "FCF_CFO_MINUS_CAPEX",
 )
