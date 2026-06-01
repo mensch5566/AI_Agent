@@ -158,16 +158,54 @@ def _ratio_logical_key(r) -> tuple:
             r.get("statement"), r.get("uni_account"))
 
 
-def filter_ratio_rows_against_facts(ratio_rows, facts_logical_keys) -> list:
-    """facts-wins at the STORAGE boundary (P2.1): drop any derived RATIO row
+def filter_derived_rows_against_facts(derived_rows, facts_logical_keys) -> list:
+    """facts-wins at the STORAGE boundary (P2.1): drop any derived metrics row
     whose logical identity collides with a disclosed `sec_financial_facts` row,
     so the collision is removed before the metrics upsert — not merely hidden by
     the read-model API. facts/metrics use different cell_id schemes, so the
     comparison is on the logical tuple (period|period_kind|version|statement|
     uni_account), per docs/financials-data-rules.md §SEC v2.
+
+    Statement-agnostic: the same guard covers RATIO ratios today and Phase B/C
+    absolute-value derivations (FCF→CF, EBITDA→IS) once they ship — provided the
+    caller passes the broadened all-statement fact-key set (fetch_facts_logical_keys).
     """
     keys = set(facts_logical_keys)
-    return [r for r in ratio_rows if _ratio_logical_key(r) not in keys]
+    return [r for r in derived_rows if _ratio_logical_key(r) not in keys]
+
+
+# Back-compat alias (Phase 0 name `filter_ratio_rows_against_facts`). The RATIO
+# scoping always lived in the *caller's* fact-key set, not this function, so the
+# alias safely points at the broadened generic.
+filter_ratio_rows_against_facts = filter_derived_rows_against_facts
+
+
+def fetch_facts_logical_keys(client, ticker: str, page: int = 1000) -> set:
+    """Fetch ALL disclosed-facts logical keys for a ticker, across every
+    statement (IS/BS/CF/RATIO), paginating past Supabase's default 1000-row cap.
+
+    Feeds the storage-boundary facts-wins guard. The Phase 0 version selected
+    only `statement='RATIO'` with a single un-paginated execute() — safe while
+    derive-analytics emitted RATIO ratios only. Phase B/C add CF (FCF) and IS
+    (EBITDA) absolute-value derivations that can collide with disclosed facts in
+    those statements, and IS+BS+CF facts per ticker can exceed 1000 rows, so the
+    fetch must drop the statement filter AND page.
+    """
+    keys: set = set()
+    frm = 0
+    while True:
+        res = (client.table("sec_financial_facts")
+               .select("period,period_kind,version,statement,uni_account")
+               .eq("ticker", ticker)
+               .range(frm, frm + page - 1)
+               .execute())
+        rows = res.data or []
+        for f in rows:
+            keys.add(_ratio_logical_key(f))
+        if len(rows) < page:
+            break
+        frm += page
+    return keys
 
 
 # ---- IO helpers --------------------------------------------------------------
@@ -744,17 +782,16 @@ def main():
                   f"sec_financial_metrics ({len(a_del.data)} rows deleted)")
             if ratio_rows:
                 # facts-wins at storage boundary (P2.1): never write a derived
-                # RATIO row whose logical identity collides with a disclosed
-                # facts row. RATIO facts per ticker are few (<100) so a single
-                # select is safe (no pagination needed).
-                fres = (client.table("sec_financial_facts")
-                        .select("period,period_kind,version,statement,uni_account")
-                        .eq("ticker", ticker).eq("statement", "RATIO").execute())
-                facts_keys = {_ratio_logical_key(f) for f in (fres.data or [])}
-                kept = filter_ratio_rows_against_facts(ratio_rows, facts_keys)
+                # row whose logical identity collides with a disclosed facts row.
+                # Broadened past RATIO (Phase B prerequisite) to ALL statements +
+                # paginated, so future FCF (CF) / EBITDA (IS) absolute-value
+                # derivations are covered, and tickers with >1000 IS/BS/CF facts
+                # aren't silently truncated.
+                facts_keys = fetch_facts_logical_keys(client, ticker)
+                kept = filter_derived_rows_against_facts(ratio_rows, facts_keys)
                 dropped = len(ratio_rows) - len(kept)
                 if dropped:
-                    print(f"  facts-wins: dropped {dropped} derived RATIO row(s) "
+                    print(f"  facts-wins: dropped {dropped} derived row(s) "
                           f"colliding with disclosed facts")
                 if kept:
                     client.table("sec_financial_metrics").upsert(

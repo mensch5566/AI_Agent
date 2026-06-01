@@ -492,6 +492,7 @@ class _RecQuery:
     def eq(self, *a, **k): return self
     def in_(self, *a, **k): return self
     def limit(self, *a, **k): return self
+    def range(self, *a, **k): return self  # storage facts-wins paginated fetch
     def execute(self):
         class _E: data = []; count = 0
         return _E()
@@ -590,6 +591,69 @@ def test_filter_ratio_rows_against_facts_drops_collisions():
     facts_keys = {("Q1_FY2025", "quarter_duration", "GAAP", "RATIO", "gross_margin_pct")}
     kept = upsert.filter_ratio_rows_against_facts(ratio_rows, facts_keys)
     assert [r["cell_id"] for r in kept] == ["ng"]  # GAAP collides → dropped; NON_GAAP kept
+
+
+def test_filter_derived_rows_against_facts_drops_non_ratio_collision():
+    """Phase B prerequisite — broaden facts-wins beyond RATIO. A derived
+    absolute-value row (e.g. FCF, statement=CF) whose logical identity collides
+    with a disclosed CF fact must be dropped at the storage boundary, exactly as
+    RATIO rows are. The filter itself is statement-agnostic; only the fetched
+    fact-key set needed broadening (see fetch_facts_logical_keys)."""
+    upsert = _import_upsert()
+    derived_rows = [
+        {"period": "Q1_FY2025", "period_kind": "quarter_duration", "version": "GAAP",
+         "statement": "CF", "uni_account": "free_cash_flow", "cell_id": "collide"},
+        {"period": "Q1_FY2025", "period_kind": "quarter_duration", "version": "GAAP",
+         "statement": "CF", "uni_account": "fcf_margin_pct", "cell_id": "keep"},
+    ]
+    facts_keys = {("Q1_FY2025", "quarter_duration", "GAAP", "CF", "free_cash_flow")}
+    kept = upsert.filter_derived_rows_against_facts(derived_rows, facts_keys)
+    assert [r["cell_id"] for r in kept] == ["keep"]
+    # back-compat alias points at the same broadened function
+    assert upsert.filter_ratio_rows_against_facts is upsert.filter_derived_rows_against_facts
+
+
+def test_fetch_facts_logical_keys_paginates_all_statements():
+    """The storage-boundary fact-key fetch must page past Supabase's 1000-row
+    cap (IS+BS+CF per ticker can exceed it) and must NOT filter by statement —
+    so derived rows of any statement (RATIO today; FCF=CF / EBITDA=IS in Phase
+    B/C) get checked against same-statement disclosed facts."""
+    upsert = _import_upsert()
+
+    PAGE = 1000
+    total = PAGE * 2 + 5  # 2 full pages + a short page → 3 range() calls
+    rows = [
+        {"period": f"P{i}", "period_kind": "quarter_duration", "version": "GAAP",
+         "statement": ["IS", "BS", "CF"][i % 3], "uni_account": f"acct_{i}"}
+        for i in range(total)
+    ]
+    range_calls: list = []
+    eq_filters: list = []
+
+    class _Q:
+        def select(self, *a, **kw): return self
+        def eq(self, col, val): eq_filters.append((col, val)); return self
+        def range(self, frm, to):
+            range_calls.append((frm, to))
+            self._slice = rows[frm:to + 1]
+            return self
+        def execute(self):
+            class _R:
+                pass
+            r = _R()
+            r.data = self._slice
+            return r
+
+    class _Client:
+        def table(self, name): return _Q()
+
+    keys = upsert.fetch_facts_logical_keys(_Client(), "AAOI", page=PAGE)
+    assert len(keys) == total  # all distinct → every key collected
+    # paged: [0,999], [1000,1999], [2000,2999] → 3 calls, then short page stops loop
+    assert range_calls == [(0, 999), (1000, 1999), (2000, 2999)]
+    # only the ticker is filtered — statement filter must be gone
+    assert ("ticker", "AAOI") in eq_filters
+    assert all(col != "statement" for col, _ in eq_filters)
 
 
 def test_analytics_required_keys_includes_derive_base_when_derive_loaded():
