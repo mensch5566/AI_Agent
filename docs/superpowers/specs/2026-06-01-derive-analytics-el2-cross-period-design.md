@@ -24,7 +24,7 @@ EL0/EL1 的指標都在「單一期間」自給自足（margin、流動比、D/E
 
 **排除**：Net-Debt/EBITDA（要 EBITDA，被 stale-parse 擋著，見 STATUS）；ROIC（需 NOPAT + invested capital，口徑較重）；turnover/DSO/CCC/YoY（follow-on）。
 
-**不受 stale-parse 影響**：ROE/ROA 用 IS 單季 net_income（Q1/Q2/Q3 已有 + Q4 = derive-base `derived_q4`）+ BS instant equity/assets。CF 的 YTD/單季 stale 問題與此**無關**，可在現行 production 資料上算。
+**不受 CF stale-parse 阻擋**（但非無條件可上線，Codex §12 P2）：ROE/ROA 用 IS 單季 net_income（Q1/Q2/Q3 + Q4 = derive-base `derived_q4`）+ BS instant equity/assets，跟 CF 的 YTD/單季 stale 問題**無關**。⚠️但這**不等於**可無條件 `--apply`：IS 單季 net_income 本身仍可能是 legacy parser 的 stale 產物，所以 production apply 前**必須先 audit IS net_income lineage**（§11 gate 5 / §7），不可當可選提醒。
 
 ## 2. 口徑（plan §7 要求動工前定義）
 
@@ -53,7 +53,7 @@ EL0/EL1 的指標都在「單一期間」自給自足（margin、流動比、D/E
 | annual ROE/ROA | `fy_annual_duration` | `FYyyyy` |
 
 - **新增 period_kind `ttm_duration`**：語意乾淨（period_kind 本就是期間語意欄）。`provenance.window='TTM'` 也帶上（雙保險）。
-- ⚠️**需 DB migration**（Codex P1.1 已驗）：`sfm_period_kind_check` 目前 `IN ('quarter_duration','fy_annual_duration','ytd_duration','instant_period_end','derived_q4')`，`ttm_duration` 會被擋。implementation **第一步**：alter `sfm_period_kind_check` 加 `ttm_duration`（**只 metrics 表**，不動 facts/dimensional 的 constraint）。同步 enum：`docs/sec-financials-v2-schema.md` §0.3、`financials-data-rules.md` display table、`app/components/financials-v2/types.ts` `PeriodKind`、`Tools/research-tools/_shared/period_kind.py::VALID_KINDS`。
+- ⚠️**需 DB migration**（Codex P1.1 已驗）：`sfm_period_kind_check` 目前 `IN ('quarter_duration','fy_annual_duration','ytd_duration','instant_period_end','derived_q4')`，`ttm_duration` 會被擋。implementation **第一步**：**`DROP CONSTRAINT IF EXISTS sfm_period_kind_check` + `ADD CONSTRAINT` 加 `ttm_duration`**（Postgres CHECK 不能 in-place alter expression，Codex §12 P3；SQL 形狀見 §12）（**只 metrics 表**，不動 facts/dimensional 的 constraint）。同步 enum/docs：`docs/sec-financials-v2-schema.md` §0.3、`docs/financials-data-rules.md` display table、**`docs/financials-view-schema.md` period_kind list**（Codex §12 P3 補回，AGENTS discipline 要求維護）、`app/components/financials-v2/types.ts` `PeriodKind`、`Tools/research-tools/_shared/period_kind.py::VALID_KINDS`。
 - **不可**把 TTM 偽裝成 `quarter_duration`（plan §6 明令）。
 
 ## 4. 跨期引擎設計（新模組）
@@ -212,3 +212,73 @@ Conclusion: design is directionally sound, but do not implement until the two P1
 5. **production `--apply` 前先 audit net_income lineage**（Codex 提醒）：抽樣 TTM 用的 4 季 net_income 必須是現行 adapter/derive-base 的 `quarter_duration`/`derived_q4`，不是 legacy parser silent-derive 藏在 facts 裡的值。雖然 ROE/ROA 不被 CF stale 擋，但 IS 單季 net_income 也可能是 stale-parse 產物——上線前要確認 lineage 乾淨，否則可能要等「re-parse 全 ticker 到現行 contract」那個 future 工程。
 
 → 設計收斂。先做 migration step，再 TDD 引擎。
+
+## 12. Codex re-review（2026-06-01，§11 複驗）
+
+### Verdict
+
+§11 已把上一輪兩個 P1 / 兩個 P2 的核心修法折回設計，主路徑可進 implementation。特別是：
+
+- `ttm_duration` 不再被當成 frontend-only contract；§3 已把 DB migration 放成第一步。
+- annual ROE/ROA denominator 已改成 lookup `Q4_FY{yyyy-1}` / `Q4_FY{yyyy}` BS instant，output target 才是 `FYyyyy`。
+- TTM net income 已明確限 `quarter_duration ∪ derived_q4`，避免 YTD 混入。
+- candidate/writer 的 `window` contract 已列入 §4.4。
+
+### Remaining Findings
+
+**P2 - §1 的 rollout claim 還是太強，跟 §11 gate 形成矛盾。**
+
+§1 仍寫「不受 stale-parse 影響」且「可在現行 production 資料上算」。§11 已接受 production `--apply` 前要 audit TTM net_income lineage，甚至承認 IS 單季 net_income 也可能是 stale-parse 產物。這兩段現在語意不一致。
+
+建議把 §1 改成更精準的 rollout 語氣：
+
+- ROE/ROA **不受 CF D&A / CF YTD stale 問題阻擋**，因為不讀 CF。
+- 但 production apply 仍需先跑 net_income lineage audit；若 TTM inputs 來自 legacy parser-side silent derivation，應 defer 到全 ticker re-parse current contract 後。
+
+這不是 engine design blocker，但如果 body 保留「可在現行 production 資料上算」的硬說法，implementation 階段很容易把 §11 gate 當成可選提醒。
+
+**P3 - §3 migration 方向正確，但實作 SQL 應明講用 drop/add constraint，不要寫成 `ALTER CONSTRAINT`。**
+
+只動 `sec_financial_metrics.sfm_period_kind_check` 是對的：`sec_financial_facts` 有自己的 `sff_period_kind_check` + `sff_statement_period_kind_check`，不應允許 facts 產生 `ttm_duration`；`sec_financial_dimensional_facts` 也不需要 TTM derived rows。
+
+Postgres 不能直接改 CHECK constraint 的 expression。implementation migration 應採這種形狀：
+
+```sql
+ALTER TABLE sec_financial_metrics
+  DROP CONSTRAINT IF EXISTS sfm_period_kind_check;
+
+ALTER TABLE sec_financial_metrics
+  ADD CONSTRAINT sfm_period_kind_check CHECK (
+    period_kind IN (
+      'quarter_duration',
+      'fy_annual_duration',
+      'ytd_duration',
+      'instant_period_end',
+      'derived_q4',
+      'ttm_duration'
+    )
+  );
+```
+
+目前舊資料都在原 allowlist 內，所以直接 add/validate 應可過；若要最保守可用 `NOT VALID` + `VALIDATE CONSTRAINT`，但表量不大不是必要。
+
+**P3 - §3 同步清單漏了 `docs/financials-view-schema.md`。**
+
+上一輪 §10 有列 `docs/financials-view-schema.md`，但 §3 / §11 的同步清單只剩 `docs/sec-financials-v2-schema.md`、`financials-data-rules.md`、frontend `PeriodKind`、`period_kind.py::VALID_KINDS`。`financials-view-schema.md` 目前也有 period_kind list，且 AGENTS discipline 明確要求 financial/derived metric change 要讀/維護它；implementation checklist 應把它補回去，避免 docs authority 分裂。
+
+### Migration Check
+
+§3「alter `sfm_period_kind_check` 加 `ttm_duration`（只 metrics 表，不動 facts/dimensional）」的表邊界是正確的。`sec_financial_metrics` 沒有額外 statement-vs-period_kind cross constraint，所以單改這個 CHECK constraint 足以讓 quarterly ROE/ROA 的 `statement='RATIO'` + `period_kind='ttm_duration'` 入庫；frontend routing 再用明確 TTM-ratio 清單限制顯示面即可。
+
+### Sign-off Scope
+
+No remaining P1. 上面 P2/P3 都是 spec wording / implementation guardrail，不改 engine architecture。修掉 §1 rollout wording 後，這份 spec 可以進 TDD implementation。
+
+## 13. Claude 收斂（回應 §12，2026-06-02）
+
+§12 三點全接受、已折進 body：
+- **P2（§1 矛盾說法）**：§1 改成「不受 CF stale 阻擋，但 production apply 前仍須 audit IS net_income lineage、不可當可選提醒」。
+- **P3（migration 寫法）**：§3 明寫 `DROP CONSTRAINT IF EXISTS + ADD CONSTRAINT`（Postgres CHECK 不能 in-place alter），SQL 形狀依 §12。
+- **P3（漏 doc）**：§3 enum/docs 同步清單補回 `docs/financials-view-schema.md`。
+
+無剩 P1/P2。設計收斂，可開工：① migration（DROP+ADD `sfm_period_kind_check` 加 `ttm_duration`，metrics-only）+ 5 處 enum/docs 同步 → ② TDD 引擎 → ③ 前端 ttm_duration 路由（只 roe/roa）→ ④ net_income lineage audit → ⑤ re-upsert → ⑥ handoff。
