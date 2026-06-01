@@ -255,6 +255,7 @@ unit 一律 `Pure`。pct-style（margins / ETR）存小數 0~1；multiple-style�
 | `roa` | GAAP | `net_income_TTM / avg_total_assets` | ⬜ |
 | `current_ratio` | GAAP | `total_current_assets / total_current_liabilities` | ✅ |
 | `cash_ratio` | GAAP | `cash_and_cash_equivalents / total_current_liabilities` | ✅ |
+| `quick_ratio` | GAAP | `(cash_and_cash_equivalents + short_term_investments[optional] + accounts_receivable) / total_current_liabilities` | ✅ |
 | `debt_to_equity` | GAAP | `(short_term_borrowings + current_portion_of_long_term_debt + long_term_debt) / total_equity` | ✅ |
 | `interest_coverage` | GAAP | `(income_before_taxes + interest_expense) / interest_expense` | ✅ |
 
@@ -278,6 +279,11 @@ unit 一律 `Pure`。pct-style（margins / ETR）存小數 0~1；multiple-style�
   - skip/NM policy：`interest_expense <= 0`（無利息費用 / 符號異常）→ skip（除以 0 或負無意義）
   - ⚠️ interest_expense 符號：需確認 parse 端存正值（費用）。EBIT = IBT + interest_expense 假設 interest_expense 為正。
   - ⚠️ convention caveat：這是教科書 / vendor 常見的 times-interest-earned 口徑，但 `income_before_taxes` 已包含 interest income 與其他非營業損益；現金多或非營業收入大的公司會被墊高，可能高估「營業償息能力」。若需要更保守的 operating view，未來另設 `operating_interest_coverage = operating_income / interest_expense`，不可混稱為標準 interest coverage。
+- **`quick_ratio` = (cash + short_term_investments + accounts_receivable) / total_current_liabilities**（EL1 composite，BS-derived，2026-06-01）
+  - numerator terms（皆 BS）：`cash_and_cash_equivalents`(+1, required)、`short_term_investments`(+1, **optional**)、`accounts_receivable`(+1, required)；denominator：`total_current_liabilities`(required)。
+  - **`short_term_investments` optional 的依據**：已查證 AAOI/SNDK 的 BS **完全無**任何 short-term-investments / marketable-securities 科目（連 long-tail 都沒有，parse 抽完整四 linkbase）→ 真的沒有，不是漏抽。所以 optional-as-0 對它們是**正確** quick ratio（cash+AR）/CL，非降級；LITE/INTC 則含其揭露的 `short_term_investments`。`cash` + `accounts_receivable` required（無 receivables 時 quick ratio 無意義 → skip，那只是 cash ratio）。
+  - period_kind：BS-derived → `instant_period_end`（annual Q4→FY remap）；unit `Pure`，multiple-style 顯示 `x`（在 `RATIO_AS_MULTIPLE`）。skip：`total_current_liabilities == 0` → skip。
+  - provenance.inputs 會顯示各期實際 resolve 了哪些 quick asset 科目（透明可審）。
 - **`fcf_margin_pct` = (net_cash_from_operating − capital_expenditures) / revenue**（EL1 **跨 statement** composite，2026-06-01）
   - numerator terms：`net_cash_from_operating`(+1, CF)、`capital_expenditures`(−1, CF)；denominator：`revenue`(IS)。
   - **直接從 CFO/capex/revenue 算**（不依賴 materialize FCF 再除；代數等價、無兩段式 dependency）。

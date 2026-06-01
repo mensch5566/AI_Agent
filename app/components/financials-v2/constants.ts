@@ -124,6 +124,7 @@ export const RATIO_ROWS: MetricSpec[] = [
   { key: "roe", label: "Return on Equity", kind: "derived_ratio" },
   { key: "roa", label: "Return on Assets", kind: "derived_ratio" },
   { key: "current_ratio", label: "Current Ratio", kind: "derived_ratio" },
+  { key: "quick_ratio", label: "Quick Ratio", kind: "derived_ratio" },
   { key: "cash_ratio", label: "Cash Ratio", kind: "derived_ratio" },
   { key: "debt_to_equity", label: "Debt / Equity", kind: "derived_ratio" },
   { key: "interest_coverage", label: "Interest Coverage", kind: "derived_ratio" },
@@ -228,9 +229,9 @@ export const LONG_TAIL_ROLLUP_HINTS: Record<string, string> = {
 export const RATIO_AS_MULTIPLE = new Set<string>([
   "current_ratio",
   "cash_ratio",
+  "quick_ratio",
   "debt_to_equity",
   "interest_coverage",
-  // Add quick_ratio here when derive-analytics emits it.
 ]);
 
 export function fmtValue(
