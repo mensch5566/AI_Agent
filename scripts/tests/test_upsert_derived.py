@@ -492,6 +492,7 @@ class _RecQuery:
     def eq(self, *a, **k): return self
     def in_(self, *a, **k): return self
     def limit(self, *a, **k): return self
+    def order(self, *a, **k): return self  # stable order for paginated fetch
     def range(self, *a, **k): return self  # storage facts-wins paginated fetch
     def execute(self):
         class _E: data = []; count = 0
@@ -521,6 +522,33 @@ def test_main_allow_missing_derived_with_analytics_loaded_does_not_crash(tmp_pat
     upsert.main()  # must complete, no UnboundLocalError
     assert apply_called["n"] == 1
     assert ops["upsert"] >= 1, "analytics rows must be upserted via a valid client"
+
+
+def test_analytics_fetch_failure_does_not_delete_before_reinsert(tmp_path, monkeypatch):
+    """P2.2: the storage facts-wins fetch is a heavier paginated read now, so it
+    must run BEFORE the analytics scope delete. A mid-pagination failure must not
+    leave analytics rows deleted-but-not-reinserted (half-update). If the fetch
+    raises, the delete must not have happened yet."""
+    upsert = _import_upsert()
+    vault = tmp_path / "vault"; vault.mkdir()
+    _make_fresh_analytics_run(vault, "FAILT", tmp_path)
+    monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
+    monkeypatch.setattr(upsert, "load_sources", lambda t: {})
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "print_report", lambda b: True)
+    monkeypatch.setattr(upsert, "apply", lambda b: None)
+    ops = {"delete": 0, "upsert": 0}
+    monkeypatch.setattr(upsert, "supabase_client", lambda: _RecClient(ops))
+
+    def _boom(*a, **k):
+        raise RuntimeError("simulated page-2 fetch failure")
+    monkeypatch.setattr(upsert, "fetch_facts_logical_keys", _boom)
+    monkeypatch.setattr(sys, "argv",
+                        ["upsert_sec_financials.py", "FAILT", "--apply", "--allow-missing-derived"])
+    with pytest.raises(RuntimeError, match="simulated page-2"):
+        upsert.main()
+    assert ops["delete"] == 0, "analytics scope must NOT be deleted before a successful fact-key fetch"
+    assert ops["upsert"] == 0
 
 
 def test_main_apply_fails_closed_on_analytics_incomplete(tmp_path, monkeypatch):
@@ -629,10 +657,12 @@ def test_fetch_facts_logical_keys_paginates_all_statements():
     ]
     range_calls: list = []
     eq_filters: list = []
+    order_cols: list = []
 
     class _Q:
         def select(self, *a, **kw): return self
         def eq(self, col, val): eq_filters.append((col, val)); return self
+        def order(self, col, *a, **kw): order_cols.append(col); return self
         def range(self, frm, to):
             range_calls.append((frm, to))
             self._slice = rows[frm:to + 1]
@@ -654,6 +684,9 @@ def test_fetch_facts_logical_keys_paginates_all_statements():
     # only the ticker is filtered — statement filter must be gone
     assert ("ticker", "AAOI") in eq_filters
     assert all(col != "statement" for col, _ in eq_filters)
+    # P2.1: paginated reads MUST carry a stable unique order (cell_id), else
+    # range() page boundaries are not a deterministic contract and can drop keys.
+    assert order_cols and all(c == "cell_id" for c in order_cols)
 
 
 def test_analytics_required_keys_includes_derive_base_when_derive_loaded():

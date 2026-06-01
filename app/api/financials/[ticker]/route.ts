@@ -86,6 +86,10 @@ export async function GET(
       .select("*")
       .eq("ticker", t)
       .maybeSingle(),
+    // .order("cell_id") gives a stable unique total order so the .range() page
+    // windows are a deterministic contract. Without it Postgres/PostgREST make
+    // NO ordering guarantee across separate paged requests, so adjacent pages
+    // could overlap or skip rows — and LITE already exceeds one 1000-row page.
     fetchAllPages<Omit<Cell, "source_table">>((from) =>
       supabase
         .from("sec_financial_facts")
@@ -93,6 +97,7 @@ export async function GET(
           "ticker, period, period_end, period_kind, statement, version, uni_account, source_account, xbrl_tag, value, weight, unit, status, ordinal, long_tail_metadata, provenance",
         )
         .eq("ticker", t)
+        .order("cell_id")
         .range(from, from + PAGE - 1),
     ),
     fetchAllPages<Omit<Cell, "source_table" | "source_account" | "xbrl_tag" | "weight" | "ordinal" | "long_tail_metadata">>(
@@ -103,6 +108,7 @@ export async function GET(
             "ticker, period, period_end, period_kind, statement, version, uni_account, value, unit, status, provenance",
           )
           .eq("ticker", t)
+          .order("cell_id")
           .range(from, from + PAGE - 1),
     ),
     fetchAllPages<DimCell>((from) =>
@@ -112,6 +118,7 @@ export async function GET(
           "ticker, period, period_end, period_kind, axis, axis_key, member, member_key, uni_account, value, unit, decimals, other_dimensions, provenance",
         )
         .eq("ticker", t)
+        .order("cell_id")
         .range(from, from + PAGE - 1),
     ),
   ]);

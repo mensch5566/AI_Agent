@@ -194,9 +194,14 @@ def fetch_facts_logical_keys(client, ticker: str, page: int = 1000) -> set:
     keys: set = set()
     frm = 0
     while True:
+        # .order("cell_id") gives a stable unique total order so .range() page
+        # boundaries are a deterministic contract — without it PostgREST/Postgres
+        # make NO ordering guarantee and adjacent pages could overlap or skip
+        # rows, silently dropping disclosed facts from the guard's key set.
         res = (client.table("sec_financial_facts")
                .select("period,period_kind,version,statement,uni_account")
                .eq("ticker", ticker)
+               .order("cell_id")
                .range(frm, frm + page - 1)
                .execute())
         rows = res.data or []
@@ -769,10 +774,29 @@ def main():
         if analytics_status == "loaded":
             ratio_rows = analytics_payload.get("ratio_metrics") or []
             a_managed = (analytics_payload.get("metadata", {}) or {}).get("managed_rule_ids")
-            # Always clear the full owned scope (union payload + fallback) so a
-            # rule that emitted 0 rows this run can't leave stale Supabase rows.
             a_scope = analytics_delete_scope(a_managed)
             client = client or supabase_client()  # P1.2: may be unset if derive-base was skipped
+
+            # facts-wins at storage boundary (P2.1): never write a derived row
+            # whose logical identity collides with a disclosed facts row.
+            # Broadened past RATIO (Phase B prerequisite) to ALL statements +
+            # paginated, so future FCF (CF) / EBITDA (IS) absolute-value
+            # derivations are covered, and tickers with >1000 IS/BS/CF facts
+            # aren't silently truncated.
+            #
+            # P2.2: do this read-only fetch + filter BEFORE the scope delete.
+            # The fetch is now a heavier multi-page read; if it fails mid-way we
+            # must not have already deleted the analytics rows (which would leave
+            # a half-update: old rows gone, new rows never written). facts_keys
+            # doesn't depend on the delete, so compute kept first, mutate after.
+            kept, dropped = ratio_rows, 0
+            if ratio_rows:
+                facts_keys = fetch_facts_logical_keys(client, ticker)
+                kept = filter_derived_rows_against_facts(ratio_rows, facts_keys)
+                dropped = len(ratio_rows) - len(kept)
+
+            # Always clear the full owned scope (union payload + fallback) so a
+            # rule that emitted 0 rows this run can't leave stale Supabase rows.
             a_del = (client.table("sec_financial_metrics")
                      .delete()
                      .eq("ticker", ticker)
@@ -781,15 +805,6 @@ def main():
             print(f"  cleared derive-analytics scope (rule_ids={a_scope}): "
                   f"sec_financial_metrics ({len(a_del.data)} rows deleted)")
             if ratio_rows:
-                # facts-wins at storage boundary (P2.1): never write a derived
-                # row whose logical identity collides with a disclosed facts row.
-                # Broadened past RATIO (Phase B prerequisite) to ALL statements +
-                # paginated, so future FCF (CF) / EBITDA (IS) absolute-value
-                # derivations are covered, and tickers with >1000 IS/BS/CF facts
-                # aren't silently truncated.
-                facts_keys = fetch_facts_logical_keys(client, ticker)
-                kept = filter_derived_rows_against_facts(ratio_rows, facts_keys)
-                dropped = len(ratio_rows) - len(kept)
                 if dropped:
                     print(f"  facts-wins: dropped {dropped} derived row(s) "
                           f"colliding with disclosed facts")
