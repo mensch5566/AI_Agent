@@ -456,9 +456,10 @@ def load_derived_run(vault: Path, ticker: str) -> tuple[str, dict | None]:
 
 def load_analytics_run(vault: Path, ticker: str) -> tuple[str, dict | None]:
     """Read latest derive-analytics run for `ticker`. Same tri-state contract
-    as load_derived_run. Phase B: rows live under the canonical "analytics_metrics"
-    key (ratios AND absolute-value metrics like FCF); "ratio_metrics" is accepted
-    as a back-compat fallback for one cycle."""
+    as load_derived_run. Rows live under the canonical "analytics_metrics" key
+    (ratios AND absolute-value metrics like FCF). The legacy "ratio_metrics" key
+    is still accepted as a defensive fallback for any pre-existing artifact (the
+    writer no longer emits it)."""
     return _load_skill_run(vault, ticker, "derive-analytics", f"{ticker}_analytics.json",
                            ("analytics_metrics", "ratio_metrics"))
 
