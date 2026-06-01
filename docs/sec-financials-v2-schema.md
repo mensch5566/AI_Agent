@@ -282,7 +282,8 @@ unit 一律 `Pure`。pct-style（margins / ETR）存小數 0~1；multiple-style�
   - numerator terms：`net_cash_from_operating`(+1, CF)、`capital_expenditures`(−1, CF)；denominator：`revenue`(IS)。
   - **直接從 CFO/capex/revenue 算**（不依賴 materialize FCF 再除；代數等價、無兩段式 dependency）。
   - CF 與 IS 同期同為 duration、共享 period_kind/period_end → 一致性 guard 通過；YTD skip。pct-style（存小數，**可為負**），unit `Pure`，顯示 `%`（非 `RATIO_AS_MULTIPLE`）。
-  - GAAP-only（無 NON_GAAP CF facts，引擎自動 skip 該 version）。skip policy：`revenue == 0` → skip。
+  - GAAP-only（無 NON_GAAP CF facts，引擎自動 skip 該 version）。skip policy：`revenue == 0` → skip；缺同期 revenue（如早年 Q4 revenue 無法重建）→ skip（LITE Q4_FY2020/FY2021 有 FCF 但無同期 revenue，正確 skip → 19 FCF rows 但 17 fcf_margin rows）。
+  - ⚠️ 口徑 caveat：這條只等價於**本管道定義的 FCF**（`CFO − capex`）。若未來 parse 出 management-disclosed FCF（口徑可能不同），**不可**直接混進 `fcf_margin_pct`；應另設 direct/source-specific contract。facts-wins 只保護 disclosed `free_cash_flow` 絕對值，不改變這條 standard-formula 衍生。
 - **`book_value_per_share` 暫緩**：需 period-end shares outstanding（instant），現只有 `shares_*_millions`（加權平均 duration）。等 parse 抽 instant shares contract 再做。
 
 ### 4.1 `RATIO_UNI_ACCOUNTS` allowlist
