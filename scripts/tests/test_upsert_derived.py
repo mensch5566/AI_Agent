@@ -15,6 +15,47 @@ def _import_upsert():
     return mod
 
 
+def test_analytics_fallback_includes_fcf_rule_id():
+    """Phase B: the owned-scope delete fallback must include the new absolute-value
+    FCF rule_id, else re-running with a rule swap could orphan FCF rows."""
+    upsert = _import_upsert()
+    assert "FCF_CFO_MINUS_CAPEX" in upsert.DERIVE_ANALYTICS_RULE_IDS_FALLBACK
+
+
+def test_load_analytics_run_reads_analytics_metrics_key(tmp_path):
+    """Phase B: payload's canonical rows key is `analytics_metrics`. The loader
+    must accept it (the old `ratio_metrics` is mirrored one cycle but must not be
+    required)."""
+    upsert = _import_upsert()
+    base = (tmp_path / "Khouse" / "Semiconductors" / "FCFT" / "01_Source"
+            / "SEC Filings" / "Skill_Output" / "derive-analytics" / "2026-06-01-0000")
+    base.mkdir(parents=True)
+    (base / "FCFT_analytics.json").write_text(json.dumps({
+        "metadata": {"ticker": "FCFT"},
+        "analytics_metrics": [{"cell_id": "fcf1", "uni_account": "free_cash_flow",
+                               "statement": "CF"}],
+        # note: NO ratio_metrics key → loader must still load via analytics_metrics
+    }))
+    status, payload = upsert.load_analytics_run(tmp_path, "FCFT")
+    assert status == "loaded"
+    rows = payload.get("analytics_metrics") or payload.get("ratio_metrics") or []
+    assert rows[0]["uni_account"] == "free_cash_flow"
+
+
+def test_load_analytics_run_back_compat_ratio_metrics_key(tmp_path):
+    """An older run that only has `ratio_metrics` must still load (back-compat)."""
+    upsert = _import_upsert()
+    base = (tmp_path / "Khouse" / "Semiconductors" / "OLDR" / "01_Source"
+            / "SEC Filings" / "Skill_Output" / "derive-analytics" / "2026-05-31-0000")
+    base.mkdir(parents=True)
+    (base / "OLDR_analytics.json").write_text(json.dumps({
+        "metadata": {"ticker": "OLDR"},
+        "ratio_metrics": [{"cell_id": "r1", "uni_account": "gross_margin_pct"}],
+    }))
+    status, payload = upsert.load_analytics_run(tmp_path, "OLDR")
+    assert status == "loaded"
+
+
 def test_load_derived_metrics_latest_run(tmp_path):
     upsert = _import_upsert()
     # Build a vault skeleton with two run folders → expect the later one wins.

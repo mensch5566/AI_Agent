@@ -98,6 +98,9 @@ export const CF_ROWS: MetricSpec[] = [
   { key: "operating_cf_long_tail", label: "Other Operating (long-tail)", kind: "long_tail_bucket" },
   { key: "net_cash_from_operating", label: "Cash from Operating", kind: "subtotal" },
   { key: "capital_expenditures", label: "Capital Expenditures", kind: "core" },
+  // Derived (derive-analytics, statement=CF): FCF = CFO − capex. Renders as a
+  // metrics cell (italic muted), so it reads as derived, not a disclosed line.
+  { key: "free_cash_flow", label: "Free Cash Flow", kind: "subtotal" },
   { key: "investing_cf_long_tail", label: "Other Investing (long-tail)", kind: "long_tail_bucket" },
   { key: "net_cash_from_investing", label: "Cash from Investing", kind: "subtotal" },
   { key: "issuance_of_common_stock", label: "Issuance of Common Stock", kind: "core" },

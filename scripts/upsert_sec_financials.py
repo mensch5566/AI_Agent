@@ -89,6 +89,8 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_CASH_RATIO",
     "RATIO_DEBT_TO_EQUITY",
     "RATIO_INTEREST_COVERAGE",
+    # Phase B absolute-value (numerator-only) derivations.
+    "FCF_CFO_MINUS_CAPEX",
 )
 
 
@@ -453,12 +455,18 @@ def load_derived_run(vault: Path, ticker: str) -> tuple[str, dict | None]:
 
 def load_analytics_run(vault: Path, ticker: str) -> tuple[str, dict | None]:
     """Read latest derive-analytics run for `ticker`. Same tri-state contract
-    as load_derived_run. Payload rows live under "ratio_metrics" key."""
-    return _load_skill_run(vault, ticker, "derive-analytics", f"{ticker}_analytics.json", "ratio_metrics")
+    as load_derived_run. Phase B: rows live under the canonical "analytics_metrics"
+    key (ratios AND absolute-value metrics like FCF); "ratio_metrics" is accepted
+    as a back-compat fallback for one cycle."""
+    return _load_skill_run(vault, ticker, "derive-analytics", f"{ticker}_analytics.json",
+                           ("analytics_metrics", "ratio_metrics"))
 
 
 def _load_skill_run(vault: Path, ticker: str, skill_dir: str,
-                    json_filename: str, rows_key: str) -> tuple[str, dict | None]:
+                    json_filename: str, rows_key) -> tuple[str, dict | None]:
+    """`rows_key` may be a single key or a tuple of candidate keys (the run is
+    'loaded' if ANY candidate is present) — lets derive-analytics accept both the
+    canonical `analytics_metrics` and the legacy `ratio_metrics` key."""
     base = (vault / "Khouse" / "Semiconductors" / ticker
             / "01_Source" / "SEC Filings" / "Skill_Output" / skill_dir)
     if not base.exists():
@@ -473,7 +481,8 @@ def _load_skill_run(vault: Path, ticker: str, skill_dir: str,
         payload = json.loads(payload_path.read_text())
     except (OSError, json.JSONDecodeError):
         return ("incomplete_run", None)
-    if payload.get(rows_key) is None:
+    keys = (rows_key,) if isinstance(rows_key, str) else tuple(rows_key)
+    if all(payload.get(k) is None for k in keys):
         return ("incomplete_run", None)
     return ("loaded", payload)
 
@@ -766,13 +775,15 @@ def main():
             # no Supabase round-trip needed for the derive scope.
             print(f"  ⚠ skipping derive-base scope replacement (status={derive_status}); existing metrics preserved")
 
-        # ---- derive-analytics (ratios) snapshot replacement ----
+        # ---- derive-analytics snapshot replacement ----
         # Independent scope from derive-base. Uses its own managed_rule_ids.
         # If analytics output is missing/incomplete we just skip — analytics
-        # is purely additive (ratios). No fail-closed gate yet; it's MVP.
+        # is purely additive. No fail-closed gate yet; it's MVP. Phase B: rows
+        # may now include absolute-value metrics (FCF), not just ratios.
         analytics_status, analytics_payload = load_analytics_run(OBSIDIAN_BASE, ticker)
         if analytics_status == "loaded":
-            ratio_rows = analytics_payload.get("ratio_metrics") or []
+            analytics_rows = (analytics_payload.get("analytics_metrics")
+                              or analytics_payload.get("ratio_metrics") or [])
             a_managed = (analytics_payload.get("metadata", {}) or {}).get("managed_rule_ids")
             a_scope = analytics_delete_scope(a_managed)
             client = client or supabase_client()  # P1.2: may be unset if derive-base was skipped
@@ -789,11 +800,11 @@ def main():
             # must not have already deleted the analytics rows (which would leave
             # a half-update: old rows gone, new rows never written). facts_keys
             # doesn't depend on the delete, so compute kept first, mutate after.
-            kept, dropped = ratio_rows, 0
-            if ratio_rows:
+            kept, dropped = analytics_rows, 0
+            if analytics_rows:
                 facts_keys = fetch_facts_logical_keys(client, ticker)
-                kept = filter_derived_rows_against_facts(ratio_rows, facts_keys)
-                dropped = len(ratio_rows) - len(kept)
+                kept = filter_derived_rows_against_facts(analytics_rows, facts_keys)
+                dropped = len(analytics_rows) - len(kept)
 
             # Always clear the full owned scope (union payload + fallback) so a
             # rule that emitted 0 rows this run can't leave stale Supabase rows.
@@ -804,7 +815,7 @@ def main():
                      .execute())
             print(f"  cleared derive-analytics scope (rule_ids={a_scope}): "
                   f"sec_financial_metrics ({len(a_del.data)} rows deleted)")
-            if ratio_rows:
+            if analytics_rows:
                 if dropped:
                     print(f"  facts-wins: dropped {dropped} derived row(s) "
                           f"colliding with disclosed facts")

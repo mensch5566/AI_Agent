@@ -222,6 +222,17 @@ adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validat
 | `investing_cf_long_tail` | `net_cash_from_investing` |
 | `financing_cf_long_tail` | `net_cash_from_financing` |
 
+### 3.6 CF derived (derive-analytics, NOT facts)
+
+| uni_account | version | formula | unit | 確認 |
+|---|---|---|---|---|
+| `free_cash_flow` | GAAP | `net_cash_from_operating - capital_expenditures` | USD（per-ticker scale，沿用輸入 facts 的 unit） | ✅ |
+
+- **絕對值衍生（非比率）**：derive-analytics 第一個 numerator-only 絕對值 rule（rule_id `FCF_CFO_MINUS_CAPEX`）。statement=`CF`、`status=DERIVED_FROM_DISCLOSED`、寫 `sec_financial_metrics`（**不污染 facts**）。
+- **sign convention**：SEC `capital_expenditures`（`PaymentsToAcquirePropertyPlantAndEquipment`）存**正值** cash outflow → `FCF = CFO − capex`（**禁用** TWSE 的相加 pattern）。負 FCF（capex-heavy 季）正常輸出。
+- **period_kind**：CF-derived → duration（quarterly `quarter_duration ∪ derived_q4`；annual `fy_annual_duration`）。YTD（6M/9M）skip。
+- 只 GAAP（無 NON_GAAP CF facts，引擎自動 skip 該 version）。前端進 `CF_ROWS`（Cash from Operating / capex 之後），渲染為 derived cell（italic muted）。
+
 ---
 
 ## 4. Ratios (RATIO)

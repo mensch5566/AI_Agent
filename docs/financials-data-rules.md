@@ -61,10 +61,14 @@ Design rationale: `tmp/financials-viewer-redesign-plan.md` §20 (v5.1)
 
 ### Derive Discipline (SEC v2)
 
-1. **derive-analytics 不可覆寫 facts 同 key**：upsert 前先 SELECT facts，存在就 skip 不寫 metrics（disclosed 優先於 derived）。
+1. **derive-analytics 不可覆寫 facts 同 key**：upsert 前先 SELECT facts，存在就 skip 不寫 metrics（disclosed 優先於 derived）。此 facts-wins 護欄在 storage boundary 已廣義到**全 statement**（非只 RATIO）+ 分頁，所以 CF/IS 的絕對值衍生（FCF/EBITDA）也受保護。
 2. **公式必須存進 `provenance.formula`**：例如 `FY2025 - Q1_FY2025 - Q2_FY2025 - Q3_FY2025`。
 3. **inputs cell_id 必須回指**：方便 audit trail。
 4. **NOT_DISCLOSED 不寫 DB**：避免「pipeline 未跑」/「derive 失敗」/「公司未揭露」三種狀態混淆。
+5. **derive-analytics 可輸出非 RATIO 絕對值（Phase B）**：除了 `statement='RATIO'` 的比率，也可輸出落在原生 statement 的絕對值衍生（`free_cash_flow` → `statement='CF'`、`unit=USD`）。
+   - **FCF sign**：SEC `capital_expenditures` 存**正值** cash outflow → `FCF = net_cash_from_operating − capital_expenditures`（**禁用** TWSE 相加 pattern）。負 FCF 正常。
+   - period_kind：CF-derived → duration（quarterly `quarter_duration ∪ derived_q4`；annual `fy_annual_duration`）；YTD skip。unit 沿用輸入 facts 的 per-ticker scale（多 unit 不一致則 skip）。
+   - payload key：canonical `analytics_metrics`（舊 `ratio_metrics` 過渡期相容）。
 
 ### Disclosed Ratio Routing (SEC v2)
 
