@@ -100,7 +100,7 @@ def analytics_delete_scope(payload_managed_rule_ids) -> list[str]:
 
     Union of the payload's self-declared managed_rule_ids with the owned
     registry fallback, so legacy/partial payloads can never under-delete and
-    leave stale ratio rows behind.
+    leave stale analytics rows behind.
     """
     return sorted(
         set(payload_managed_rule_ids or ()) | set(DERIVE_ANALYTICS_RULE_IDS_FALLBACK)
@@ -669,7 +669,7 @@ def main():
 
     # Phase 0 P0.3 + P1.1: derive-analytics apply-path gate. Mirrors derive-base:
     # every unsafe analytics state must fail closed BEFORE apply(batch), so fresh
-    # facts are never written alongside stale/missing ratio rows (mixed-vintage).
+    # facts are never written alongside stale/missing analytics rows (mixed-vintage).
     #   - incomplete_run → corrupt run, never safe → exit 2.
     #   - missing_run + DB already has analytics-managed rows → exit 4, unless
     #     --allow-missing-derived (parse-only refresh; existing ratios preserved).
@@ -829,7 +829,7 @@ def main():
         elif analytics_status == "missing_run":
             print(f"  (no derive-analytics output found for {ticker} — ratios not refreshed)")
         elif analytics_status == "incomplete_run":
-            print(f"  ⚠ derive-analytics latest run INCOMPLETE for {ticker}; existing ratio rows preserved")
+            print(f"  ⚠ derive-analytics latest run INCOMPLETE for {ticker}; existing analytics rows preserved")
         print(f"  ✓ Upsert complete.")
     else:
         print(f"\n  ✓ Dry-run complete. Gate passed. Re-run with --apply to write to Supabase.")
