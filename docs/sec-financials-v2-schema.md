@@ -256,6 +256,7 @@ unit 一律 `Pure`，分三種 display category：pct-style（margins / ETR，�
 | `effective_tax_rate` | GAAP | `income_tax_expense / income_before_taxes` | ⬜ |
 | `roe` | GAAP | `net_income_TTM / avg_total_equity` | ⬜ |
 | `roa` | GAAP | `net_income_TTM / avg_total_assets` | ⬜ |
+| `roic` | GAAP | `NOPAT_TTM / avg_invested_capital`；NOPAT = operating_income × (1 − TTM_tax/TTM_pretax)；invested capital = total_equity + 有息債（st_borrow+cur_ltd+ltd，exact-value dedup）− cash − short_term_investments。required：equity/cash/operating_income/tax+pretax；optional-as-0：sti+債三項。**pretax≤0 / tax_rate<0 或 >1 / avg invested capital≤0 → skip**（不 clamp）。只存 roic（NOPAT 放 provenance）。cash-rich 公司 IC 變小、ROIC 可能墊高（caveat）| ✅ |
 | `current_ratio` | GAAP | `total_current_assets / total_current_liabilities` | ✅ |
 | `cash_ratio` | GAAP | `cash_and_cash_equivalents / total_current_liabilities` | ✅ |
 | `quick_ratio` | GAAP | `(cash_and_cash_equivalents + short_term_investments[optional] + accounts_receivable) / total_current_liabilities` | ✅ |

@@ -85,6 +85,7 @@ const BS_PKINDS: PeriodKind[] = ["instant_period_end"];
 const TTM_RATIO_ROWS = new Set<string>([
   "roe",
   "roa",
+  "roic",
   "asset_turnover",
   "dio",
   "dso",

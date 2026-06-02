@@ -123,6 +123,7 @@ export const RATIO_ROWS: MetricSpec[] = [
   { key: "effective_tax_rate", label: "Effective Tax Rate", kind: "derived_ratio" },
   { key: "roe", label: "Return on Equity", kind: "derived_ratio" },
   { key: "roa", label: "Return on Assets", kind: "derived_ratio" },
+  { key: "roic", label: "Return on Invested Capital", kind: "derived_ratio" },
   { key: "current_ratio", label: "Current Ratio", kind: "derived_ratio" },
   { key: "quick_ratio", label: "Quick Ratio", kind: "derived_ratio" },
   { key: "cash_ratio", label: "Cash Ratio", kind: "derived_ratio" },
