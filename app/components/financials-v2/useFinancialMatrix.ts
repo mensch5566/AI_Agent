@@ -147,11 +147,12 @@ export function buildMatrix(
       if (c.period_kind === "instant_period_end") {
         return frequency === "quarterly" ? isQuarterPeriod(c.period) : isFyPeriod(c.period);
       }
-      // EL2 TTM-derived ratios (roe/roa) are quarterly-only — period is the TTM
+      // EL2 TTM-derived ratios (roe/roa/roic + efficiency dio/dso/dpo/ccc/
+      // asset_turnover — see TTM_RATIO_ROWS) are quarterly-only; period is the TTM
       // end quarter (Qx_FYyyyy). The annual EL2 variant is fy_annual_duration
       // (handled by ANNUAL_PKINDS_IS_CF below), so ttm_duration never shows in
-      // annual mode. Restrict to the explicit ROE/ROA allowlist so an unexpected
-      // ttm_duration row for another RATIO key can't silently render.
+      // annual mode. Restrict to the explicit TTM_RATIO_ROWS allowlist so an
+      // unexpected ttm_duration row for another RATIO key can't silently render.
       if (c.period_kind === "ttm_duration") {
         return (
           frequency === "quarterly" &&
