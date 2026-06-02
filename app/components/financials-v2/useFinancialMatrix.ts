@@ -19,7 +19,7 @@ import { LONG_TAIL_ROLLUP_HINTS, ROWS_BY_STATEMENT, comparePeriods } from "./con
  *   IS/CF + annual:          fy_annual_duration
  *   BS + quarterly:          instant_period_end (period = Qx_FYyyyy)
  *   BS + annual:             instant_period_end (period = FYyyyy)
- *   RATIO + quarterly:       quarter_duration ∪ derived_q4 ∪ instant_period_end (Qx_FYyyyy)
+ *   RATIO + quarterly:       quarter_duration ∪ derived_q4 ∪ instant_period_end (Qx_FYyyyy) ∪ ttm_duration (Qx_FYyyyy, EL2 roe/roa)
  *   RATIO + annual:          fy_annual_duration ∪ instant_period_end (FYyyyy)
  *
  * RATIO mixes duration-based ratios (margins, ETR computed off IS) and
@@ -130,6 +130,13 @@ export function buildMatrix(
       // periods into the RATIO grid.
       if (c.period_kind === "instant_period_end") {
         return frequency === "quarterly" ? isQuarterPeriod(c.period) : isFyPeriod(c.period);
+      }
+      // EL2 TTM-derived ratios (roe/roa) are quarterly-only — period is the TTM
+      // end quarter (Qx_FYyyyy). The annual EL2 variant is fy_annual_duration
+      // (handled by ANNUAL_PKINDS_IS_CF below), so ttm_duration never shows in
+      // annual mode.
+      if (c.period_kind === "ttm_duration") {
+        return frequency === "quarterly" && isQuarterPeriod(c.period);
       }
       const allowed = frequency === "quarterly" ? QUARTERLY_PKINDS_IS_CF : ANNUAL_PKINDS_IS_CF;
       return allowed.includes(c.period_kind);

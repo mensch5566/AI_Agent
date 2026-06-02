@@ -620,28 +620,40 @@ def test_analytics_fallback_matches_skill_registry():
     rule added to the skill but not the upsert fallback (or a mirror left behind)
     would let that rule's stale rows survive. Checking all mirrors catches drift
     even when the dev prototype happens to match but a runtime mirror does not."""
-    import importlib.util
+    import importlib
     upsert = _import_upsert()
     fallback = set(upsert.DERIVE_ANALYTICS_RULE_IDS_FALLBACK)
-    mirrors = [
-        Path.home() / "AI_Agent" / "tmp" / "derive-analytics" / "rules_ratios.py",
-        Path.home() / "CC_Switch_Config" / "skills" / "derive-analytics" / "scripts" / "rules_ratios.py",
-        Path.home() / ".claude" / "skills" / "derive-analytics" / "scripts" / "rules_ratios.py",
-        Path.home() / ".codex" / "skills" / "derive-analytics" / "scripts" / "rules_ratios.py",
-        Path.home() / ".cc-switch" / "skills" / "derive-analytics" / "scripts" / "rules_ratios.py",
+    # The full skill registry = EL1 (rules_ratios.ALL_RULE_IDS) ∪ EL2
+    # (rules_crossperiod.ALL_CROSSPERIOD_RULE_IDS). Prototype is FLAT; deployed
+    # mirrors keep the modules under scripts/.
+    mirror_dirs = [
+        Path.home() / "AI_Agent" / "tmp" / "derive-analytics",
+        Path.home() / "CC_Switch_Config" / "skills" / "derive-analytics" / "scripts",
+        Path.home() / ".claude" / "skills" / "derive-analytics" / "scripts",
+        Path.home() / ".codex" / "skills" / "derive-analytics" / "scripts",
+        Path.home() / ".cc-switch" / "skills" / "derive-analytics" / "scripts",
     ]
-    found = [p for p in mirrors if p.is_file()]
+    found = [d for d in mirror_dirs
+             if (d / "rules_ratios.py").is_file() and (d / "rules_crossperiod.py").is_file()]
     if not found:
-        pytest.skip("derive-analytics skill rules_ratios.py not found in any known mirror")
-    for i, src in enumerate(found):
-        modname = f"ra_rules_{i}"
-        spec = importlib.util.spec_from_file_location(modname, str(src))
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules[modname] = mod  # required for dataclass KW_ONLY under `from __future__ import annotations`
-        spec.loader.exec_module(mod)
-        assert set(mod.ALL_RULE_IDS) == fallback, (
-            f"registry drift in mirror {src}: ALL_RULE_IDS={set(mod.ALL_RULE_IDS)} "
-            f"!= upsert fallback={fallback}"
+        pytest.skip("derive-analytics skill modules not found in any known mirror")
+    _mods = ("rules_ratios", "rules_crossperiod", "period_topology")
+    for d in found:
+        for m in _mods:
+            sys.modules.pop(m, None)
+        sys.path.insert(0, str(d))
+        try:
+            import rules_ratios  # noqa: F401
+            import rules_crossperiod  # noqa: F401
+            importlib.reload(rules_ratios)
+            importlib.reload(rules_crossperiod)
+            registry = set(rules_ratios.ALL_RULE_IDS) | set(rules_crossperiod.ALL_CROSSPERIOD_RULE_IDS)
+        finally:
+            sys.path.remove(str(d))
+            for m in _mods:
+                sys.modules.pop(m, None)
+        assert registry == fallback, (
+            f"registry drift in mirror {d}: skill={registry} != upsert fallback={fallback}"
         )
 
 
