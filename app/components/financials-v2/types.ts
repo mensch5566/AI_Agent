@@ -8,7 +8,8 @@ export type PeriodKind =
   | "fy_annual_duration"
   | "ytd_duration"
   | "instant_period_end"
-  | "derived_q4";
+  | "derived_q4"
+  | "ttm_duration"; // EL2: quarterly trailing-12-month ratios (ROE/ROA), metrics-only
 export type CellStatus =
   | "SOURCE_OF_TRUTH"
   | "DERIVED_FROM_DISCLOSED"

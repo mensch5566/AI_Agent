@@ -108,13 +108,14 @@ adapter 必須將 raw unit 映射到下列五種之一（其他 → validation e
 | quarterly IS / CF | IS / CF | `quarter_duration` ∪ `derived_q4` |
 | quarterly RATIO — duration（margins / ETR）| RATIO | `quarter_duration` ∪ `derived_q4` |
 | quarterly RATIO — BS-derived（current_ratio / cash_ratio）| RATIO | `instant_period_end`（period = Qx_FYyyyy） |
+| quarterly RATIO — TTM-derived（EL2 roe / roa）| RATIO | `ttm_duration`（period = Qx_FYyyyy = TTM 結束季） |
 | quarterly BS | BS | `instant_period_end`（period = Qx_FYyyyy） |
 | annual IS / CF | IS / CF | `fy_annual_duration` |
-| annual RATIO — duration | RATIO | `fy_annual_duration` |
+| annual RATIO — duration（含 EL2 roe / roa annual）| RATIO | `fy_annual_duration` |
 | annual RATIO — BS-derived | RATIO | `instant_period_end`，`Q4_FYyyyy` remap 成 `FYyyyy` |
 | annual BS | BS | `instant_period_end`，`Q4_FYyyyy` remap 成 `FYyyyy` |
 
-> RATIO 有兩種 period 語意：margin / ETR 是 IS-derived（duration，跟 IS/CF 同）；current_ratio / cash_ratio / 未來 debt_to_equity 是 BS-derived（instant，跟 BS 同，annual 時 `Q4_FYyyyy` instant remap 成 `FYyyyy`）。前端 `useFinancialMatrix` 已照此實作。
+> RATIO 有三種 period 語意：margin / ETR 是 IS-derived（duration，跟 IS/CF 同）；current_ratio / cash_ratio / debt_to_equity 是 BS-derived（instant，跟 BS 同，annual 時 `Q4_FYyyyy` instant remap 成 `FYyyyy`）；**EL2 roe / roa 是 TTM-derived**（quarterly 用新 `ttm_duration`，annual 用 `fy_annual_duration`）。前端 `useFinancialMatrix` 依此分流。
 
 Status-aware render：
 

@@ -8,6 +8,8 @@ Canonical period_kind enum:
     ytd_duration           — 10-Q YTD cumulative (6M / 9M)
     instant_period_end     — any period-end BS instant
     derived_q4             — metrics-only: FY - Q1 - Q2 - Q3 reconstruction
+    ttm_duration           — metrics-only (EL2): quarterly trailing-12-month
+                             ratios (ROE/ROA = TTM numerator / average balance)
 """
 from __future__ import annotations
 
@@ -19,6 +21,7 @@ VALID_KINDS = {
     "ytd_duration",
     "instant_period_end",
     "derived_q4",
+    "ttm_duration",
 }
 
 # Supplement JSON (parse-SEC-supplement v3) -> canonical

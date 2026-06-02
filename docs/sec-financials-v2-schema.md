@@ -48,6 +48,7 @@
 | `ytd_duration` | YTD 累積 duration（10-Q 6M / 9M） | 9M_FY2025 cogs |
 | `instant_period_end` | 期末 instant（BS 一律用此） | Q4_FY2024 total_assets / FY2024 total_assets |
 | `derived_q4` | metrics-only：FY − Q1 − Q2 − Q3 還原值 | Q4_FY2024 revenue |
+| `ttm_duration` | metrics-only（EL2）：quarterly 滾動 12 個月比率（ROE/ROA = TTM分子 ÷ 平均餘額），period 標 TTM 結束季 | Q3_FY2025 roe |
 
 ### 0.4 統一 unit 值
 
