@@ -122,7 +122,7 @@ adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validat
 | 順 | uni_account | XBRL tag | 確認 |
 |---|---|---|---|
 | 1 | `cash_and_cash_equivalents` | `us-gaap:CashAndCashEquivalentsAtCarryingValue` | ✅ |
-| 2 | `accounts_receivable` | `us-gaap:AccountsReceivableNetCurrent` | ✅ |
+| 2 | `accounts_receivable` | `us-gaap:AccountsReceivableNetCurrent`（標準）；**ticker override**：LITE = `us-gaap:ContractWithCustomerAssetNet`（ASC 606，見註）| ✅ |
 | 3 | `inventories` | `us-gaap:InventoryNet` | ✅ |
 | 4 | `other_current_assets` | `us-gaap:PrepaidExpenseAndOtherAssetsCurrent` | ✅ |
 | 5 | `total_current_assets` | `us-gaap:AssetsCurrent` | ✅ |
@@ -134,6 +134,8 @@ adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validat
 | 11 | `deferred_tax_assets` | `us-gaap:DeferredIncomeTaxAssetsNet` | ✅ |
 | 12 | `other_noncurrent_assets` | `us-gaap:OtherAssetsNoncurrent` | ✅ |
 | 13 | `total_assets` | `us-gaap:Assets` | ✅ |
+
+> **註 — `accounts_receivable` 的 LITE ASC 606 ticker override**：LITE 採用 ASC 606（FY2018 起）把 BS「Accounts receivable, net」改用 `us-gaap:ContractWithCustomerAssetNet`（標準 `AccountsReceivableNetCurrent` 在 companyfacts 只到 2018-06-30）。parse-10QK-gaap 用 **`TICKER_BS_TAG_OVERRIDES`（ticker-specific，非全域 fallback）** 處理：標準 tag 仍優先，LITE 額外 append contract-asset tag。所以 LITE production 的 `source_account=ContractWithCustomerAssetNet` 是**合約內**來源，非 schema 外。依據：filing lab.xml label = 「Accounts receivable, net」+ BS 流動資產 roll-up 對帳 diff=0。其他 issuer 若也這樣報需顯式加 override（見 `parse-10QK-gaap/SKILL.md` 2026-06-02 CHANGELOG）。
 
 ### 2.2 核心 universal keys — 負債
 

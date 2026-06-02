@@ -267,7 +267,7 @@ v2 完整 uni_account 清單見 [`sec-financials-v2-schema.md`](./sec-financials
 | ----- | ------------------------- | ------------------------ | ----------------------------------------------- | --- | --- |
 | BS    | `cash_and_equivalents`    | Cash and Equivalents     | `us-gaap:CashAndCashEquivalentsAtCarryingValue` | ⬜   |     |
 | BS    | `short_term_investments`  | Short-term Investments   | `us-gaap:ShortTermInvestments`                  | ⬜   |     |
-| BS    | `accounts_receivable`     | Accounts Receivable, net | `us-gaap:AccountsReceivableNetCurrent`          | ⬜   |     |
+| BS    | `accounts_receivable`     | Accounts Receivable, net | `us-gaap:AccountsReceivableNetCurrent`（標準）；LITE override = `us-gaap:ContractWithCustomerAssetNet`（ASC 606，ticker-specific，見 sec-financials-v2-schema §2.1 註）| ⬜   |     |
 | BS    | `inventories`             | Inventories              | `us-gaap:InventoryNet`                          | ⬜   |     |
 | BS    | `other_current_assets`    | Other Current Assets     | `us-gaap:OtherAssetsCurrent`                    | ⬜   |     |
 | BS    | `total_current_assets`    | Total Current Assets     | `us-gaap:AssetsCurrent`                         | ⬜   |     |
