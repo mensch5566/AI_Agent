@@ -36,6 +36,7 @@ export const IS_ROWS: MetricSpec[] = [
   { key: "income_before_taxes", label: "Pretax Income", kind: "subtotal" },
   { key: "income_tax_expense", label: "Income Tax Expense", kind: "core" },
   { key: "net_income", label: "Net Income", kind: "subtotal" },
+  { key: "ebitda", label: "EBITDA", kind: "subtotal" },
   { key: "below_line_long_tail", label: "Below-Line Items (long-tail)", kind: "long_tail_bucket" },
   { key: "net_income_available_to_common", label: "Net Income Available to Common", kind: "subtotal" },
   { key: "eps_basic", label: "EPS Basic", kind: "core" },

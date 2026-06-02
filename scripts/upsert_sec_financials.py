@@ -93,6 +93,9 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_FCF_MARGIN_PCT",
     # Phase B absolute-value (numerator-only) derivations.
     "FCF_CFO_MINUS_CAPEX",
+    # EBITDA (SEC C&DI 103.01 bottom-up) — absolute value + margin.
+    "EBITDA_NI_INT_TAX_DA",
+    "RATIO_EBITDA_MARGIN_PCT",
     # Phase D EL2 cross-period (TTM) ratios.
     "RATIO_ROE",
     "RATIO_ROA",
