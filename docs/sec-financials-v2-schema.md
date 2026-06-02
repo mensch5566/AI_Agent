@@ -252,7 +252,7 @@ unit 一律 `Pure`，分三種 display category：pct-style（margins / ETR，�
 | `operating_margin_pct` | GAAP / NON_GAAP | `operating_income / revenue` | ⬜ |
 | `net_margin_pct` | GAAP / NON_GAAP | `net_income / revenue` | ⬜ |
 | `fcf_margin_pct` | GAAP | `(net_cash_from_operating - capital_expenditures) / revenue` | ✅ |
-| `ebitda_margin_pct` | GAAP | `(net_income + interest_expense + income_tax_expense + D&A) / revenue`（= EBITDA/revenue，SEC C&DI 103.01 bottom-up；D&A 取 CF；四項全 required，缺 D&A → skip）| ✅ |
+| `ebitda_margin_pct` | GAAP | `((net_income + net_income_nci[optional]) + interest_expense + income_tax_expense + D&A) / revenue`（= EBITDA/revenue，SEC C&DI 103.01 bottom-up，base 用合併淨利 net_income+NCI；D&A 取 CF；除 NCI 外 required，缺 D&A → skip）。**derived non-GAAP**：`provenance.basis='GAAP_INPUTS_DERIVED_NON_GAAP_MEASURE'` | ✅ |
 | `adjusted_ebitda_margin_pct` | NON_GAAP | `adjusted_ebitda / revenue` | ⬜ |
 | `effective_tax_rate` | GAAP | `income_tax_expense / income_before_taxes` | ⬜ |
 | `roe` | GAAP | `net_income_TTM / avg_total_equity` | ⬜ |
