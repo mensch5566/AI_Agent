@@ -230,7 +230,7 @@ adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validat
 | uni_account | version | formula | unit | 確認 |
 |---|---|---|---|---|
 | `free_cash_flow` | GAAP | `net_cash_from_operating - capital_expenditures` | USD（per-ticker scale，沿用輸入 facts 的 unit） | ✅ |
-| `ebitda` | GAAP | `net_income + interest_expense + income_tax_expense + depreciation_and_amortization`（**SEC C&DI 103.01 bottom-up，必須從 GAAP net income 起算，非 operating income，否則須叫 Adjusted EBITDA**；D&A 取 CF 非現金加回）| USD（per-ticker scale，FROM_INPUTS）| ✅ |
+| `ebitda` | GAAP | `(net_income + net_income_nci[optional]) + interest_expense + income_tax_expense + depreciation_and_amortization`（**SEC C&DI 103.01 bottom-up，必須從 GAAP net income，非 operating income**；base 用**合併淨利** net_income+NCI（無 NCI → +0），與合併加回項一致；D&A 取 CF 非現金加回）。**derived non-GAAP measure**：`version='GAAP'` 但 `provenance.basis='GAAP_INPUTS_DERIVED_NON_GAAP_MEASURE'`，非 GAAP filing line item | USD（per-ticker scale，FROM_INPUTS）| ✅ |
 
 - **絕對值衍生（非比率）**：derive-analytics 第一個 numerator-only 絕對值 rule（rule_id `FCF_CFO_MINUS_CAPEX`）。statement=`CF`、`status=DERIVED_FROM_DISCLOSED`、寫 `sec_financial_metrics`（**不污染 facts**）。
 - **sign convention**：SEC `capital_expenditures`（`PaymentsToAcquirePropertyPlantAndEquipment`）存**正值** cash outflow → `FCF = CFO − capex`（**禁用** TWSE 的相加 pattern）。負 FCF（capex-heavy 季）正常輸出。
