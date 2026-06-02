@@ -128,6 +128,11 @@ export const RATIO_ROWS: MetricSpec[] = [
   { key: "cash_ratio", label: "Cash Ratio", kind: "derived_ratio" },
   { key: "debt_to_equity", label: "Debt / Equity", kind: "derived_ratio" },
   { key: "interest_coverage", label: "Interest Coverage", kind: "derived_ratio" },
+  { key: "asset_turnover", label: "Asset Turnover", kind: "derived_ratio" },
+  { key: "dso", label: "Days Sales Outstanding (DSO)", kind: "derived_ratio" },
+  { key: "dio", label: "Days Inventory Outstanding (DIO)", kind: "derived_ratio" },
+  { key: "dpo", label: "Days Payable Outstanding (DPO)", kind: "derived_ratio" },
+  { key: "ccc", label: "Cash Conversion Cycle (CCC)", kind: "derived_ratio" },
 ];
 
 export const ROWS_BY_STATEMENT: Record<Statement, MetricSpec[]> = {
@@ -179,7 +184,7 @@ export const CHART_COLORS = [
 // Mixing $ and % on one axis is misleading; mixing $ and shares is also
 // misleading. Per-share lives in its own group too because absolute EPS
 // doesn't compare against revenue dollars.
-export type UnitGroup = "monetary" | "pct" | "multiple" | "per_share" | "shares" | "other";
+export type UnitGroup = "monetary" | "pct" | "multiple" | "days" | "per_share" | "shares" | "other";
 
 export function unitGroupOf(unit: string | null | undefined): UnitGroup {
   if (!unit) return "other";
@@ -199,6 +204,9 @@ export function unitGroupOf(unit: string | null | undefined): UnitGroup {
 export function chartGroupOf(unit: string | null | undefined, uniAccount?: string | null): UnitGroup {
   const base = unitGroupOf(unit);
   if (base === "pct" && uniAccount && RATIO_AS_MULTIPLE.has(uniAccount)) return "multiple";
+  // days-style ratios (DSO/DIO/DPO/CCC) get their own axis — never mixed onto a
+  // margin-% or multiple axis (a 45-day DSO is not 4500% or 45x).
+  if (base === "pct" && uniAccount && RATIO_AS_DAYS.has(uniAccount)) return "days";
   return base;
 }
 
@@ -232,6 +240,17 @@ export const RATIO_AS_MULTIPLE = new Set<string>([
   "quick_ratio",
   "debt_to_equity",
   "interest_coverage",
+  "asset_turnover",
+]);
+
+// Pure-unit ratios whose stored value is a number of DAYS (DSO/DIO/DPO/CCC).
+// The value is the day count itself (e.g. 49.3), not a decimal fraction — render
+// as "49.3 days", never ×100 as a percentage. CCC can be negative.
+export const RATIO_AS_DAYS = new Set<string>([
+  "dso",
+  "dio",
+  "dpo",
+  "ccc",
 ]);
 
 export function fmtValue(
@@ -246,6 +265,9 @@ export function fmtValue(
   if (unit === "Pure") {
     if (uniAccount && RATIO_AS_MULTIPLE.has(uniAccount)) {
       return `${value.toFixed(2)}x`;
+    }
+    if (uniAccount && RATIO_AS_DAYS.has(uniAccount)) {
+      return `${value.toFixed(1)} days`;
     }
     return `${(value * 100).toFixed(1)}%`;
   }

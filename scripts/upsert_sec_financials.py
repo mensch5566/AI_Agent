@@ -96,6 +96,12 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     # Phase D EL2 cross-period (TTM) ratios.
     "RATIO_ROE",
     "RATIO_ROA",
+    # EL2 expansion Phase 1 — efficiency (asset turnover + DSO/DIO/DPO/CCC).
+    "RATIO_ASSET_TURNOVER",
+    "RATIO_DIO",
+    "RATIO_DSO",
+    "RATIO_DPO",
+    "RATIO_CCC",
 )
 
 

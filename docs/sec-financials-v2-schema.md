@@ -261,6 +261,11 @@ unit 一律 `Pure`。pct-style（margins / ETR）存小數 0~1；multiple-style�
 | `quick_ratio` | GAAP | `(cash_and_cash_equivalents + short_term_investments[optional] + accounts_receivable) / total_current_liabilities` | ✅ |
 | `debt_to_equity` | GAAP | `(short_term_borrowings + current_portion_of_long_term_debt + long_term_debt) / total_equity` | ✅ |
 | `interest_coverage` | GAAP | `(income_before_taxes + interest_expense) / interest_expense` | ✅ |
+| `asset_turnover` | GAAP | `revenue_TTM / avg_total_assets`（EL2，x-multiple，display Pure）| ✅ |
+| `dso` | GAAP | `365 × avg_accounts_receivable / revenue_TTM`（EL2，days，display Pure）| ✅ |
+| `dio` | GAAP | `365 × avg_inventories / cost_of_goods_sold_TTM`（EL2，days）| ✅ |
+| `dpo` | GAAP | `365 × avg_accounts_payable / cost_of_goods_sold_TTM`（EL2，days，COGS 為採購代理）| ✅ |
+| `ccc` | GAAP | `dio + dso − dpo`（EL2，days，可為負；缺任一 component → skip）| ✅ |
 
 #### debt_to_equity / interest_coverage 口徑（EL1 composite，2026-06-01）
 

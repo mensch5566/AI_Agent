@@ -77,11 +77,20 @@ const QUARTERLY_PKINDS_IS_CF: PeriodKind[] = ["quarter_duration", "derived_q4"];
 const ANNUAL_PKINDS_IS_CF: PeriodKind[] = ["fy_annual_duration"];
 const BS_PKINDS: PeriodKind[] = ["instant_period_end"];
 
-// EL2 TTM-derived ratios are quarterly-only and currently limited to ROE/ROA.
-// The `ttm_duration` period_kind must only be honored for these uni_accounts so a
-// stray `ttm_duration` row for any other RATIO key can never leak into the grid
-// silently (keeps UI aligned with the EL2 spec — Codex P3, 2026-06-02).
-const TTM_RATIO_ROWS = new Set<string>(["roe", "roa"]);
+// EL2 TTM-derived ratios are quarterly-only. The `ttm_duration` period_kind must
+// only be honored for these uni_accounts so a stray `ttm_duration` row for any
+// other RATIO key can never leak into the grid silently (keeps UI aligned with the
+// EL2 spec — Codex P3, 2026-06-02). Phase 1 efficiency (asset_turnover/dio/dso/dpo/
+// ccc) are TTM ratios too; YoY (quarter_duration) is deliberately NOT here.
+const TTM_RATIO_ROWS = new Set<string>([
+  "roe",
+  "roa",
+  "asset_turnover",
+  "dio",
+  "dso",
+  "dpo",
+  "ccc",
+]);
 
 function isFyPeriod(p: string): boolean {
   return /^FY\d{4}$/.test(p);
