@@ -54,6 +54,9 @@ function formatValue(value: number | null, unit: string, group: UnitGroup): stri
   const abs = Math.abs(value);
   if (group === "pct") return `${value < 0 ? "-" : ""}${(abs * 100).toFixed(1)}%`;
   if (group === "multiple") return `${sign}${abs.toFixed(2)}x`;
+  // days-style efficiency ratios (DSO/DIO/DPO/CCC) — value is the day count
+  // itself (CCC can be negative), matching the table formatter.
+  if (group === "days") return `${sign}${abs.toFixed(1)} days`;
   if (group === "per_share") return `${sign}$${abs.toFixed(2)}`;
   if (group === "shares") {
     if (unit === "thousands_shares") return `${sign}${(abs / 1000).toFixed(1)}M`;

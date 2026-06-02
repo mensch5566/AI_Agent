@@ -60,7 +60,7 @@
 | `USD_per_share` | `USD_per_share` / `USD/share` / 在 EPS context 下的 `USD` |
 | `millions_shares` | `millions_shares` |
 | `thousands_shares` | `thousands_shares` |
-| `Pure` | `Pure` / `percent` / `Percent`。pct-style（margins / ETR）存小數 0~1；multiple-style（current/cash/quick ratio、debt_to_equity、interest_coverage）是倍數、**可超過 1 或為負**，前端依 `RATIO_AS_MULTIPLE` 顯示 `x` |
+| `Pure` | `Pure` / `percent` / `Percent`。**三種 display category**：pct-style（margins / ETR，存小數 0~1）；multiple-style（current/cash/quick ratio、debt_to_equity、interest_coverage、`asset_turnover`，倍數、**可超過 1 或為負**，`RATIO_AS_MULTIPLE` 顯示 `x`）；days-style（`dso`/`dio`/`dpo`/`ccc`，存天數本身、CCC 可負，`RATIO_AS_DAYS` 顯示 `days`、chart 獨立軸）。days/x 都是 display category，DB `unit` 仍 `Pure` |
 
 adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validation error。
 
@@ -243,7 +243,7 @@ adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validat
 direct disclosed ratios → `sec_financial_facts` (SOURCE_OF_TRUTH, version=GAAP|NON_GAAP)
 derived ratios → `sec_financial_metrics` (DERIVED_FROM_DISCLOSED)
 
-unit 一律 `Pure`。pct-style（margins / ETR）存小數 0~1；multiple-style（current/cash/quick ratio、debt_to_equity、interest_coverage）是倍數，**可 >1 或為負**（如虧損季 interest_coverage）。前端依 `RATIO_AS_MULTIPLE` 決定 `%` vs `x` 顯示與 chart 分軸。
+unit 一律 `Pure`，分三種 display category：pct-style（margins / ETR，存小數 0~1）；multiple-style（current/cash/quick ratio、debt_to_equity、interest_coverage、`asset_turnover`，倍數、**可 >1 或為負**，`RATIO_AS_MULTIPLE` 顯示 `x`）；days-style（`dso`/`dio`/`dpo`/`ccc`，存天數本身、CCC 可負，`RATIO_AS_DAYS` 顯示 `days`）。前端 `fmtValue` / `chartGroupOf` 依此分流顯示與 chart 分軸。**`dpo` 是 COGS-proxy DPO**（真 purchases = COGS + Δinventory，會引入 derived-on-derived，不適合 core key）。`ccc` 是 derived-on-derived（= dio+dso−dpo），provenance.inputs 用三個 component 的 metrics cell_id 追溯。
 
 | uni_account | version | 公式（derived 時） | 確認 |
 |---|---|---|---|

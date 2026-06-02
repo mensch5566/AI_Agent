@@ -80,8 +80,9 @@ Safety net：`unit ∈ PCT_UNITS` 且 `uni_account.endswith('_pct')` 或 `'margi
 
 - **僅適用 pct-style ratio（margins / ETR）**：DB 存小數 0~1，例如 39.2% 存 `0.392`。
 - adapter 對 pct-style `unit='Pure'` row 跑 `normalize_pct_value()`：`abs(value) > 1` 時 `value/100`。
-- **multiple-style ratio（current/cash/quick ratio、debt_to_equity、interest_coverage，在 `RATIO_AS_MULTIPLE`）原樣存**（current_ratio 4.49 存 `4.49`，不可被 normalize 成 0.0449），可 >1 或為負；UI 顯示 `x`。⚠️ 目前無「揭露的倍數 ratio fact」，故 `normalize_pct_value` 對倍數的潛在 /100 尚無實害；若未來新增此類 disclosed fact，adapter 要排除 `RATIO_AS_MULTIPLE` keys。
-- pct-style UI 顯示 `fmtPct(decimal) → "${(decimal*100).toFixed(1)}%"`。
+- **multiple-style ratio（current/cash/quick ratio、debt_to_equity、interest_coverage、`asset_turnover`，在 `RATIO_AS_MULTIPLE`）原樣存**（current_ratio 4.49 存 `4.49`，不可被 normalize 成 0.0449），可 >1 或為負；UI 顯示 `x`。⚠️ 目前無「揭露的倍數 ratio fact」，故 `normalize_pct_value` 對倍數的潛在 /100 尚無實害；若未來新增此類 disclosed fact，adapter 要排除 `RATIO_AS_MULTIPLE` keys。
+- **days-style ratio（`dso` / `dio` / `dpo` / `ccc`，在 `RATIO_AS_DAYS`）原樣存**（值即天數本身，例 DSO 49.3 存 `49.3`，**不** ×100），CCC 可為負；UI 顯示「49.3 days」、chart 走獨立 `days` 軸（`chartGroupOf`）。`unit` 仍 `Pure`（days 是第三種 display category，非 storage unit）。⚠️ `dpo` 用 COGS 當 purchases 代理（真 purchases = COGS + Δinventory，會引入 derived-on-derived + 更多異常值，不適合 Phase 1 core key）。
+- pct-style UI 顯示 `fmtPct(decimal) → "${(decimal*100).toFixed(1)}%"`。`Pure` 共三種 display：pct-style / multiple-style（`x`）/ days-style（`days`）。
 
 ### Unit Canonicalization (SEC v2)
 
@@ -108,14 +109,14 @@ adapter 必須將 raw unit 映射到下列五種之一（其他 → validation e
 | quarterly IS / CF | IS / CF | `quarter_duration` ∪ `derived_q4` |
 | quarterly RATIO — duration（margins / ETR）| RATIO | `quarter_duration` ∪ `derived_q4` |
 | quarterly RATIO — BS-derived（current_ratio / cash_ratio）| RATIO | `instant_period_end`（period = Qx_FYyyyy） |
-| quarterly RATIO — TTM-derived（EL2 roe / roa）| RATIO | `ttm_duration`（period = Qx_FYyyyy = TTM 結束季） |
+| quarterly RATIO — TTM-derived（EL2 roe / roa / asset_turnover / dio / dso / dpo / ccc）| RATIO | `ttm_duration`（period = Qx_FYyyyy = TTM 結束季） |
 | quarterly BS | BS | `instant_period_end`（period = Qx_FYyyyy） |
 | annual IS / CF | IS / CF | `fy_annual_duration` |
-| annual RATIO — duration（含 EL2 roe / roa annual）| RATIO | `fy_annual_duration` |
+| annual RATIO — duration（含 EL2 roe / roa / asset_turnover / dio / dso / dpo / ccc annual）| RATIO | `fy_annual_duration` |
 | annual RATIO — BS-derived | RATIO | `instant_period_end`，`Q4_FYyyyy` remap 成 `FYyyyy` |
 | annual BS | BS | `instant_period_end`，`Q4_FYyyyy` remap 成 `FYyyyy` |
 
-> RATIO 有三種 period 語意：margin / ETR 是 IS-derived（duration，跟 IS/CF 同）；current_ratio / cash_ratio / debt_to_equity 是 BS-derived（instant，跟 BS 同，annual 時 `Q4_FYyyyy` instant remap 成 `FYyyyy`）；**EL2 roe / roa 是 TTM-derived**（quarterly 用新 `ttm_duration`，annual 用 `fy_annual_duration`）。前端 `useFinancialMatrix` 依此分流。
+> RATIO 有三種 period 語意：margin / ETR 是 IS-derived（duration，跟 IS/CF 同）；current_ratio / cash_ratio / debt_to_equity 是 BS-derived（instant，跟 BS 同，annual 時 `Q4_FYyyyy` instant remap 成 `FYyyyy`）；**EL2 TTM-derived（`roe` / `roa` / `asset_turnover` / `dio` / `dso` / `dpo` / `ccc`）**（quarterly 用 `ttm_duration` + `TTM_RATIO_ROWS` allowlist，annual 用 `fy_annual_duration`）。前端 `useFinancialMatrix` 依此分流。
 
 Status-aware render：
 
