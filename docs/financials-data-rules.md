@@ -82,6 +82,7 @@ Safety net：`unit ∈ PCT_UNITS` 且 `uni_account.endswith('_pct')` 或 `'margi
 - adapter 對 pct-style `unit='Pure'` row 跑 `normalize_pct_value()`：`abs(value) > 1` 時 `value/100`。
 - **multiple-style ratio（current/cash/quick ratio、debt_to_equity、interest_coverage、`asset_turnover`，在 `RATIO_AS_MULTIPLE`）原樣存**（current_ratio 4.49 存 `4.49`，不可被 normalize 成 0.0449），可 >1 或為負；UI 顯示 `x`。⚠️ 目前無「揭露的倍數 ratio fact」，故 `normalize_pct_value` 對倍數的潛在 /100 尚無實害；若未來新增此類 disclosed fact，adapter 要排除 `RATIO_AS_MULTIPLE` keys。
 - **days-style ratio（`dso` / `dio` / `dpo` / `ccc`，在 `RATIO_AS_DAYS`）原樣存**（值即天數本身，例 DSO 49.3 存 `49.3`，**不** ×100），CCC 可為負；UI 顯示「49.3 days」、chart 走獨立 `days` 軸（`chartGroupOf`）。`unit` 仍 `Pure`（days 是第三種 display category，非 storage unit）。⚠️ `dpo` 用 COGS 當 purchases 代理（真 purchases = COGS + Δinventory，會引入 derived-on-derived + 更多異常值，不適合 Phase 1 core key）。
+- **YoY ratio（`revenue_yoy` / `net_income_yoy` / `eps_diluted_yoy`）是 duration RATIO、pct-style**（存小數，例 21.0% 存 `0.21`，UI ×100）。口徑：`(current − year_ago) / year_ago`，**`prior ≤ 0` 不產 row**（從非正基數的成長率無穩定解讀；N/M 由 read-model/display 層推導，不寫進 metrics）。period_kind：quarterly 繼承 current fact 的 kind（`quarter_duration ∪ derived_q4`，Q4 = derived_q4），annual = `fy_annual_duration`，**永不 ttm_duration**（故不在 `TTM_RATIO_ROWS`，走 quarterly fallthrough）。`period_start = None`（FactRow 無 duration startDate）。EPS 無 derived_q4（不可加）→ eps_diluted_yoy 季度只 Q1–Q3。
 - pct-style UI 顯示 `fmtPct(decimal) → "${(decimal*100).toFixed(1)}%"`。`Pure` 共三種 display：pct-style / multiple-style（`x`）/ days-style（`days`）。
 
 ### Unit Canonicalization (SEC v2)
