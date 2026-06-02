@@ -77,6 +77,12 @@ const QUARTERLY_PKINDS_IS_CF: PeriodKind[] = ["quarter_duration", "derived_q4"];
 const ANNUAL_PKINDS_IS_CF: PeriodKind[] = ["fy_annual_duration"];
 const BS_PKINDS: PeriodKind[] = ["instant_period_end"];
 
+// EL2 TTM-derived ratios are quarterly-only and currently limited to ROE/ROA.
+// The `ttm_duration` period_kind must only be honored for these uni_accounts so a
+// stray `ttm_duration` row for any other RATIO key can never leak into the grid
+// silently (keeps UI aligned with the EL2 spec — Codex P3, 2026-06-02).
+const TTM_RATIO_ROWS = new Set<string>(["roe", "roa"]);
+
 function isFyPeriod(p: string): boolean {
   return /^FY\d{4}$/.test(p);
 }
@@ -134,9 +140,14 @@ export function buildMatrix(
       // EL2 TTM-derived ratios (roe/roa) are quarterly-only — period is the TTM
       // end quarter (Qx_FYyyyy). The annual EL2 variant is fy_annual_duration
       // (handled by ANNUAL_PKINDS_IS_CF below), so ttm_duration never shows in
-      // annual mode.
+      // annual mode. Restrict to the explicit ROE/ROA allowlist so an unexpected
+      // ttm_duration row for another RATIO key can't silently render.
       if (c.period_kind === "ttm_duration") {
-        return frequency === "quarterly" && isQuarterPeriod(c.period);
+        return (
+          frequency === "quarterly" &&
+          isQuarterPeriod(c.period) &&
+          TTM_RATIO_ROWS.has(c.uni_account)
+        );
       }
       const allowed = frequency === "quarterly" ? QUARTERLY_PKINDS_IS_CF : ANNUAL_PKINDS_IS_CF;
       return allowed.includes(c.period_kind);
