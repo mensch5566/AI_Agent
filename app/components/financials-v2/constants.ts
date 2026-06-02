@@ -133,6 +133,9 @@ export const RATIO_ROWS: MetricSpec[] = [
   { key: "dio", label: "Days Inventory Outstanding (DIO)", kind: "derived_ratio" },
   { key: "dpo", label: "Days Payable Outstanding (DPO)", kind: "derived_ratio" },
   { key: "ccc", label: "Cash Conversion Cycle (CCC)", kind: "derived_ratio" },
+  { key: "revenue_yoy", label: "Revenue YoY %", kind: "derived_ratio" },
+  { key: "net_income_yoy", label: "Net Income YoY %", kind: "derived_ratio" },
+  { key: "eps_diluted_yoy", label: "Diluted EPS YoY %", kind: "derived_ratio" },
 ];
 
 export const ROWS_BY_STATEMENT: Record<Statement, MetricSpec[]> = {

@@ -102,6 +102,10 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_DSO",
     "RATIO_DPO",
     "RATIO_CCC",
+    # EL2 expansion Phase 2 — YoY growth.
+    "RATIO_REVENUE_YOY",
+    "RATIO_NET_INCOME_YOY",
+    "RATIO_EPS_DILUTED_YOY",
 )
 
 
