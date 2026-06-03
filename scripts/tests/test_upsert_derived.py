@@ -633,8 +633,12 @@ def test_analytics_fallback_matches_skill_registry():
         Path.home() / ".codex" / "skills" / "derive-analytics" / "scripts",
         Path.home() / ".cc-switch" / "skills" / "derive-analytics" / "scripts",
     ]
+    # Skip mirrors retired per ADR-001 (canonical=SSOT): the flat dev prototype
+    # carries a DEPRECATED.md and is intentionally no longer hand-synced, so it
+    # must not gate the drift check against the 4 live mirrors.
     found = [d for d in mirror_dirs
-             if (d / "rules_ratios.py").is_file() and (d / "rules_crossperiod.py").is_file()]
+             if (d / "rules_ratios.py").is_file() and (d / "rules_crossperiod.py").is_file()
+             and not (d / "DEPRECATED.md").is_file()]
     if not found:
         pytest.skip("derive-analytics skill modules not found in any known mirror")
     _mods = ("rules_ratios", "rules_crossperiod", "period_topology")
