@@ -176,7 +176,9 @@ LOCKED `docs/financials-core-checklist.md`（v5，90 核心 uni_account）+ `doc
 2. **axis-aware**：同一份 filing 內**依 axis 分派 period**——10-K 的 **BS（instant）edge → `Q4_FYyyyy`**（年末 snapshot），**IS/CF（duration）edge → `FYyyyy`**。不可像現在 `full_linkbase.py:268` 在解析 role/axis 前就對整份 filing 填單一 period。
 3. **accession/context-aware raw lookup**：§5 raw 值查找用 **inline `filings[period].accession_number`（或 companyfacts `accn`）精準匹配**，不只 `tag + period_end`——同一 `period_end` 會跨多份 filing 出現（restatement），只靠 period_end 會抓錯期/錯版。
 
-**驗收**：MU/LITE/SNDK（非 12 月結）的 cal BS period 集合 == facts BS period 集合（無孤兒期），且 10-K 的 BS edge 落 `Q4_FYyyyy`、IS/CF edge 落 `FYyyyy`；AAOI/INTC（12 月結）re-run byte-identical（不得回歸）。
+**驗收**：cal BS period 集合 == facts BS period 集合（無孤兒期），10-K 的 BS edge 落 `Q4_FYyyyy`、IS/CF edge 落 `FYyyyy`。⚠️ **修正先前措辭**：此改動會讓**所有 ticker**（含 12 月結）的 10-K BS cal edge 由 `FY`→`Q4_FY`（這是修正、非回歸）；真正「不變」的是 **facts.json 本體 byte-identical**（只 cal edge period 標籤變）+ IS/CF cal label。
+
+**Phase 0 實作狀態（2026-06-03，已完成、待 Phase 3 per-ticker 重驗）**：✅ `fiscal_period_label` 落地（full_linkbase + build_separated `--fy-end-month` plumbing + cal_sum_sanity 對齊）；`test_period_mapping.py` 11 case 綠；**MU 端對端：cal BS 22 == facts BS 22（零孤兒）、cal sanity 0 ❌、facts.json 本體 byte-identical**。已上線 INTC/AAOI/SNDK/LITE 的 per-ticker 重抽+對齊驗證留待 Phase 3。accession-aware raw lookup 留待 Phase 1 build_separated。已同步 cc-switch(SSOT)+.claude+.codex+CC_Switch_Config 四 mirror。
 
 ## 14. Codex review log
 
