@@ -1,6 +1,24 @@
 # AI_Agent Status
 
-Updated: 2026-05-31
+Updated: 2026-06-03
+
+## Project Profile (SOP §5)
+
+> 依 `~/Obsidian/SOPs/Development/Software Development SOP.md` 填。換 stack 只改這段。
+
+- Project: AI_Agent（個股研究 / Financials Viewer + portal + news/data pipelines）
+- **Tier: T3**（financials 資料管道核心 = 100% 精準 / 對外 / 不可逆 → 全套 hard gate；portal/週報等較輕功能視情況 T2）
+- SSOT: repo `/Users/mensch5566/AI_Agent`；狀態權威 `docs/STATUS.md`；schema 權威 `docs/financials-core-checklist.md`（LOCKED v5，90 核心 uni_account）+ `financials-architecture.md`
+- Stack: Next.js App Router（前端）+ Python skills（parse-10QK-gaap / derive-base / derive-analytics）+ Supabase（`sec_financial_facts` / `_metrics` / `_dimensional_facts`）
+- 套件 + lockfile: `package-lock.json`（前端）+ `uv`（Python skills，`uv run --with`）
+- 測試: vitest + `tsc --noEmit`（前端）/ pytest（skills）/ Hypothesis property（derive-analytics 對抗式）
+- 上 production 機制: parse → build_separated → cross-check → derive-base → derive-analytics → `scripts/upsert_sec_financials.py`（dry-run diff → `--apply`）
+- 回滾: git revert + re-upsert known-good（無 schema migration）
+- Reviewer: 人類最後把關 + Codex functional review（對抗審查者）；NLM「Topic - Project Dev」當方法論對照
+- 資料管道: 統一管道寫 Supabase（禁直接 INSERT/UPDATE）；source（facts）vs derived（metrics RATIO）分離 + provenance/cell_id lineage；dual-key + 12 long-tail bucket
+- 觀測（T3 應有，目前**弱 = 已知缺口**）: 待補 pipeline log/告警 + synthetic 驗業務關鍵路徑
+- AI 分工: Claude=實作者；Codex=對抗審查者；跨 session 交接用 AI-Memory(memsearch) + `docs/STATUS.md` + `tmp/*-review.md`
+- 對外契約: schema = core-checklist LOCKED v5；新 metric 走 checklist 登記流程（不自由創造 uni_account）
 
 ## Current Focus
 - Portal remains the main entrypoint for internal tools.
