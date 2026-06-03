@@ -1,7 +1,7 @@
 # Design Spec：parse-10QK-gaap BS long-tail catch-all（+ 同義 tag 補核心）
 
 Date: 2026-06-02 / Project: ai_agent / Skill: `parse-10QK-gaap`
-Status: **DRAFT v2，Codex round-1 review 完成（4 findings 全接受並折回，見 §14）**，待 round-2（未動 code）
+Status: **DRAFT v3，Codex round-2 = conditional pass（2 P2 + 1 P3 全折回，見 §14）**，待人類核可即可進 Build（未動 code）
 作者交接：跨 ticker BS footing 稽核工單 `tmp/parse-bs-footing-audit-worklist.md` 的正式設計解。
 
 ---
@@ -75,7 +75,9 @@ LOCKED `docs/financials-core-checklist.md`（v5，90 核心 uni_account）+ `doc
    | `long_tail_metadata.rolls_up_to` | 父小計的核心 uni_account |
    | `long_tail_metadata.is_recurring` / `last_occurrence_date` | 由跨期出現情況計 |
 
-5. 把 rolls_up_to 注入 cal roll-up edges（沿用既有 §3 機制）。
+5. 把 rolls_up_to 注入 cal roll-up edges（沿用既有 §3 機制）—— **但這是補充結構資料，不可取代 facts metadata（見下）**。
+
+**facts.json metadata 保留契約（Codex round-2 P2-b，Build requirement）**：BS long-tail fact 的 `long_tail_metadata`（含 `rolls_up_to`）**必須保留在 `{ticker}_gaap_facts.json` 的該 row 上**。現行 `build_separated.py:67` 會把 inline rows 的 `long_tail_metadata` **strip 掉只轉成 cal edge**，但 upsert 管道的 adapter（`sec_json_adapter.py:448 adapt_gaap_facts`）是**從 facts.json 讀 `long_tail_metadata`**，cal edge 不參與 Viewer 顯示/聚合。→ 對 BS long-tail rows **不可 strip**；否則進 Supabase 的 `long_tail_metadata=None`，前端 §5b 的 kind-aware suppression / bucket rolls_up_to 結構聚合全失效（現有 IS/CF long-tail 是靠 `LONG_TAIL_ROLLUP_HINTS` xbrl_tag 撐 suppression，BS 這些 tag 不在 hints map，沒有 fallback）。
 
 **父小計 → bucket / rolls_up_to 對照**：
 
@@ -132,7 +134,7 @@ LOCKED `docs/financials-core-checklist.md`（v5，90 核心 uni_account）+ `doc
 ## 7. 不改 / 不碰
 
 - **核心 90 key 不動**（LOCKED）；本案零新核心 key。
-- **前端**：除可能補 `LONG_TAIL_ROLLUP_HINTS` 條目外，不改渲染/聚合。
+- **前端**：渲染/聚合大致不動（5 BS bucket 已接好），**唯一例外是 §5b 的 suppression kind-aware 修正（必改）**；視情況補 `LONG_TAIL_ROLLUP_HINTS` 條目。
 - **ratio / derive-analytics**：用官方揭露小計，不受影響。
 - **B 類 extension tag**：companyfacts 拿不到值，維持 SKILL.md Known Limitation；要補值需另建 instance-XML 抽取能力（獨立大案）。
 
@@ -169,9 +171,12 @@ LOCKED `docs/financials-core-checklist.md`（v5，90 核心 uni_account）+ `doc
 
 **根因**：`full_linkbase.py:226 derive_period_label(report_date, form)` 只用 report_date 的月曆月份推 fiscal quarter（`{3:1,6:2,9:3,12:4}` + 月份 fallback），不吃 `fy_end_month`。非 12 月結 ticker 整個位移（MU fy-end=8：真 Q3 5 月底→誤標 Q2、真 Q2 2 月底→誤標 Q1）。`xbrl_extract.py:195` 是 fiscal-aware 的，兩者標法不一致 → cal↔facts 對不上。
 
-**修法方向**：cal edge 的 period label 改用 **accession / inline-filing 對應**（與 xbrl_extract 同一套 fiscal 推導），或把 `fy_end_month` 傳進 `full_linkbase.py` 共用 xbrl_extract 的 period 函式。`cal_sum_sanity.py` 的 period 推導一併對齊。
+**修法方向（Codex round-2 P2-a：fiscal + axis + accession 三者都要釘死）**：
+1. **fiscal-aware**：period label 用 `fy_end_month` 推（共用 xbrl_extract 同一套），不用月曆月份。**兩處 `derive_period_label` 都要改**：`full_linkbase.py:226` 與 `cal_sum_sanity.py:69`。
+2. **axis-aware**：同一份 filing 內**依 axis 分派 period**——10-K 的 **BS（instant）edge → `Q4_FYyyyy`**（年末 snapshot），**IS/CF（duration）edge → `FYyyyy`**。不可像現在 `full_linkbase.py:268` 在解析 role/axis 前就對整份 filing 填單一 period。
+3. **accession/context-aware raw lookup**：§5 raw 值查找用 **inline `filings[period].accession_number`（或 companyfacts `accn`）精準匹配**，不只 `tag + period_end`——同一 `period_end` 會跨多份 filing 出現（restatement），只靠 period_end 會抓錯期/錯版。
 
-**驗收**：MU/LITE/SNDK（非 12 月結）的 cal BS period 集合 == facts BS period 集合（無孤兒期）；AAOI/INTC（12 月結）re-run byte-identical（不得回歸）。
+**驗收**：MU/LITE/SNDK（非 12 月結）的 cal BS period 集合 == facts BS period 集合（無孤兒期），且 10-K 的 BS edge 落 `Q4_FYyyyy`、IS/CF edge 落 `FYyyyy`；AAOI/INTC（12 月結）re-run byte-identical（不得回歸）。
 
 ## 14. Codex review log
 
@@ -195,6 +200,18 @@ Codex review position：方向 OK、但修完 period mapping / suppression / gat
 | 90 核心 key 硬鎖 = 未來 IFRS 架構債 | 大致已解：台股走獨立 parse-twse-ixbrl 管道；dual-key ≈ Anti-Corruption Layer；misc_long_tail 是逃生口 | 不改架構，註記 |
 | TLE / bitmask O(1) 階層儲存 | YAGNI：rolls_up_to 僅 1-2 層淺階層，Supabase+pagination 夠 | **不採納**（規模不符）|
 | .cursorrules 約束 AI | 已做：CLAUDE.md/AGENTS.md 已寫死 schema 紀律 | 已涵蓋 |
+
+### Round 2（2026-06-03）— conditional pass after P2 patch（2 P2 + 1 P3 全折回 v3）
+
+無新 P1；round-1 四點 + NLM 三點確認實質折回。2 P2 + 1 P3：
+
+| # | finding | 驗證 | 處置 |
+|---|---|---|---|
+| P2-a | period mapping 不夠釘死：要 fiscal **+ axis + accession**-aware（10-K 內 BS→Q4_FYyyyy、IS/CF→FYyyyy；`full_linkbase.py:268` 解析 axis 前就填單一 period；`cal_sum_sanity.py:69` 也月曆推導）| 確認屬實（= MU cal FY2020 vs facts Q4_FY2020）| 折回 §13（三者都釘 + 兩處 derive_period_label + raw lookup 用 accession）|
+| P2-b | `long_tail_metadata` separated-facts 契約未修：`build_separated.py:67` strip 掉 metadata 只轉 cal edge，但 adapter `sec_json_adapter.py:448` 從 facts.json 讀 metadata、edge 不參與顯示 | 確認屬實（現有 IS/CF 靠 HINTS 撐，BS tag 無 hints fallback）| 折回 §5：facts.json BS long-tail rows **必須保留 long_tail_metadata**，cal edge 只補充 |
+| P3 | §7 stale：仍寫「前端不改渲染/聚合」，與 §5b 矛盾 | 屬實 | 折回 §7 指向 §5b |
+
+Sign-off：**conditional pass** — 補上 axis/accession mapping + long_tail_metadata preservation 契約（已折回 v3）後可進 Phase 0/1 Build。**Phase 2 的 Q3 債務合併 tag（③ 類）裁決仍須在動核心/analytics 前拍板**。本輪為 spec/ADR functional review，未跑測試。
 
 ## 11. 重現 / 測試
 

@@ -11,7 +11,7 @@ related: docs/superpowers/specs/2026-06-02-parse-bs-long-tail-design.md
 # ADR-002：Balance Sheet long-tail catch-all（補實作 + suppression 語意修正）
 
 > 格式：Context / Decision / Alternatives / Consequences（對齊 ADR-001）。
-> 狀態：**proposed**（Design gate 中，待 Codex round-2 收斂 + 人類核可才轉 accepted）。
+> 狀態：**proposed**（Codex round-2 = conditional pass，2 P2 + 1 P3 已折回 spec v3；**待人類核可**即轉 accepted 進 Build）。
 > 完整設計見 spec：`docs/superpowers/specs/2026-06-02-parse-bs-long-tail-design.md`。
 
 ## Context
@@ -30,8 +30,9 @@ T3（100% 精準、對外、不可逆）→ 套完整 SOP：先審再上、prope
 2. **① 類（核心科目的同義/別名 tag）→ 補 candidate 到既有核心 key**（`xbrl_extract.py`/inline，first-match-wins，保 cross-check）。非新 uni_account，= MU 應收 / LITE ASC606 先例。
 3. **③ 類（跨多核心 key 的合併 tag）→ 逐筆裁決**（傾向當 bucket 合併行）。
 4. **前端 suppression 語意修正**：suppression 只在 target row `kind === "core"` 時觸發，subtotal target（結構性 rolls_up_to）不抑制——否則 BS bucket 因 rolls_up_to=subtotal（永遠 populated）被全濾成空。
-5. **Phase 0 前置（硬擋）**：`full_linkbase.py` cal period label 改 **fiscal-year-aware**（現為月曆推導，非 12 月結 ticker fiscal 位移）；leaf 偵測 **role-scoped** 到 face-BS role。
+5. **Phase 0 前置（硬擋）**：`full_linkbase.py` cal period label 改 **fiscal + axis + accession-aware**（現為月曆推導 → 非 12 月結 ticker 位移；10-K 內 BS→`Q4_FYyyyy`、IS/CF→`FYyyyy`；raw 值查找用 accession 精準匹配，不只 tag+period_end）；leaf 偵測 **role-scoped** 到 face-BS role。（Codex round-2 P2-a）
 6. **防禦式設計**：拿不到值 / cal 異常 → 寫一級 anomaly report，**不 silent-drop**。
+7. **facts.json metadata 契約（Codex round-2 P2-b）**：BS long-tail fact 的 `long_tail_metadata` 必須保留在 facts.json（adapter 從 facts.json 讀），cal edge 注入只補充、不取代——現行 `build_separated.py:67` 會 strip，須對 BS long-tail rows 例外保留。
 
 ## Alternatives considered
 
