@@ -130,6 +130,7 @@ export const RATIO_ROWS: MetricSpec[] = [
   { key: "cash_ratio", label: "Cash Ratio", kind: "derived_ratio" },
   { key: "debt_to_equity", label: "Debt / Equity", kind: "derived_ratio" },
   { key: "interest_coverage", label: "Interest Coverage", kind: "derived_ratio" },
+  { key: "net_debt_to_ebitda", label: "Net Debt / EBITDA", kind: "derived_ratio" },
   { key: "asset_turnover", label: "Asset Turnover", kind: "derived_ratio" },
   { key: "dso", label: "Days Sales Outstanding (DSO)", kind: "derived_ratio" },
   { key: "dio", label: "Days Inventory Outstanding (DIO)", kind: "derived_ratio" },
@@ -157,6 +158,43 @@ export const NONGAAP_SPOTLIGHT_METRICS = new Set([
   "eps_diluted",
   "adjusted_ebitda",
 ]);
+
+// Derived non-GAAP measures — rows the engine emits with
+// provenance.basis='GAAP_INPUTS_DERIVED_NON_GAAP_MEASURE' (EBITDA family).
+// They are computed FROM GAAP inputs but are NOT themselves reported GAAP line
+// items, so the table marks them with a "non-GAAP" superscript + tooltip
+// (SEC C&DI 103.01: EBITDA is a non-GAAP financial measure). Kept in sync with
+// the `basis` set in rules_ratios.py.
+export const NONGAAP_DERIVED_ROWS = new Set([
+  "ebitda",
+  "ebitda_margin_pct",
+  // net_debt_to_ebitda: both net debt and EBITDA are SEC non-GAAP measures →
+  // engine emits it with the same provenance.basis marker (rules_crossperiod._NDE_BASIS).
+  "net_debt_to_ebitda",
+  // free cash flow + margin are SEC named non-GAAP measures (Reg G) — engine marks
+  // them with provenance.basis (rules_ratios). Kept in sync with that basis set.
+  "free_cash_flow",
+  "fcf_margin_pct",
+]);
+
+// Per-row tooltip: each non-GAAP measure gets its OWN accurate formula (the old
+// single string was EBITDA-specific and read wrong on FCF / net-debt-EBITDA).
+// Membership in NONGAAP_DERIVED_ROWS gates the marker; this map supplies the text.
+export const NONGAAP_DERIVED_TOOLTIP: Record<string, string> = {
+  ebitda:
+    "Derived non-GAAP measure — EBITDA = net income + interest + tax + D&A; not a reported GAAP line item.",
+  ebitda_margin_pct:
+    "Derived non-GAAP measure — EBITDA margin = EBITDA / revenue; not a reported GAAP line item.",
+  free_cash_flow:
+    "Derived non-GAAP measure — free cash flow = operating cash flow − capital expenditures; not a reported GAAP line item.",
+  fcf_margin_pct:
+    "Derived non-GAAP measure — FCF margin = free cash flow / revenue; not a reported GAAP line item.",
+  net_debt_to_ebitda:
+    "Derived non-GAAP measure — net debt (debt − cash − short-term investments) ÷ TTM EBITDA; not a reported GAAP line item.",
+};
+
+export const NONGAAP_DERIVED_TOOLTIP_FALLBACK =
+  "Derived non-GAAP measure — computed from GAAP inputs; not a reported GAAP line item.";
 
 // Chart defaults per statement — the metrics auto-selected when the user
 // switches to a new view. Capped at `CHART_MAX_SELECTION` in the toggle
@@ -246,6 +284,7 @@ export const RATIO_AS_MULTIPLE = new Set<string>([
   "debt_to_equity",
   "interest_coverage",
   "asset_turnover",
+  "net_debt_to_ebitda",
 ]);
 
 // Pure-unit ratios whose stored value is a number of DAYS (DSO/DIO/DPO/CCC).

@@ -60,7 +60,7 @@
 | `USD_per_share` | `USD_per_share` / `USD/share` / 在 EPS context 下的 `USD` |
 | `millions_shares` | `millions_shares` |
 | `thousands_shares` | `thousands_shares` |
-| `Pure` | `Pure` / `percent` / `Percent`。**三種 display category**：pct-style（margins / ETR，存小數 0~1）；multiple-style（current/cash/quick ratio、debt_to_equity、interest_coverage、`asset_turnover`，倍數、**可超過 1 或為負**，`RATIO_AS_MULTIPLE` 顯示 `x`）；days-style（`dso`/`dio`/`dpo`/`ccc`，存天數本身、CCC 可負，`RATIO_AS_DAYS` 顯示 `days`、chart 獨立軸）。days/x 都是 display category，DB `unit` 仍 `Pure` |
+| `Pure` | `Pure` / `percent` / `Percent`。**三種 display category**：pct-style（margins / ETR，存小數 0~1）；multiple-style（current/cash/quick ratio、debt_to_equity、interest_coverage、`net_debt_to_ebitda`、`asset_turnover`，倍數、**可超過 1 或為負**，`RATIO_AS_MULTIPLE` 顯示 `x`）；days-style（`dso`/`dio`/`dpo`/`ccc`，存天數本身、CCC 可負，`RATIO_AS_DAYS` 顯示 `days`、chart 獨立軸）。days/x 都是 display category，DB `unit` 仍 `Pure` |
 
 adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validation error。
 
@@ -229,7 +229,7 @@ adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validat
 
 | uni_account | version | formula | unit | 確認 |
 |---|---|---|---|---|
-| `free_cash_flow` | GAAP | `net_cash_from_operating - capital_expenditures` | USD（per-ticker scale，沿用輸入 facts 的 unit） | ✅ |
+| `free_cash_flow` | GAAP | `net_cash_from_operating - capital_expenditures` | USD（per-ticker scale，沿用輸入 facts 的 unit）。**`provenance.basis = GAAP_INPUTS_DERIVED_NON_GAAP_MEASURE`**（FCF 是 SEC named non-GAAP measure / Reg G，非 GAAP line item；前端 `NONGAAP_DERIVED_ROWS` 標記） | ✅ |
 | `ebitda` | GAAP | `(net_income + net_income_nci[optional]) + interest_expense + income_tax_expense + depreciation_and_amortization`（**SEC C&DI 103.01 bottom-up，必須從 GAAP net income，非 operating income**；base 用**合併淨利** net_income+NCI（無 NCI → +0），與合併加回項一致；D&A 取 CF 非現金加回）。**derived non-GAAP measure**：`version='GAAP'` 但 `provenance.basis='GAAP_INPUTS_DERIVED_NON_GAAP_MEASURE'`，非 GAAP filing line item | USD（per-ticker scale，FROM_INPUTS）| ✅ |
 
 - **絕對值衍生（非比率）**：derive-analytics 第一個 numerator-only 絕對值 rule（rule_id `FCF_CFO_MINUS_CAPEX`）。statement=`CF`、`status=DERIVED_FROM_DISCLOSED`、寫 `sec_financial_metrics`（**不污染 facts**）。
@@ -244,14 +244,14 @@ adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validat
 direct disclosed ratios → `sec_financial_facts` (SOURCE_OF_TRUTH, version=GAAP|NON_GAAP)
 derived ratios → `sec_financial_metrics` (DERIVED_FROM_DISCLOSED)
 
-unit 一律 `Pure`，分三種 display category：pct-style（margins / ETR，存小數 0~1）；multiple-style（current/cash/quick ratio、debt_to_equity、interest_coverage、`asset_turnover`，倍數、**可 >1 或為負**，`RATIO_AS_MULTIPLE` 顯示 `x`）；days-style（`dso`/`dio`/`dpo`/`ccc`，存天數本身、CCC 可負，`RATIO_AS_DAYS` 顯示 `days`）。前端 `fmtValue` / `chartGroupOf` 依此分流顯示與 chart 分軸。**`dpo` 是 COGS-proxy DPO**（真 purchases = COGS + Δinventory，會引入 derived-on-derived，不適合 core key）。`ccc` 是 derived-on-derived（= dio+dso−dpo），provenance.inputs 用三個 component 的 metrics cell_id 追溯。
+unit 一律 `Pure`，分三種 display category：pct-style（margins / ETR，存小數 0~1）；multiple-style（current/cash/quick ratio、debt_to_equity、interest_coverage、`net_debt_to_ebitda`、`asset_turnover`，倍數、**可 >1 或為負**，`RATIO_AS_MULTIPLE` 顯示 `x`）；days-style（`dso`/`dio`/`dpo`/`ccc`，存天數本身、CCC 可負，`RATIO_AS_DAYS` 顯示 `days`）。前端 `fmtValue` / `chartGroupOf` 依此分流顯示與 chart 分軸。**`dpo` 是 COGS-proxy DPO**（真 purchases = COGS + Δinventory，會引入 derived-on-derived，不適合 core key）。`ccc` 是 derived-on-derived（= dio+dso−dpo），provenance.inputs 用三個 component 的 metrics cell_id 追溯。
 
 | uni_account | version | 公式（derived 時） | 確認 |
 |---|---|---|---|
 | `gross_margin_pct` | GAAP / NON_GAAP | `gross_profit / revenue` | ⬜ |
 | `operating_margin_pct` | GAAP / NON_GAAP | `operating_income / revenue` | ⬜ |
 | `net_margin_pct` | GAAP / NON_GAAP | `net_income / revenue` | ⬜ |
-| `fcf_margin_pct` | GAAP | `(net_cash_from_operating - capital_expenditures) / revenue` | ✅ |
+| `fcf_margin_pct` | GAAP | `(net_cash_from_operating - capital_expenditures) / revenue`。**`provenance.basis = GAAP_INPUTS_DERIVED_NON_GAAP_MEASURE`**（繼承 FCF 的非-GAAP 性質；前端標記） | ✅ |
 | `ebitda_margin_pct` | GAAP | `((net_income + net_income_nci[optional]) + interest_expense + income_tax_expense + D&A) / revenue`（= EBITDA/revenue，SEC C&DI 103.01 bottom-up，base 用合併淨利 net_income+NCI；D&A 取 CF；除 NCI 外 required，缺 D&A → skip）。**derived non-GAAP**：`provenance.basis='GAAP_INPUTS_DERIVED_NON_GAAP_MEASURE'` | ✅ |
 | `adjusted_ebitda_margin_pct` | NON_GAAP | `adjusted_ebitda / revenue` | ⬜ |
 | `effective_tax_rate` | GAAP | `income_tax_expense / income_before_taxes` | ⬜ |
@@ -263,6 +263,7 @@ unit 一律 `Pure`，分三種 display category：pct-style（margins / ETR，�
 | `quick_ratio` | GAAP | `(cash_and_cash_equivalents + short_term_investments[optional] + accounts_receivable) / total_current_liabilities` | ✅ |
 | `debt_to_equity` | GAAP | `(short_term_borrowings + current_portion_of_long_term_debt + long_term_debt) / total_equity` | ✅ |
 | `interest_coverage` | GAAP | `(income_before_taxes + interest_expense) / interest_expense` | ✅ |
+| `net_debt_to_ebitda` | GAAP | `net_debt(期末 BS) / EBITDA(視窗)`（EL2 槓桿，x-multiple）。net_debt = 有息債（st_borrow+cur_ltd+ltd，exact-value dedup）− cash − short_term_investments（cash required；債/sti optional-as-0；**可為負＝淨現金，emit**）。EBITDA = inline 重算（季度 trailing-4 單季 / 年度 FY 的 Σ(net_income+net_income_nci[opt]+interest_expense+income_tax_expense)[IS] + Σ depreciation_and_amortization[CF]，同 EBITDA 口徑）。period_kind：quarterly `ttm_duration`（在 `TTM_RATIO_ROWS`）/ annual `fy_annual_duration`；`period_start = day_after(EBITDA 視窗起點 BS instant)`，缺 anchor 降級 None（不影響 emit）。**skip（不 clamp）**：EBITDA≤0 / 任一 EBITDA 單期 component 缺 / cash 缺。**`provenance.basis = GAAP_INPUTS_DERIVED_NON_GAAP_MEASURE`**（net debt 與 EBITDA 皆 SEC non-GAAP measure，非 GAAP line item；前端 `NONGAAP_DERIVED_ROWS` 標記）。⚠️ **net debt 口徑 caveat**：採 liquid-asset-adjusted（額外減 `short_term_investments`，與 ROIC invested-capital 口徑一致）；比最嚴格的「debt − cash&equivalents」低，跨 vendor 的 net-debt/EBITDA 比較需留意| ✅ |
 | `asset_turnover` | GAAP | `revenue_TTM / avg_total_assets`（EL2，x-multiple，display Pure）| ✅ |
 | `dso` | GAAP | `365 × avg_accounts_receivable / revenue_TTM`（EL2，days，display Pure）| ✅ |
 | `dio` | GAAP | `365 × avg_inventories / cost_of_goods_sold_TTM`（EL2，days）| ✅ |

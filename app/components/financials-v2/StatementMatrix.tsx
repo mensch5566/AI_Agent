@@ -2,7 +2,7 @@
 
 import type { Cell, CellStatus } from "./types";
 import type { Matrix } from "./useFinancialMatrix";
-import { CHART_COLORS, NONGAAP_SPOTLIGHT_METRICS, comparePeriods, fmtValue } from "./constants";
+import { CHART_COLORS, NONGAAP_SPOTLIGHT_METRICS, NONGAAP_DERIVED_ROWS, NONGAAP_DERIVED_TOOLTIP, NONGAAP_DERIVED_TOOLTIP_FALLBACK, comparePeriods, fmtValue } from "./constants";
 
 type Props = {
   gaap: Matrix;
@@ -290,6 +290,15 @@ export function StatementMatrix({
                     />
                   )}
                   {row.label}
+                  {NONGAAP_DERIVED_ROWS.has(row.key) && (
+                    <sup
+                      className="ml-0.5 text-[9px] font-medium text-muted-foreground cursor-help"
+                      title={NONGAAP_DERIVED_TOOLTIP[row.key] ?? NONGAAP_DERIVED_TOOLTIP_FALLBACK}
+                      aria-label="non-GAAP derived measure"
+                    >
+                      non-GAAP
+                    </sup>
+                  )}
                 </td>
                 {periods.flatMap((p) => {
                   const m = gaap.cells[row.key]?.[p];

@@ -111,6 +111,8 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_EPS_DILUTED_YOY",
     # EL2 expansion Phase 3 — ROIC.
     "RATIO_ROIC",
+    # EL2 leverage — Net Debt / EBITDA.
+    "RATIO_NET_DEBT_TO_EBITDA",
 )
 
 

@@ -91,6 +91,7 @@ const TTM_RATIO_ROWS = new Set<string>([
   "dso",
   "dpo",
   "ccc",
+  "net_debt_to_ebitda",
 ]);
 
 function isFyPeriod(p: string): boolean {
