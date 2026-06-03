@@ -82,7 +82,7 @@ adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validat
 | 6 | `amortization_of_acquired_intangibles` | `us-gaap:AmortizationOfIntangibleAssets` | 無形資產攤銷 | ✅ |
 | 7 | `total_operating_expenses` | `us-gaap:OperatingExpenses` | 營業費用合計 | ✅ |
 | 8 | `operating_income` | `us-gaap:OperatingIncomeLoss` | 營業利益 | ✅ |
-| 9 | `interest_income` | `us-gaap:InvestmentIncomeInterest` | 利息收入 | ✅ |
+| 9 | `interest_income` | `us-gaap:InvestmentIncomeInterest` / `InterestIncomeOther` / `InterestAndDividendIncomeOperating`（**MU ticker-override**: `InvestmentIncomeNet` — Micron face-of-IS「Interest income」用此 tag，語意較廣故只對 MU prepend，`TICKER_IS_TAG_OVERRIDES`）| 利息收入 | ✅ |
 | 10 | `interest_expense` | `us-gaap:InterestExpense` / `InterestExpenseNonoperating` | 利息費用（含 nonoperating 變體） | ✅ |
 | 11 | `interest_and_other_net` | `us-gaap:NonoperatingIncomeExpense` | 業外淨額 | ✅ |
 | 12 | `other_nonoperating_income_expense` | `us-gaap:OtherNonoperatingIncomeExpense` | 其他業外 | ✅ |
