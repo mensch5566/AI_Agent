@@ -420,5 +420,14 @@ The NLM match priority's `uni_account` tier (G1) may fire **only when, within
 More than one → `unmatched` / manual audit, never a guess. Guards against future long-tail-bucket or
 same-classification expansion mis-ordering.
 
-**Status**: v5 (= §13 architecture + §12 + §14 G1–G5 + §15 G6–G8). Codex: "v4 可進下一階段，補這 2 P2
-即可" → with G6–G8 folded, design gate is **closed pending human sign-off**; next step writing-plans.
+**Status**: v5 (= §13 architecture + §12 + §14 G1–G5 + §15 G6–G8). Codex round-3 closure: no open
+P1/P2. **Design gate CLOSED — human sign-off given 2026-06-04.** Next: writing-plans → git worktree → TDD.
+
+**Plan note (Codex round-3 P3, binding on the implementation plan, not a spec change)**: §15 G7's "SUM
+row stays only in analytics layer" means **Statement-view display-ineligible**, NOT a storage
+relocation. The core synthetic facts `SUM(D&A components)` / `SUM(S&M+G&A)` remain in storage and
+continue feeding EBITDA/analytics unchanged; they simply **do not create a Statement-view row
+prototype**, and `derived_q4` must NOT pull a non-display synthetic core back into the statement via its
+shared `uni_account`. The plan + tests must explicitly cover: (a) non-display synthetic core builds no
+row prototype; (b) the component long-tail rows are the PDF rows; (c) derived_q4 attaches only to
+display-eligible prototypes.
