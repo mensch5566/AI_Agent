@@ -250,3 +250,61 @@ formatter**, not a global `fmtValue` edit (avoid collateral changes to chart/rat
 
 **Status**: v2 (this §12 supersedes the conflicting parts of §4–§8). Awaiting human approval; optional
 Codex round-2 on v2 before writing-plans.
+
+## 13. v3 — upsert-layer resolution + NLM ordering fallback (user-directed, 2026-06-04)
+
+User-driven convergence after §12. Empirical re-measurement (per-statement, 5 tickers) reframed the
+problem and the architecture. **This §13 is binding and supersedes §4's resolution layer, §10's
+parse-layer alternative, and §12's AAOI-defer.** All other §12 findings (row identity, derived
+subsection, migration column, formatter, KNOWN_TICKERS) carry over unchanged.
+
+### 13.1 Reframing (verified)
+
+- **`display_label` coverage is 95–100% for every ticker incl AAOI** (AAOI IS 95% / BS 100% / CF 95%).
+  The earlier "AAOI 28%" was an artifact of conflating label-coverage with ordinal-coverage and of the
+  bare-vs-prefixed string mismatch. **Labels are not the problem.**
+- The real gap is **`ordinal` (row order)**, and AAOI's is specifically **BS = 0% / CF = 9%**: its
+  captured presentation linkbase (`edges_pre`) contains **zero** balance-sheet/cash-flow networks (128
+  roles, none match `balancesheet|financialposition|cashflow`; the `full_linkbase.py` regex is correct,
+  so the networks were never captured — a separate parse data-capture gap, NOT a matching bug).
+
+### 13.2 Architecture (decision: upsert-layer; parse-10QK-gaap UNTOUCHED)
+
+Resolution lives entirely in `scripts/upsert_sec_financials.py`. **`parse-10QK-gaap`
+(`xbrl_extract.py` / `build_separated.py`) is not modified** — it already emits `labels.json` +
+`edges_pre.json`, which the upsert consumes.
+
+- **`display_label`**: upsert matches `fact.source_account` (bare local name) to `labels.json` keys
+  (prefixed qname) by **local name** (namespace-strip); pick the `text` whose `role` == the
+  presentation `preferred_label` for that concept (fallback `terseLabel → totalLabel → label →
+  source_account`). Verified 95–100% coverage.
+- **`ordinal` primary = XBRL presentation**: from `edges_pre.order` within the network selected per
+  §12-P2.5 (robust, case/hyphen-insensitive role matching; exclude parenthetical/details/notes).
+- **`ordinal` fallback = NLM** (user's idea): for any ticker×statement where the XBRL presentation
+  network is absent/below the coverage gate (e.g. AAOI BS/CF), a small **NLM ordering step** reads the
+  actual filing PDF and returns the line items in PDF order; the upsert assigns `ordinal` from that
+  sequence (matched to facts by display_label/source_account). `provenance.ordinal_source ∈ {xbrl,
+  nlm}`. Row order is a low-hallucination "read the sequence" task and NLM reads the real PDF, so it is
+  PDF-faithful by construction. **The NLM step is NEW code; it does NOT modify the 定案 parse skills**
+  (it lives near `parse-sec-cross-check`, which already does NLM PDF reads, or as a small standalone;
+  output is a per-ticker ordering artifact the upsert reads — plan decides exact home).
+
+### 13.3 Coverage hard gate + AAOI (defer REMOVED)
+
+Per ticker×statement, `ordinal` must reach the coverage threshold via **XBRL ∪ NLM combined**; below →
+**fail the upsert loudly**. AAOI BS/CF reach coverage via the NLM fallback → **AAOI ships with the
+other 4; no defer.** A separate follow-up ticket investigates why `build_separated` did not capture
+AAOI's BS/CF presentation networks (a parse data-capture gap); fixing it later lets AAOI drop the NLM
+fallback, but it does not block this feature.
+
+### 13.4 Net effect on prior findings
+
+- **P1.1 (qname resolver)**: handled at upsert via namespace-strip (verified). Not a blocker.
+- **P1.2/P2.6 (row identity), P2.3 (derived subsection), P2.4 (reuse `ordinal` col + add `display_label`
+  via SQL migration), P3 (MU in KNOWN_TICKERS, statement-scoped formatter, docs in gate)**: all carry
+  over from §12 unchanged — they are frontend/migration concerns independent of the resolution layer.
+- **P2.2 (annual/quarterly ordering)**: still use latest 10-K network primary + 10-Q supplement for the
+  XBRL ordinal; the NLM fallback (when used) reads the most recent filing of that statement type.
+
+**Status**: v3 (binding architecture = §13 + carried-over §12 findings). Ready for Codex round-2 on v3
+before writing-plans.
