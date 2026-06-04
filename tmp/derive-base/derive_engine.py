@@ -2,8 +2,11 @@
 
 Pipeline (design §4):
   Pass 1 identity_on_direct: identity rules on direct facts only
-  Pass 2 GAAP_Q4:            Q4 reconstruction (FY-9M / FY-Q1Q2Q3)
-  Pass 3 identity_on_q4:     identity rules on Q4 (period_kind=derived_q4) keys
+  Pass 2 GAAP_quarters:      single-quarter reconstruction from disclosed YTD —
+                             Q2 = 6M-Q1, Q3 = 9M-6M (rules_q2q3) and
+                             Q4 = FY-9M / FY-Q1Q2Q3 (rules_q4)
+  Pass 3 identity_on_derived: identity rules on derived single-quarter
+                             (period_kind in derived_q2/derived_q3/derived_q4) keys
 
 Each pass produces Candidate[]; resolve_candidates picks one per semantic key,
 or skips with a conflict report when hard tolerance breached.
@@ -61,7 +64,12 @@ def resolve_candidates(candidates: list[Candidate]) -> tuple[list[Candidate], li
 
 
 from rules_q4 import q4_candidates
+from rules_q2q3 import q2q3_candidates
 from rules_identity import apply_identity_rules, apply_static_allowlist
+
+# Derived single-quarter period kinds that Pass 3 identity is allowed to build
+# subtotals on top of. Mirrors the Pass-2 reconstruction outputs.
+_DERIVED_QUARTER_KINDS = ("derived_q2", "derived_q3", "derived_q4")
 
 
 def _materialize_facts_with_winners(facts: list, winners: list[Candidate]) -> list:
@@ -117,21 +125,29 @@ def run_engine(
 
     facts_after_p1 = _materialize_facts_with_winners(facts, p1_winners)
 
-    # Pass 2 — GAAP Q4 reconstruction. Collect skip diagnostics so the audit
-    # report can show that a row was *intentionally* dropped (concept or
-    # unit mismatch) rather than silently missing. R4-F3.
+    # Pass 2 — GAAP single-quarter reconstruction (Q2/Q3 from rules_q2q3,
+    # Q4 from rules_q4). All read facts_after_p1 (direct + Pass-1 identity)
+    # only, so the quarters are independent and never chain on one another.
+    # Collect skip diagnostics so the audit report can show that a row was
+    # *intentionally* dropped (concept or unit mismatch) rather than silently
+    # missing. R4-F3.
     q4_skips: list[dict] = []
+    q2q3_skips: list[dict] = []
     p2: list[Candidate] = q4_candidates(facts_after_p1, skips_collector=q4_skips)
+    p2 += q2q3_candidates(facts_after_p1, skips_collector=q2q3_skips)
     p2_winners, p2_conflicts = resolve_candidates(p2)
 
     facts_after_p2 = _materialize_facts_with_winners(facts_after_p1, p2_winners)
 
-    # Pass 3 — identity on Q4 keys
-    # Only run identity rules; only emit Candidates whose period is derived_q4
+    # Pass 3 — identity on derived single-quarter keys
+    # Only run identity rules; only emit Candidates whose period is a derived
+    # single quarter (derived_q2 / derived_q3 / derived_q4). Direct quarters
+    # (period_kind=quarter_duration) and YTD rows are excluded — those were
+    # already covered by Pass 1.
     p3_raw: list[Candidate] = []
     p3_raw += apply_identity_rules(facts_after_p2, calc_rules, qname_to_uni)
     p3_raw += apply_static_allowlist(facts_after_p2, version="GAAP")
-    p3 = [c for c in p3_raw if c.period_kind == "derived_q4"]
+    p3 = [c for c in p3_raw if c.period_kind in _DERIVED_QUARTER_KINDS]
     # bump chain_depth to reflect we built on Pass 2 outputs
     for c in p3:
         c.chain_depth = 3
@@ -145,6 +161,7 @@ def run_engine(
         "conflicts": p1_conflicts + p2_conflicts + p3_conflicts,
         "fact_conflicts": fact_dropped,
         "q4_skips": q4_skips,
+        "q2q3_skips": q2q3_skips,
         "stats": {
             "pass1_count":      len(p1_winners),
             "pass2_count":      len(p2_winners),
@@ -153,6 +170,7 @@ def run_engine(
             "conflicts":        len(p1_conflicts) + len(p2_conflicts) + len(p3_conflicts),
             "fact_skips":       len(fact_dropped),
             "q4_skips":         len(q4_skips),
+            "q2q3_skips":       len(q2q3_skips),
         },
     }
 

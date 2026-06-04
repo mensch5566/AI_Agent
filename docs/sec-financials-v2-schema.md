@@ -47,7 +47,9 @@
 | `fy_annual_duration` | 全年 duration | FY2024 revenue |
 | `ytd_duration` | YTD 累積 duration（10-Q 6M / 9M） | 9M_FY2025 cogs |
 | `instant_period_end` | 期末 instant（BS 一律用此） | Q4_FY2024 total_assets / FY2024 total_assets |
-| `derived_q4` | metrics-only：FY − Q1 − Q2 − Q3 還原值 | Q4_FY2024 revenue |
+| `derived_q2` | metrics-only：6M − Q1 單季還原值 | Q2_FY2025 net_cash_from_operating |
+| `derived_q3` | metrics-only：9M − 6M 單季還原值 | Q3_FY2025 net_cash_from_operating |
+| `derived_q4` | metrics-only：FY − 9M（或 FY − Q1Q2Q3）還原值 | Q4_FY2024 revenue |
 | `ttm_duration` | metrics-only（EL2）：quarterly 滾動 12 個月比率（ROE/ROA = TTM分子 ÷ 平均餘額），period 標 TTM 結束季 | Q3_FY2025 roe |
 
 ### 0.4 統一 unit 值
@@ -234,7 +236,7 @@ adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validat
 
 - **絕對值衍生（非比率）**：derive-analytics 第一個 numerator-only 絕對值 rule（rule_id `FCF_CFO_MINUS_CAPEX`）。statement=`CF`、`status=DERIVED_FROM_DISCLOSED`、寫 `sec_financial_metrics`（**不污染 facts**）。
 - **sign convention**：SEC `capital_expenditures`（`PaymentsToAcquirePropertyPlantAndEquipment`）存**正值** cash outflow → `FCF = CFO − capex`（**禁用** TWSE 的相加 pattern）。負 FCF（capex-heavy 季）正常輸出。
-- **period_kind**：CF-derived → duration（quarterly `quarter_duration ∪ derived_q4`；annual `fy_annual_duration`）。YTD（6M/9M）skip。
+- **period_kind**：CF-derived → duration（quarterly `quarter_duration ∪ derived_q2/q3/q4`；annual `fy_annual_duration`）。YTD（6M/9M）skip。
 - 只 GAAP（無 NON_GAAP CF facts，引擎自動 skip 該 version）。前端進 `CF_ROWS`（Cash from Operating / capex 之後），渲染為 derived cell（italic muted）。
 
 ---
@@ -289,7 +291,7 @@ unit 一律 `Pure`，分三種 display category：pct-style（margins / ETR，�
 - **`interest_coverage` = EBIT / interest_expense**，EBIT = `income_before_taxes + interest_expense`（**不是 operating_income 冒充**）
   - numerator terms（皆 IS，+1，required）：`income_before_taxes`、`interest_expense`
   - denominator：`interest_expense`（IS，required）
-  - period_kind：IS-derived → duration（quarterly `quarter_duration ∪ derived_q4`；annual `fy_annual_duration`）；unit `Pure`，顯示倍數 `x`
+  - period_kind：IS-derived → duration（quarterly `quarter_duration ∪ derived_q2/q3/q4`；annual `fy_annual_duration`）；unit `Pure`，顯示倍數 `x`
   - skip/NM policy：`interest_expense <= 0`（無利息費用 / 符號異常）→ skip（除以 0 或負無意義）
   - ⚠️ interest_expense 符號：需確認 parse 端存正值（費用）。EBIT = IBT + interest_expense 假設 interest_expense 為正。
   - ⚠️ convention caveat：這是教科書 / vendor 常見的 times-interest-earned 口徑，但 `income_before_taxes` 已包含 interest income 與其他非營業損益；現金多或非營業收入大的公司會被墊高，可能高估「營業償息能力」。若需要更保守的 operating view，未來另設 `operating_interest_coverage = operating_income / interest_expense`，不可混稱為標準 interest coverage。

@@ -43,7 +43,7 @@
 - **dimensional dedupe** 用 `member_key`（qname or normalized label）；`Data Center` ↔ `Datacenter` 自動合併
 - **pct value 一律存小數**（DB 0.392；UI fmtPct → 39.2%）
 - **unit canonical**：`USD_thousands` / `USD_millions` / `USD_per_share` / `millions_shares` / `Pure` 五種
-- **period_kind**：`quarter_duration` / `fy_annual_duration` / `ytd_duration` / `instant_period_end` / `derived_q4` / `ttm_duration`（後二者 metrics-only；`ttm_duration` = EL2 quarterly 滾動 12 月比率：`roe` / `roa` / `asset_turnover` / `dio` / `dso` / `dpo` / `ccc`）
+- **period_kind**：`quarter_duration` / `fy_annual_duration` / `ytd_duration` / `instant_period_end` / `derived_q2` / `derived_q3` / `derived_q4` / `ttm_duration`（`derived_q2/q3/q4` 與 `ttm_duration` 皆 metrics-only；`derived_q2`=6M−Q1、`derived_q3`=9M−6M、`derived_q4`=FY−9M 單季還原；`ttm_duration` = EL2 quarterly 滾動 12 月比率：`roe` / `roa` / `asset_turnover` / `dio` / `dso` / `dpo` / `ccc`）
 - **BS 一律 `instant_period_end`**；IS/CF 一律 duration。RATIO 分兩種：margin / ETR 是 IS-derived（duration），current_ratio / cash_ratio / 未來 debt_to_equity 是 BS-derived（`instant_period_end`，annual 時 `Q4_FYyyyy` remap 成 `FYyyyy`）
 - **uni_account 新增 / 改名 / 刪除**：先在 `sec-financials-v2-schema.md` 登記並打勾，未確認不可入庫
 

@@ -31,11 +31,13 @@ def test_intc_q4_revenue(intc_derived):
     assert row["unit"] == "USD_millions"
 
 
-def test_intc_q4_uses_q1q2q3_fallback(intc_derived):
-    # INTC's parse output doesn't include 9M_FY2025 YTD, so Q4 reconstruction
-    # falls back to FY - Q1 - Q2 - Q3. (AAOI/SNDK use FY-9M.)
-    # Was previously `Q4_FY_MINUS_9M in rule_ids` which is wrong for INTC.
+def test_intc_q4_uses_fy_minus_9m(intc_derived):
+    # 2026-06-03: INTC was re-parsed to the current contract (YTD first-class),
+    # so 9M_FY YTD is now disclosed for every fiscal year. Q4 reconstruction
+    # therefore prefers FY − 9M (priority 1), like AAOI/SNDK — the old
+    # FY − Q1Q2Q3 fallback no longer fires for INTC. (Pre-reparse INTC lacked
+    # 9M YTD and used the Q1Q2Q3 fallback; that history is now stale.)
     rule_ids = {r["provenance"]["rule_id"] for r in intc_derived["derived_metrics"]}
-    assert "Q4_FY_MINUS_Q1Q2Q3" in rule_ids
+    assert "Q4_FY_MINUS_9M" in rule_ids
     # CALC_LINKBASE optional — log but don't hard-fail (depends on facts coverage)
     print("rule_ids fired:", rule_ids)

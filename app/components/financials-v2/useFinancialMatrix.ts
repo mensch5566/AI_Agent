@@ -15,11 +15,11 @@ import { LONG_TAIL_ROLLUP_HINTS, ROWS_BY_STATEMENT, comparePeriods } from "./con
  *   cell: {cell?, status} — status='PENDING' if no DB row found
  *
  * Statement-aware period filtering (per docs/financials-data-rules.md §SEC v2):
- *   IS/CF + quarterly:       quarter_duration ∪ derived_q4
+ *   IS/CF + quarterly:       quarter_duration ∪ derived_q2 ∪ derived_q3 ∪ derived_q4
  *   IS/CF + annual:          fy_annual_duration
  *   BS + quarterly:          instant_period_end (period = Qx_FYyyyy)
  *   BS + annual:             instant_period_end (period = FYyyyy)
- *   RATIO + quarterly:       quarter_duration ∪ derived_q4 ∪ instant_period_end (Qx_FYyyyy) ∪ ttm_duration (Qx_FYyyyy, EL2 roe/roa)
+ *   RATIO + quarterly:       quarter_duration ∪ derived_q2/q3/q4 ∪ instant_period_end (Qx_FYyyyy) ∪ ttm_duration (Qx_FYyyyy, EL2 roe/roa)
  *   RATIO + annual:          fy_annual_duration ∪ instant_period_end (FYyyyy)
  *
  * RATIO mixes duration-based ratios (margins, ETR computed off IS) and
@@ -73,7 +73,16 @@ export function useFinancialData(ticker: string): UseFinancialMatrixState {
   return state;
 }
 
-const QUARTERLY_PKINDS_IS_CF: PeriodKind[] = ["quarter_duration", "derived_q4"];
+// Single-quarter IS/CF cells: directly disclosed (quarter_duration) plus
+// derive-base reconstructions from YTD cumulatives (derived_q2 = 6M−Q1,
+// derived_q3 = 9M−6M, derived_q4 = FY−9M). YTD-CF tickers (e.g. INTC) only
+// disclose 6M/9M, so their Q2/Q3 single-quarter flows come from derived_q2/q3.
+const QUARTERLY_PKINDS_IS_CF: PeriodKind[] = [
+  "quarter_duration",
+  "derived_q2",
+  "derived_q3",
+  "derived_q4",
+];
 const ANNUAL_PKINDS_IS_CF: PeriodKind[] = ["fy_annual_duration"];
 const BS_PKINDS: PeriodKind[] = ["instant_period_end"];
 

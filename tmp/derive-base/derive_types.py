@@ -62,7 +62,16 @@ def input_dict_from_fact(f: "FactRow") -> dict:
 
     Includes restatement-relevant lineage fields (accession_number,
     source_filing, period_end, source_account, xbrl_tag, decimals) when the
-    underlying FactRow carries them — see Codex round-2 finding F6."""
+    underlying FactRow carries them — see Codex round-2 finding F6.
+
+    Phase 3.4 (schema §8.1): also carries audit lineage so that derived
+    rows can claim `has_audited_inputs` and trace back to source cell_ids:
+      - audit_source       (canonical, normalized)
+      - audit_source_raw   (forensic raw legacy enum)
+      - audit_evidence     (whatever audit_evidence dict was set)
+    Does NOT include classification_source — that's row metadata, not
+    value provenance, and isn't relevant for derived value lineage.
+    """
     base = {
         "cell_id": f.cell_id,
         "uni_account": f.uni_account,
@@ -87,4 +96,9 @@ def input_dict_from_fact(f: "FactRow") -> dict:
             base[key] = val
     if base.get("decimals") is None:
         base["precision_unknown"] = True
+    # Phase 3.4: audit lineage (schema §8.1)
+    for key in ("audit_source", "audit_source_raw", "audit_evidence"):
+        val = prov.get(key)
+        if val is not None:
+            base[key] = val
     return base

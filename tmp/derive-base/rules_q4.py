@@ -22,6 +22,21 @@ from derive_types import Candidate, input_dict_from_fact
 if TYPE_CHECKING:
     from _shared.sec_json_adapter import FactRow  # noqa: F401
 
+# Phase 3.6: schema §8.3 — _concepts_match relaxation must use canonical
+# predicate (not truthy audit_source). audit.py already bootstraps the
+# AI_Agent _shared path; import here is safe at module load.
+try:
+    from _shared.audit_metadata import is_manual_audit_source  # noqa: E402
+except ImportError:
+    # Fallback for prototype tmp/derive-base runs where _shared isn't on path
+    def is_manual_audit_source(s):
+        return s in {
+            "MANUAL_AUDIT_FROM_OFFICIAL_FILING",
+            "MANUAL_RESTATEMENT_FROM_AMENDED_FILING",
+            "MANUAL_AUDIT_FROM_PDF",
+            "MANUAL_AUDIT_FROM_8K_PDF",
+        }
+
 _FY_RE = re.compile(r"^FY(\d{4})$")
 
 # Allowlist — Q4 = FY − 9M is mathematically valid only for additive duration
@@ -180,23 +195,28 @@ def _concepts_match(*facts) -> bool:
     Require the normalized concept identity (local-name of source_account
     or xbrl_tag) to match across all inputs.
 
-    Exception: NLM-audited rows (apply_audit-written) carry the PDF label as
-    `source_account` but the value's semantic identity is anchored by
-    `uni_account` (auditor confirmed). Different PDFs may use different
-    wording for the same line item across years (e.g. "Income before income
-    taxes" vs "Loss before income taxes") — treat all audit-sourced inputs
-    as concept-compatible.
+    Phase 3.6 / schema §8.3: NLM-audited rows (apply_audit-written) carry
+    the PDF label as `source_account` but the value's semantic identity is
+    anchored by `uni_account` (auditor confirmed). Different PDFs may use
+    different wording for the same line item across years (e.g. "Income
+    before income taxes" vs "Loss before income taxes") — treat all manual-
+    audit-sourced inputs as concept-compatible.
+
+    Uses `is_manual_audit_source` (canonical predicate) instead of legacy
+    truthy check so that AGENT_CLASSIFIED rows (classification, not value
+    audit) don't incorrectly trigger the relaxation.
     """
     def _local(s: str | None) -> str:
         return (s or "").rsplit(":", 1)[-1]
-    # If ANY input is audit-sourced, fall back to uni_account+unit identity
-    # (already enforced by caller). PDF-label variation is not a concept change.
-    if any(
-        (getattr(f, "provenance", None) or {}).get("audit_source") or
-        getattr(f, "audit_source", None)
-        for f in facts
-    ):
-        return True
+    # If ANY input is manual-audit-sourced, fall back to uni_account+unit
+    # identity (already enforced by caller). PDF-label variation is not a
+    # concept change for auditor-confirmed values.
+    for f in facts:
+        prov = getattr(f, "provenance", None) or {}
+        if (is_manual_audit_source(prov.get("audit_source"))
+                or is_manual_audit_source(prov.get("audit_source_raw"))
+                or is_manual_audit_source(getattr(f, "audit_source", None))):
+            return True
     concepts = set()
     for f in facts:
         concept = _local(getattr(f, "source_account", "")) or _local(getattr(f, "xbrl_tag", ""))

@@ -21,11 +21,22 @@ if not (AI_AGENT_ROOT / "Tools" / "research-tools" / "_shared").exists():
     AI_AGENT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(AI_AGENT_ROOT / "Tools" / "research-tools"))
 from _shared.cell_id import metrics_cell_id  # noqa: E402
+from _shared.audit_metadata import is_manual_audit_source  # noqa: E402
 
 from derive_types import Candidate, DerivedMetricRow
 
 
 def to_derived_metric_row(c: Candidate) -> DerivedMetricRow:
+    # Phase 3.5 (schema §8.2): aggregate audit lineage from input cells.
+    # A derived row "has audited inputs" iff any of its inputs carry a manual
+    # audit source. Front-end uses this flag to render audit indicators on
+    # derived metrics; downstream forensic can follow audited_input_cell_ids
+    # back to the source rows.
+    audited_input_cell_ids = [
+        i["cell_id"] for i in c.inputs
+        if is_manual_audit_source(i.get("audit_source"))
+        or is_manual_audit_source(i.get("audit_source_raw"))
+    ]
     provenance = {
         "rule_id":      c.rule_id,
         "rule_version": "derive-base/1.0",
@@ -34,6 +45,9 @@ def to_derived_metric_row(c: Candidate) -> DerivedMetricRow:
         "chained":      c.chained,
         "chain_depth":  c.chain_depth,
         "target_table": "sec_financial_metrics",
+        # Phase 3.5: audit lineage
+        "has_audited_inputs":     bool(audited_input_cell_ids),
+        "audited_input_cell_ids": audited_input_cell_ids,
     }
     if "role_uri" in c.extras:
         provenance["role_uri"] = c.extras["role_uri"]
@@ -92,21 +106,22 @@ def write_audit_md(out_dir: Path, ticker: str, result: dict, *, meta_extras: dic
     lines = [
         f"# {ticker} derive-base audit",
         "",
-        f"- Pass 1 (identity_on_direct):  {stats['pass1_count']}",
-        f"- Pass 2 (GAAP_Q4):             {stats['pass2_count']}",
-        f"- Pass 3 (identity_on_q4):      {stats['pass3_count']}",
-        f"- Final winners (after facts):  {stats['final_count']}",
-        f"- Hard tolerance conflicts:     {stats['conflicts']}",
-        f"- Facts-already-cover skips:    {stats['fact_skips']}",
-        f"- Q4 input-mismatch skips:      {stats.get('q4_skips', 0)}",
+        f"- Pass 1 (identity_on_direct):    {stats['pass1_count']}",
+        f"- Pass 2 (GAAP_quarters Q2/Q3/Q4):{stats['pass2_count']}",
+        f"- Pass 3 (identity_on_derived):   {stats['pass3_count']}",
+        f"- Final winners (after facts):    {stats['final_count']}",
+        f"- Hard tolerance conflicts:       {stats['conflicts']}",
+        f"- Facts-already-cover skips:      {stats['fact_skips']}",
+        f"- Q4 input-mismatch skips:        {stats.get('q4_skips', 0)}",
+        f"- Q2/Q3 input-mismatch skips:     {stats.get('q2q3_skips', 0)}",
         "",
     ]
-    # R4-F3: surface the Q4 candidates that were intentionally dropped
-    # (concept/unit mismatch) so a reviewer can tell missing != skipped.
-    q4_skips = result.get("q4_skips") or []
-    if q4_skips:
-        lines.append("## Q4 input-mismatch skips")
-        for s in q4_skips:
+    # R4-F3: surface the single-quarter candidates that were intentionally
+    # dropped (concept/unit mismatch) so a reviewer can tell missing != skipped.
+    quarter_skips = (result.get("q4_skips") or []) + (result.get("q2q3_skips") or [])
+    if quarter_skips:
+        lines.append("## Single-quarter input-mismatch skips (Q2/Q3/Q4)")
+        for s in quarter_skips:
             inputs_desc = ", ".join(
                 f"{i.get('period')}={i.get('source_account') or i.get('xbrl_tag') or '?'}@{i.get('unit')}"
                 for i in s["inputs"]

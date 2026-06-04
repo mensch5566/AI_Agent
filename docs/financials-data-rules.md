@@ -43,7 +43,7 @@ Design rationale: `tmp/financials-viewer-redesign-plan.md` §20 (v5.1)
 
 #### `sec_financial_metrics`
 
-- All derived values：Q4 single-quarter IS / CF（`derived_q4`）、margin ratios、TTM、average balances...
+- All derived values：Q2/Q3/Q4 single-quarter IS / CF（`derived_q2` / `derived_q3` / `derived_q4`）、margin ratios、TTM、average balances...
 - `status IN ('DERIVED_FROM_DISCLOSED', 'EXCLUDED_FROM_NONGAAP')`.
 - `provenance.formula` 必填，`provenance.inputs` 帶 cell_id 回指 facts。
 - **`NOT_DISCLOSED` 不寫進 DB**：由 API/read model 補 PENDING 給前端顯示 `—`。
@@ -67,7 +67,7 @@ Design rationale: `tmp/financials-viewer-redesign-plan.md` §20 (v5.1)
 4. **NOT_DISCLOSED 不寫 DB**：避免「pipeline 未跑」/「derive 失敗」/「公司未揭露」三種狀態混淆。
 5. **derive-analytics 可輸出非 RATIO 絕對值（Phase B）**：除了 `statement='RATIO'` 的比率，也可輸出落在原生 statement 的絕對值衍生（`free_cash_flow` → `statement='CF'`、`unit=USD`）。
    - **FCF sign**：SEC `capital_expenditures` 存**正值** cash outflow → `FCF = net_cash_from_operating − capital_expenditures`（**禁用** TWSE 相加 pattern）。負 FCF 正常。
-   - period_kind：CF-derived → duration（quarterly `quarter_duration ∪ derived_q4`；annual `fy_annual_duration`）；YTD skip。unit 沿用輸入 facts 的 per-ticker scale（多 unit 不一致則 skip）。
+   - period_kind：CF-derived → duration（quarterly `quarter_duration ∪ derived_q2/q3/q4`；annual `fy_annual_duration`）；YTD skip。unit 沿用輸入 facts 的 per-ticker scale（多 unit 不一致則 skip）。
    - payload key：canonical `analytics_metrics`（舊 `ratio_metrics` 過渡期相容）。
 
 ### Disclosed Ratio Routing (SEC v2)
@@ -110,8 +110,8 @@ adapter 必須將 raw unit 映射到下列五種之一（其他 → validation e
 
 | view | statement | 撈 period_kind |
 |---|---|---|
-| quarterly IS / CF | IS / CF | `quarter_duration` ∪ `derived_q4` |
-| quarterly RATIO — duration（margins / ETR）| RATIO | `quarter_duration` ∪ `derived_q4` |
+| quarterly IS / CF | IS / CF | `quarter_duration` ∪ `derived_q2` ∪ `derived_q3` ∪ `derived_q4` |
+| quarterly RATIO — duration（margins / ETR）| RATIO | `quarter_duration` ∪ `derived_q2` ∪ `derived_q3` ∪ `derived_q4` |
 | quarterly RATIO — BS-derived（current_ratio / cash_ratio）| RATIO | `instant_period_end`（period = Qx_FYyyyy） |
 | quarterly RATIO — TTM-derived（EL2 roe / roa / roic / asset_turnover / dio / dso / dpo / ccc / net_debt_to_ebitda）| RATIO | `ttm_duration`（period = Qx_FYyyyy = TTM 結束季） |
 | quarterly BS | BS | `instant_period_end`（period = Qx_FYyyyy） |

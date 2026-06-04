@@ -7,7 +7,9 @@ Canonical period_kind enum:
     fy_annual_duration     — full-year IS / CF / RATIO
     ytd_duration           — 10-Q YTD cumulative (6M / 9M)
     instant_period_end     — any period-end BS instant
-    derived_q4             — metrics-only: FY - Q1 - Q2 - Q3 reconstruction
+    derived_q2             — metrics-only: 6M - Q1 single-quarter reconstruction
+    derived_q3             — metrics-only: 9M - 6M single-quarter reconstruction
+    derived_q4             — metrics-only: FY - 9M (or FY - Q1Q2Q3) reconstruction
     ttm_duration           — metrics-only (EL2): quarterly trailing-12-month
                              ratios (ROE/ROA = TTM numerator / average balance)
 """
@@ -20,6 +22,8 @@ VALID_KINDS = {
     "fy_annual_duration",
     "ytd_duration",
     "instant_period_end",
+    "derived_q2",
+    "derived_q3",
     "derived_q4",
     "ttm_duration",
 }

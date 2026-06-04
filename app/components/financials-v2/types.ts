@@ -8,6 +8,8 @@ export type PeriodKind =
   | "fy_annual_duration"
   | "ytd_duration"
   | "instant_period_end"
+  | "derived_q2" // derive-base: 6M − Q1 single-quarter reconstruction (metrics-only)
+  | "derived_q3" // derive-base: 9M − 6M single-quarter reconstruction (metrics-only)
   | "derived_q4"
   | "ttm_duration"; // EL2: quarterly trailing-12-month ratios (ROE/ROA), metrics-only
 export type CellStatus =
