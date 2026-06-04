@@ -443,6 +443,123 @@ def normalize(ticker: str, sources: dict) -> A.NormalizedBatch:
     return batch
 
 
+# ---- Coverage hard gate (spec G4) -------------------------------------------
+#
+# 100% of display-eligible FACT rows (per ticker × statement IS/BS/CF) must carry
+# an ordinal, else we MUST NOT ship a half-ordered Statement view — fail loud and
+# block --apply (a human adds an NLM artifact line / audits before retry).
+#
+# Denominator = display-eligible FACT rows only. EXCLUDED:
+#   - YTD-duration rows (period_kind == "ytd_duration") — never a Statement row.
+#   - metric-only rows: derived single quarters (derived_q2/q3/q4) + absolute-value
+#     metrics (ebitda / free_cash_flow). These live in sec_financial_metrics and
+#     attach by uni_account on the frontend; the adapter never assigns them a
+#     statement ordinal (spec §16). They are not in batch.facts today, but the
+#     denominator excludes them explicitly so coverage_report is correct even if a
+#     caller passes a mixed row set.
+#   - display-INELIGIBLE synthetic SUM-of-multiple-PDF-lines rows
+#     (display_eligible is False) — they build no Statement-view row.
+
+_COVERAGE_STATEMENTS = ("IS", "BS", "CF")
+_YTD_PERIOD_KIND = "ytd_duration"
+# Mirrors sec_json_adapter._DERIVED_SINGLE_QUARTER_PKINDS (kept local so the gate
+# has no import-time dependency on a private adapter name).
+_DERIVED_SINGLE_QUARTER_PKINDS = frozenset({"derived_q2", "derived_q3", "derived_q4"})
+# Absolute-value metric-only uni_accounts (derive-analytics) that are never
+# Statement facts. Excluded from the coverage denominator by uni_account.
+_METRIC_ONLY_UNI = frozenset({"ebitda", "adjusted_ebitda", "free_cash_flow"})
+
+
+def _row_attr(row, name, default=None):
+    """Read `name` from a FactRow dataclass OR a plain dict (coverage_report is
+    spec'd to accept generic adapted rows)."""
+    if isinstance(row, dict):
+        return row.get(name, default)
+    return getattr(row, name, default)
+
+
+def _is_coverage_eligible(row) -> bool:
+    """True iff `row` belongs in the coverage denominator (display-eligible FACT)."""
+    if _row_attr(row, "statement") not in _COVERAGE_STATEMENTS:
+        return False
+    if _row_attr(row, "period_kind") == _YTD_PERIOD_KIND:
+        return False
+    if _row_attr(row, "period_kind") in _DERIVED_SINGLE_QUARTER_PKINDS:
+        return False
+    if _row_attr(row, "uni_account") in _METRIC_ONLY_UNI:
+        return False
+    if _row_attr(row, "display_eligible") is False:
+        return False
+    return True
+
+
+def coverage_report(rows) -> dict:
+    """Per-statement coverage of display-eligible FACT rows.
+
+    Returns ``{statement: {"eligible": int, "with_ordinal": int,
+    "missing": [{statement, uni_account, source_account, period}, ...]}}`` for
+    each statement (IS/BS/CF) that has at least one eligible row.
+    """
+    report: dict = {}
+    for row in rows:
+        if not _is_coverage_eligible(row):
+            continue
+        stmt = _row_attr(row, "statement")
+        bucket = report.setdefault(stmt, {"eligible": 0, "with_ordinal": 0, "missing": []})
+        bucket["eligible"] += 1
+        if _row_attr(row, "ordinal") is not None:
+            bucket["with_ordinal"] += 1
+        else:
+            bucket["missing"].append({
+                "statement": stmt,
+                "uni_account": _row_attr(row, "uni_account"),
+                "source_account": _row_attr(row, "source_account"),
+                "period": _row_attr(row, "period"),
+            })
+    return report
+
+
+def coverage_pct(bucket: dict) -> float:
+    """Coverage % for one statement bucket (100.0 when no eligible rows)."""
+    eligible = bucket.get("eligible", 0)
+    if eligible == 0:
+        return 100.0
+    return round(100.0 * bucket.get("with_ordinal", 0) / eligible, 1)
+
+
+def coverage_gate_blocks_apply(report: dict) -> bool:
+    """Apply-blocking predicate: True iff ANY statement is < 100% covered."""
+    return any(bucket.get("with_ordinal", 0) < bucket.get("eligible", 0)
+               for bucket in report.values())
+
+
+def print_coverage_report(report: dict) -> bool:
+    """Print the per-statement coverage section. Return True if gate passes
+    (all statements 100%)."""
+    blocks = coverage_gate_blocks_apply(report)
+    print(f"\n  === Coverage Gate (spec G4: display-eligible rows need ordinal) ===")
+    if not report:
+        print(f"    (no display-eligible fact rows)")
+        return True
+    for stmt in _COVERAGE_STATEMENTS:
+        bucket = report.get(stmt)
+        if bucket is None:
+            continue
+        pct = coverage_pct(bucket)
+        ok = bucket["with_ordinal"] >= bucket["eligible"]
+        mark = "✓" if ok else "✗"
+        line = (f"    [{mark}] {stmt} {pct}% "
+                f"({bucket['with_ordinal']}/{bucket['eligible']})")
+        if not ok:
+            line += f" — {len(bucket['missing'])} row(s) missing ordinal"
+        print(line)
+        if not ok:
+            for m in bucket["missing"]:
+                label = m.get("uni_account") or m.get("source_account") or "?"
+                print(f"        - {stmt} {label} ({m.get('period')})")
+    return not blocks
+
+
 def print_report(batch: A.NormalizedBatch) -> bool:
     """Print dry-run / real-run report. Return True if gate passes."""
     print(f"\n=== {batch.ticker} normalization report ===")
@@ -509,6 +626,14 @@ def print_report(batch: A.NormalizedBatch) -> bool:
             print(f"    key={c['dedupe_key']}")
             for v in c['values']:
                 print(f"      value={v['value']} dec={v.get('decimals')} src={v.get('source_doc')}")
+
+    # Coverage hard gate (spec G4): 100% of display-eligible fact rows per
+    # statement must carry an ordinal, else block --apply. Reported here (dry-run
+    # & real-run alike); folds into the overall gate result.
+    report = coverage_report(batch.facts)
+    coverage_pass = print_coverage_report(report)
+    if not coverage_pass:
+        gate_pass = False
 
     return gate_pass
 
