@@ -25,7 +25,7 @@
 | `scripts/upsert_sec_financials.py` | wire resolver into adapter; write display_label + ordinal; coverage hard gate | modify |
 | `Tools/research-tools/_shared/sec_json_adapter.py` | attach display_label/ordinal/provenance to each adapted fact row | modify |
 | `app/api/financials/[ticker]/route.ts` | return `display_label, ordinal` (source_account already returned) | modify |
-| `app/components/financials-v2/useFinancialMatrix.ts` | data-driven IS/BS/CF row builder (rowId contract, derived_q4 attach, display-ineligible synthetic) | modify |
+| `app/components/financials-v2/useFinancialMatrix.ts` | data-driven IS/BS/CF row builder (rowId contract, derived single-quarter `derived_q2/q3/q4` attach, display-ineligible synthetic) | modify |
 | `app/components/financials-v2/StatementMatrix.tsx` | render `display_label`; statement-scoped PDF number formatter | modify |
 | `app/components/financials-v2/constants.ts` | `KNOWN_TICKERS += "MU"`; `DERIVED_NONGAAP_ABSOLUTE_ROWS`; keep ROWS as label fallback | modify |
 | `docs/sec-financials-v2-schema.md`, `docs/financials-data-rules.md` | document display_label + ordinal contract | modify |
@@ -284,7 +284,7 @@ def test_uni_fallback_requires_unique_candidate():
 
 **Files:** Modify `Tools/research-tools/_shared/sec_json_adapter.py`; Modify `scripts/upsert_sec_financials.py`; Test `scripts/tests/test_upsert_display.py`.
 
-- [ ] **Step 1: Write failing test**: given a facts batch (mix of all 4 classes + a derived_q4 metric + an ebitda metric), `adapt_*` produces rows where each display-eligible fact has `display_label` + `ordinal` + `provenance.ordinal_source ∈ {xbrl,nlm}`; synthetic-SUM-of-components rows are flagged `display_eligible=False` (no statement row); ebitda/fcf metric-only rows carry no statement ordinal.
+- [ ] **Step 1: Write failing test**: given a facts batch (mix of all 4 classes + derived single-quarter metrics `derived_q2`/`derived_q3`/`derived_q4` + an ebitda metric), `adapt_*` produces rows where each display-eligible fact has `display_label` + `ordinal` + `provenance.ordinal_source ∈ {xbrl,nlm}`; synthetic-SUM-of-components rows are flagged `display_eligible=False` (no statement row); ebitda/fcf metric-only rows carry no statement ordinal.
 
 - [ ] **Step 2: Run fail. Step 3: Implement**: per fact → `classify_source_account` → resolve via Task 3–5 (tag_like / preserved_pdf_label / synthetic|null) → on `NeedsNlmOrder` read the audited NLM artifact (Task 6); set `display_label`, `ordinal`, `provenance` (`ordinal_source`, `ordinal_source_doc`, `ordinal_source_period`, `ordinal_match_method`, `ordinal_artifact_hash` when NLM). Mark synthetic-SUM-of-multiple-PDF-lines `display_eligible=False`. **Step 4: pass. Step 5: Commit.**
 
@@ -319,8 +319,8 @@ def test_uni_fallback_requires_unique_candidate():
   - rows are built from **direct facts** (not the hardcoded ROWS list);
   - `rowId = uni_account` for core; `uni_account + '|' + source_account` for long-tail bucket members;
   - rows sorted by `ordinal` (nulls last, stable); label = `display_label` (fallback `source_account`);
-  - a `derived_q4` metric cell **attaches by uni_account** to the display-eligible prototype (no `(uni|null)` ghost row);
-  - a synthetic-SUM display-ineligible core fact builds **no** row prototype, and `derived_q4` does NOT pull it back;
+  - a derived single-quarter metric cell (`derived_q2` / `derived_q3` / `derived_q4`) **attaches by uni_account** to the display-eligible prototype (no `(uni|null)` ghost row) — Q2/Q3/Q4 are all routed into the quarterly IS/CF view (matches `QUARTERLY_PKINDS_IS_CF` + `docs/financials-data-rules.md` §quarterly IS/CF), so the test must assert all three attach, not only Q4;
+  - a synthetic-SUM display-ineligible core fact builds **no** row prototype, and none of `derived_q2/q3/q4` pulls it back;
   - `ebitda`/`free_cash_flow` metric-only rows are **excluded** from IS/BS/CF.
 - [ ] **Step 2: Run fail. Step 3: Implement** `buildMatrix` for IS/BS/CF accordingly; label prototype = latest-10K/NLM matched fact (deterministic, not data order). **Step 4: pass + `tsc`. Step 5: Commit.**
 
@@ -360,5 +360,6 @@ def test_uni_fallback_requires_unique_candidate():
 
 ## Self-Review
 
-- **Spec coverage**: §13 architecture (P3 resolver) ✔; G1 NLM contract (Task 6/7) ✔; G2/G7 synthetic/null + canonical-miss (Task 5) ✔; G3 fail-closed (Task 4) ✔; G4 coverage gate (Task 9) ✔; G5 prototype + derived_q4 (Task 11) ✔; G6 4-class (Task 2) ✔; G8 uniqueness (Task 6) ✔; P2.3 derived subsection (Task 13) ✔; P3 plan note display-ineligible (Task 11) ✔; migration reuse ordinal (Task 1) ✔; KNOWN_TICKERS MU (Task 13) ✔; statement-scoped formatter (Task 12) ✔; docs in gate (Task 16) ✔; parse UNTOUCHED ✔ (no parse-skill file in the file map).
+- **Spec coverage**: §13 architecture (P3 resolver) ✔; G1 NLM contract (Task 6/7) ✔; G2/G7 synthetic/null + canonical-miss (Task 5) ✔; G3 fail-closed (Task 4) ✔; G4 coverage gate (Task 9) ✔; G5 prototype + derived single-quarter `derived_q2/q3/q4` attach (Task 11) ✔; G6 4-class (Task 2) ✔; G8 uniqueness (Task 6) ✔; P2.3 derived subsection (Task 13) ✔; P3 plan note display-ineligible (Task 11) ✔; migration reuse ordinal (Task 1) ✔; KNOWN_TICKERS MU (Task 13) ✔; statement-scoped formatter (Task 12) ✔; docs in gate (Task 16) ✔; parse UNTOUCHED ✔ (no parse-skill file in the file map).
+- **Data-layer delta since the plan was first written (2026-06-04, P2.1 shipped)**: `sec_financial_metrics` now carries `derived_q2`/`derived_q3` single-quarter IS/CF rows (not just `derived_q4`); the migration `20260604120000_add_derived_q2_q3_metrics.sql` is already applied; `useFinancialMatrix.ts` `QUARTERLY_PKINDS_IS_CF` already routes `derived_q2/q3/q4` into the quarterly view. Tasks 8 & 11 generalized accordingly (derived single-quarter attach must cover Q2/Q3/Q4). No other task is affected — the resolver/classifier/NLM/coverage-gate/formatter operate on FACTS display metadata, orthogonal to the derived metric period_kind.
 - **Open follow-up (not in this plan, separate ticket)**: why `build_separated` did not capture AAOI's BS/CF presentation networks (fixing it later lets AAOI drop the NLM ordering fallback).
