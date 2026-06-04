@@ -1,10 +1,15 @@
 "use client";
 
-import type { Cell, CellStatus } from "./types";
+import type { Cell, CellStatus, Statement } from "./types";
 import type { Matrix } from "./useFinancialMatrix";
 import { CHART_COLORS, NONGAAP_SPOTLIGHT_METRICS, NONGAAP_DERIVED_ROWS, NONGAAP_DERIVED_TOOLTIP, NONGAAP_DERIVED_TOOLTIP_FALLBACK, comparePeriods, fmtValue } from "./constants";
+import { fmtStatementValue } from "./statementFormat";
 
 type Props = {
+  /** Which statement is being rendered. IS/BS/CF use the PDF-faithful
+   *  statement-scoped formatter; RATIO keeps the existing `fmtValue` (percent /
+   *  multiple / days) so the Ratios view is unaffected. */
+  statement?: Statement;
   gaap: Matrix;
   nongaap?: Matrix;
   showNongaapColumn?: boolean;
@@ -47,11 +52,24 @@ function etrNotMeaningful(c: Cell): boolean {
   return !!ibt && typeof ibt.value === "number" && ibt.value <= 0;
 }
 
-function displayValue(c: Cell | undefined, signFlipConcepts: Set<string>): string {
+function displayValue(
+  c: Cell | undefined,
+  signFlipConcepts: Set<string>,
+  statement: Statement,
+): string {
   if (!c) return "—";
   if (etrNotMeaningful(c)) return "N/M";
   const flip = !!c.xbrl_tag && signFlipConcepts.has(c.xbrl_tag);
   const v = flip ? -Math.abs(c.value) : c.value;
+  // IS/BS/CF use the PDF-faithful statement-scoped formatter ($ whole numbers
+  // with separators + parens, EPS 2dp). It owns money + EPS units and returns
+  // null for anything else (e.g. a stray Pure/share cell), in which case we fall
+  // back to fmtValue. RATIO never touches the statement formatter so the Ratios
+  // view keeps its percent/multiple/days rendering.
+  if (statement !== "RATIO") {
+    const scoped = fmtStatementValue(v, c.unit);
+    if (scoped !== null) return scoped;
+  }
   if (v < 0) return `(${fmtValue(Math.abs(v), c.unit, c.uni_account)})`;
   return fmtValue(v, c.unit, c.uni_account);
 }
@@ -165,6 +183,7 @@ function statusTooltip(status: CellStatus, c?: Cell): string {
 }
 
 export function StatementMatrix({
+  statement = "IS",
   gaap,
   nongaap,
   showNongaapColumn = false,
@@ -321,7 +340,7 @@ export function StatementMatrix({
                           {gBadge}
                         </span>
                       )}
-                      {displayValue(c, flipSet)}
+                      {displayValue(c, flipSet, statement)}
                     </td>,
                   ];
                   // Whenever the table-wide Non-GAAP column is on, we MUST
@@ -350,7 +369,7 @@ export function StatementMatrix({
                               {nBadge}
                             </span>
                           )}
-                          {displayValue(ng, flipSet)}
+                          {displayValue(ng, flipSet, statement)}
                         </td>,
                       );
                     } else {

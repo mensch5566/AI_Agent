@@ -237,6 +237,7 @@ export default function Viewer({ ticker }: { ticker: string }) {
                 showNongaapColumn={showNongaapCol}
               />
               <StatementMatrix
+                statement={statement}
                 gaap={gaapMatrix}
                 nongaap={nongaapMatrix}
                 showNongaapColumn={showNongaapCol}
