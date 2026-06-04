@@ -30,3 +30,20 @@ def test_ambiguous_local_name_fails_closed():
     edges = _EDGES + [{"role_uri":"r/operations","child_qname":"intc:GrossProfit","order":6.0,"preferred_label":"x"}]
     with pytest.raises(AmbiguityError):
         resolve_label_ordinal("GrossProfit", "r/operations", edges, _LABELS)
+
+from presentation_resolver import resolve_via_uni, NeedsNlmOrder
+
+def test_uni_canonical_present():
+    edges = [{"role_uri":"r/cf","child_qname":"us-gaap:NetIncomeLoss","order":1.0,"preferred_label":"http://www.xbrl.org/2003/role/label"}]
+    labels = {"us-gaap:NetIncomeLoss":[{"role":"http://www.xbrl.org/2003/role/label","text":"Net income"}]}
+    lbl, ordn = resolve_via_uni("net_income", "CF", "r/cf", edges, labels)
+    assert lbl == "Net income" and ordn == 1.0
+
+def test_uni_canonical_miss_raises_needs_nlm():
+    # D&A reported as components → combined canonical absent → must NOT render SUM(...)
+    with pytest.raises(NeedsNlmOrder):
+        resolve_via_uni("depreciation_and_amortization", "CF", "r/cashflow", [], {})
+
+def test_uni_unknown_account_raises_needs_nlm():
+    with pytest.raises(NeedsNlmOrder):
+        resolve_via_uni("some_unmapped_account", "IS", "r/op", [], {})

@@ -86,3 +86,55 @@ def resolve_label_ordinal(concept_local, network_role, edges, labels):
         if role and role in texts:
             return (texts[role], ordinal)
     return (None, ordinal)
+
+
+class NeedsNlmOrder(Exception):
+    """Raised when a synthetic (``SUM(...)``) or null-source fact can't have its
+    canonical concept resolved in this filing's presentation network/labels —
+    either no known canonical mapping for the ``uni_account``, or the canonical
+    concept is not actually disclosed (absent from the selected network OR from
+    the labels map). Fail-closed safety property (spec G7): NEVER invent a label
+    or render ``SUM(...)``; route to the NLM ordering artifact / manual handling
+    instead."""
+
+
+# uni_account → bare canonical us-gaap local name. Minimal seed map (spec G2):
+# the primary candidate per the parse skill's IS/BS/CF tag maps. Hardcoded here
+# on purpose — do NOT import from the parse skill.
+CANONICAL_CONCEPT = {
+    "net_income": "NetIncomeLoss",
+    "shares_basic_millions": "WeightedAverageNumberOfSharesOutstandingBasic",
+    "shares_diluted_millions": "WeightedAverageNumberOfDilutedSharesOutstanding",
+    "depreciation_and_amortization": "DepreciationAndAmortization",
+    "selling_general_administrative": "SellingGeneralAndAdministrativeExpense",
+}
+
+
+def resolve_via_uni(uni_account, statement, network_role, edges, labels):
+    """Resolve PDF-faithful (display_label, ordinal) for a synthetic/null-source
+    fact by mapping its ``uni_account`` to its canonical XBRL concept and
+    resolving THAT within the selected presentation network. Spec G2, G7.
+
+    - ``canonical = CANONICAL_CONCEPT.get(uni_account)``; if no mapping →
+      raise :class:`NeedsNlmOrder`.
+    - The canonical concept must BE DISCLOSED: present as an edge in the SELECTED
+      network (``role_uri == network_role`` with ``child_qname`` local == canonical)
+      AND ``f"us-gaap:{canonical}"`` must key into ``labels``. If either is
+      missing → raise :class:`NeedsNlmOrder` (never invent a label / render SUM).
+    - Otherwise delegate to :func:`resolve_label_ordinal` on the canonical local.
+    """
+    canonical = CANONICAL_CONCEPT.get(uni_account)
+    if canonical is None:
+        raise NeedsNlmOrder(
+            f"no known canonical concept for uni_account {uni_account!r}")
+
+    in_network = any(
+        e.get("role_uri") == network_role
+        and _local(e["child_qname"]) == canonical
+        for e in edges)
+    if not in_network or f"us-gaap:{canonical}" not in labels:
+        raise NeedsNlmOrder(
+            f"canonical concept {canonical!r} for uni_account {uni_account!r} "
+            f"is not disclosed in network {network_role!r} / labels map")
+
+    return resolve_label_ordinal(canonical, network_role, edges, labels)
