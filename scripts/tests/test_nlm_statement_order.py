@@ -20,7 +20,10 @@ from nlm_statement_order import (  # noqa: E402
     bidirectional_unmatched,
     validate_artifact,
     read_audited_order,
+    produce_nlm_order,
 )
+
+import json
 
 
 # --------------------------------------------------------------------------- #
@@ -265,3 +268,38 @@ def test_read_audited_order_skips_lines_without_cell_id():
         ],
     }
     assert read_audited_order(art) == {"c1": 1, "c3": 3}
+
+
+# --------------------------------------------------------------------------- #
+# produce_nlm_order — pending_audit artifact producer (NLM call injected)
+# --------------------------------------------------------------------------- #
+def _stub_query(lines):
+    def q(ticker, statement):
+        return lines
+
+    return q
+
+
+def test_produce_writes_pending_audit_artifact(tmp_path):
+    facts = [{"uni_account": "u1", "display_label": "Total assets", "source_account": "Assets", "cell_id": "c1"}]
+    lines = [{"pdf_label": "Total assets", "page_or_section": "BS p.3"}]
+    art, unmatched = produce_nlm_order(
+        "AAOI", "BS", facts, _stub_query(lines), str(tmp_path),
+        source_doc="aaoi-10k.htm", accession="0001", period="FY2025",
+        form="10-K", page_or_section="BS")
+    assert art["status"] == "pending_audit" and art["signer"] is None
+    assert art["lines"][0]["ordinal"] == 1
+    assert art["lines"][0]["matched_cell_id"] == "c1"
+    # file written + valid + still pending (read_audited_order returns {})
+    written = json.loads((tmp_path / "AAOI_BS_nlm_order.json").read_text())
+    assert validate_artifact(written) == []
+    assert read_audited_order(written) == {}
+
+
+def test_produce_reports_unmatched(tmp_path):
+    facts = [{"uni_account": "u1", "display_label": "Total assets", "source_account": "Assets", "cell_id": "c1"}]
+    lines = [{"pdf_label": "Goodwill", "page_or_section": "BS"}]  # no matching fact
+    art, unmatched = produce_nlm_order("AAOI", "BS", facts, _stub_query(lines), str(tmp_path),
+        source_doc="d", accession="a", period="FY2025", form="10-K", page_or_section="BS")
+    assert art["lines"][0]["matched_cell_id"] is None
+    assert unmatched["pdf_without_fact"] and unmatched["fact_without_pdf_line"]

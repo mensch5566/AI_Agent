@@ -19,8 +19,10 @@ The downstream adapter (Task 8) calls ``read_audited_order`` on a
 
 from __future__ import annotations
 
+import json
+import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # Match-method labels, in priority order (first that yields a UNIQUE fact wins).
 METHOD_EXACT_DISPLAY = "exact_display_label"
@@ -30,6 +32,18 @@ METHOD_UNI_ACCOUNT = "uni_account"
 
 REASON_AMBIGUOUS_UNI = "ambiguous_uni_account"
 REASON_NO_FACT = "no_fact_for_pdf_line"
+
+# Confidence per match method: high-precision label/source matches are 1.0;
+# the uni_account fallback tier is intrinsically weaker (display_label and
+# source_account both failed), so it gets a reduced confidence. Unmatched
+# lines carry no confidence (None).
+CONFIDENCE_HIGH = 1.0
+CONFIDENCE_UNI = 0.5
+_HIGH_CONFIDENCE_METHODS = {
+    METHOD_EXACT_DISPLAY,
+    METHOD_NORMALIZED_DISPLAY,
+    METHOD_SOURCE_ACCOUNT,
+}
 
 VALID_STATUSES = {"pending_audit", "audited"}
 VALID_STATEMENTS = {"IS", "BS", "CF"}
@@ -242,3 +256,101 @@ def read_audited_order(artifact: Dict[str, Any]) -> Dict[str, int]:
         if cell_id is not None:
             order[cell_id] = line.get("ordinal")
     return order
+
+
+def _confidence_for(method: Optional[str]) -> Optional[float]:
+    """Map a match_method to a confidence score (None when unmatched)."""
+    if method in _HIGH_CONFIDENCE_METHODS:
+        return CONFIDENCE_HIGH
+    if method == METHOD_UNI_ACCOUNT:
+        return CONFIDENCE_UNI
+    return None
+
+
+def produce_nlm_order(
+    ticker: str,
+    statement: str,
+    facts: List[Dict[str, Any]],
+    nlm_query_fn: Callable[[str, str], List[Dict[str, Any]]],
+    out_dir: str,
+    *,
+    source_doc: str,
+    accession: str,
+    period: str,
+    form: str,
+    page_or_section: str,
+) -> Tuple[Dict[str, Any], Dict[str, List[Any]]]:
+    """Build a ``pending_audit`` NLM ordering artifact (spec G1/G7/G8).
+
+    This is the runtime entry point. The NLM query is INJECTED via
+    ``nlm_query_fn`` — a callable ``(ticker, statement) -> [pdf_line, ...]``
+    returning PDF lines top-to-bottom, each ``{"pdf_label": str,
+    "page_or_section": str (optional)}``. At runtime the caller injects a
+    function that wraps the NLM MCP query; tests inject a stub. This producer
+    NEVER imports an MCP client and never touches the network / Supabase.
+
+    Steps:
+      1. ``lines_raw = nlm_query_fn(ticker, statement)``.
+      2. For each raw line, assign 1-based ``ordinal`` and bind it to a fact
+         via ``match_pdf_line_to_fact(... display_eligible=True)``. Confidence
+         is 1.0 for label/source matches, 0.5 for the uni_account tier, None
+         when unmatched.
+      3. Assemble the artifact with ``status="pending_audit"`` and
+         ``signer=None`` — an unaudited artifact MUST never feed production.
+      4. ``validate_artifact`` must pass (else ``ValueError``).
+      5. Write to ``{out_dir}/{TICKER}_{STATEMENT}_nlm_order.json`` (pretty
+         JSON) and RETURN ``(artifact, bidirectional_unmatched(...))``.
+
+    Returns ``(artifact, unmatched_report)``.
+    """
+    lines_raw = nlm_query_fn(ticker, statement)
+
+    artifact_lines: List[Dict[str, Any]] = []
+    for idx, raw in enumerate(lines_raw, start=1):
+        match = match_pdf_line_to_fact(raw, facts, display_eligible=True)
+        method = match["match_method"]
+        artifact_lines.append(
+            {
+                "ordinal": idx,
+                "pdf_label": raw.get("pdf_label"),
+                "matched_cell_id": match["matched_cell_id"],
+                "match_method": method,
+                "confidence": _confidence_for(method),
+                "unmatched_reason": match["unmatched_reason"],
+            }
+        )
+
+    artifact: Dict[str, Any] = {
+        "source_doc": source_doc,
+        "accession": accession,
+        "period": period,
+        "form": form,
+        "page_or_section": page_or_section,
+        "statement": statement,
+        "status": "pending_audit",
+        "signer": None,
+        "lines": artifact_lines,
+    }
+
+    errors = validate_artifact(artifact)
+    if errors:
+        raise ValueError(
+            "produce_nlm_order built an invalid artifact: " + "; ".join(errors)
+        )
+
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"{ticker.upper()}_{statement.upper()}_nlm_order.json")
+    with open(out_path, "w", encoding="utf-8") as fh:
+        json.dump(artifact, fh, indent=2, ensure_ascii=False)
+
+    unmatched = bidirectional_unmatched(lines_raw, facts)
+
+    n_pdf = len(unmatched["pdf_without_fact"])
+    n_fact = len(unmatched["fact_without_pdf_line"])
+    print(
+        f"[produce_nlm_order] {ticker.upper()} {statement.upper()} → {out_path} "
+        f"(pending_audit, {len(artifact_lines)} lines; "
+        f"unmatched: {n_pdf} pdf-without-fact, {n_fact} fact-without-pdf-line)"
+    )
+
+    return artifact, unmatched
