@@ -176,3 +176,77 @@ EPS detection reuses the existing `isEps()` / per-row unit check (`USD_per_share
 - Per-period (column-specific) presentation ordering (we use latest filing's network for one stable
   order; revisit only if a filer materially re-orders its statement mid-history).
 - Backfilling display metadata for tickers not in the current 5-ticker set (done when each is onboarded).
+
+## 12. Codex round-1 review — accepted findings & spec deltas (2026-06-04)
+
+Codex reviewed v1; all 6 P1/P2 + 3 P3 findings independently **verified true** against the 5-ticker
+local parse output and the repo. No pushback — Claude's own verification additionally escalated the
+AAOI coverage risk. The following deltas **amend** the sections above and are binding for v2.
+
+**P1.1 — `source_account` is a BARE local name, not a prefixed qname. (verified: direct
+`child_qname == source_account` match = 0 for ALL 5 tickers.)** §4.3 step 1 is replaced by a **qname
+resolver**: facts store `GrossProfit`; `edges_pre.child_qname` and `labels.json` keys are
+`us-gaap:GrossProfit`. Match on the **local name** (`child_qname.split(':')[-1] == source_account`).
+Namespace ambiguity (same local name under >1 namespace) is resolved **within the chosen presentation
+network** (§4.1), which already scopes to one statement; if still ambiguous, prefer `us-gaap` then the
+filer extension. Same local-name resolution applies to the `labels.json` lookup.
+
+**P1.2 + P2.6 — row identity contract (this was under-specified; would have broken quarterly IS/CF).**
+`derived_q4` single-quarter values live in `sec_financial_metrics` keyed by `uni_account` with **no
+`source_account`/`ordinal`**, and quarterly IS/CF must show `quarter_duration ∪ derived_q4`
+(`useFinancialMatrix.ts`). The row builder therefore:
+- **Row prototypes come from DIRECT FACTS only** (they carry `source_account` + `uni_account` + display
+  metadata). A metric cell never creates a row.
+- **`rowId` = `uni_account` for core rows** (so a `derived_q4` metric cell attaches to its PDF row by
+  `uni_account`); **`rowId` = `uni_account + '|' + source_account` for long-tail bucket members** (many
+  share one bucket `uni_account`, so they need `source_account` to disambiguate — long-tail has no
+  `derived_q4` attach problem because those Q4 values are bucket-less).
+- **Metric-only rows with no fact prototype (ebitda, free_cash_flow) are EXCLUDED from IS/BS/CF**, not
+  rendered as `(uni_account|null)` ghost rows. Exclusion is by "no direct-fact prototype", NOT "is a
+  metric" (derived_q4 metrics still attach).
+- `Matrix.rows[].key` stays a single string (`rowId`); chart selection / cellMap / tooltip / long-tail
+  must consume `rowId` + a separate `displayLabel`, never assume `key === uni_account`.
+
+**P2.3 — EBITDA/FCF relocation data path. (verified: `ebitda` in `IS_ROWS:44`, `free_cash_flow` in
+`CF_ROWS:109`; `RATIO_ROWS` has only the margins; RATIO builder filters `statement==="RATIO"`.)** Add an
+explicit **`DERIVED_NONGAAP_ABSOLUTE_ROWS`** subsection in the analytics/Ratios area that reads the
+`ebitda` (statement=IS) + `free_cash_flow` (statement=CF) metric rows directly (they are NOT
+`statement="RATIO"`, so the existing RATIO builder will not pick them up). Remove their inline IS/CF
+placement only.
+
+**P2.4 — migration discipline (T3) + reuse existing column. (verified: `sec_financial_facts` already
+has `ordinal smallint -- presentation order` at migration `20260516234808_…:7`, currently unpopulated.)**
+- **Reuse the existing `ordinal` column** for presentation order (do NOT add `display_ordinal`).
+- Add only **`display_label TEXT`** via a **proper SQL migration file** under `supabase/migrations/`
+  (SSOT) with a `-- rollback` block — NOT the Supabase Management API console. Update
+  `docs/sec-financials-v2-schema.md` + `docs/financials-data-rules.md` in the same change.
+
+**P2.5 — network selection must be robust + a HARD GATE. (verified: AAOI role_uris are custom +
+date-prefixed, e.g. `http://ao-inc.com/20260331/role/statement-condensed-consolidated-statements-of-
+operations-unaudited`; plain `BalanceSheets`/`CashFlows` keywords miss them.)**
+- Network match is **case-insensitive + hyphen/underscore-insensitive on the role local part**:
+  IS = contains `operations` or `income` (and `statement`); BS = `balancesheet` or `financialposition`;
+  CF = `cashflow`. **Exclude** `parenthetical`, `details`, `note`, `reconciliation`. Pick the latest
+  filing's matching network; tie-break by largest child∩facts overlap.
+- **HARD GATE**: for every (ticker × statement) the resolver must select **exactly one** primary network
+  and reach a **coverage threshold** (≥ X% of that ticker-statement's direct facts get a non-null
+  `ordinal`; threshold TBD in plan, e.g. 90%). Below threshold or zero-network → **FAIL the upsert
+  loudly**, never silently ship null `ordinal`.
+- **AAOI risk (Claude escalation)**: even after the qname resolver, a residual coverage gap may remain
+  for AAOI. Rollout is therefore **per-ticker, gated**: ship the tickers that pass; if AAOI fails the
+  gate, **defer AAOI** and open a follow-up to investigate its presentation-linkbase capture — do NOT
+  weaken the gate to force it through.
+
+**P2.2 (Claude refine) — ordering source across annual/quarterly.** §4.2's "latest filing" is refined to
+**latest 10-K (annual) network as primary** (the full statement), **supplemented by the latest 10-Q
+network** for any concept present only in 10-Q. This prevents annual-only lines from being null-ordinal
+appended (Codex's open concern on my Q3 answer).
+
+**P3 deltas**: (a) add `"MU"` to `KNOWN_TICKERS` (`constants.ts:9` currently `["AAOI","INTC","LITE",
+"SNDK"]` — MU is upserted but unlisted in the UI). (b) PDF number formatting is a **statement-scoped
+formatter**, not a global `fmtValue` edit (avoid collateral changes to chart/ratio rendering). (c)
+`docs/financials-data-rules.md` + `docs/sec-financials-v2-schema.md` are in the implementation gate
+(schema + display-contract change).
+
+**Status**: v2 (this §12 supersedes the conflicting parts of §4–§8). Awaiting human approval; optional
+Codex round-2 on v2 before writing-plans.
