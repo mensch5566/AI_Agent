@@ -66,6 +66,13 @@
 
 adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validation error。
 
+### 0.5 sec_financial_facts 表欄位
+
+| column | type | nullable | 說明 |
+|---|---|---|---|
+| `display_label` | `text` | ✓ | PDF-faithful line label resolved at upsert from labels.json preferred_label role; null → frontend falls back to source_account |
+| `ordinal` | `smallint` | | Presentation ORDER from XBRL labels (added 20260516234808); reused for PDF display sequencing |
+
 ---
 
 ## 1. Income Statement (IS)
