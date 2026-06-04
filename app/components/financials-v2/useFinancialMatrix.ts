@@ -103,6 +103,49 @@ const TTM_RATIO_ROWS = new Set<string>([
   "net_debt_to_ebitda",
 ]);
 
+// Absolute-value metric-only uni_accounts (derive-analytics) that are NOT
+// disclosed statement lines — they live in the Ratios/Derived subsection, never
+// inline in IS/BS/CF (spec §P2.3). Mirrors scripts/upsert_sec_financials.py
+// `_METRIC_ONLY_UNI`. A metric cell for one of these must never create a row.
+const METRIC_ONLY_UNI = new Set<string>(["ebitda", "adjusted_ebitda", "free_cash_flow"]);
+
+// Derived single-quarter reconstructions (derive-base): they carry no
+// source_account/ordinal and ATTACH to a display-eligible prototype row by
+// uni_account — they never create a prototype themselves (spec §P1.2/G5).
+const DERIVED_SINGLE_QUARTER_PKINDS = new Set<PeriodKind>([
+  "derived_q2",
+  "derived_q3",
+  "derived_q4",
+]);
+
+// A long-tail bucket uni_account holds many source_accounts under one key, so a
+// bucket member's rowId must include source_account to stay distinct.
+function isLongTailUni(uni: string): boolean {
+  return uni.endsWith("_long_tail");
+}
+
+// rowId contract: core rows key on uni_account so a derived single-quarter
+// metric (bucket-less, keyed only by uni_account) can attach to its PDF row;
+// long-tail bucket members key on uni_account|source_account to disambiguate the
+// many source_accounts that share one bucket uni_account (spec §P1.2/P2.6).
+function rowIdOf(uni: string, sourceAccount: string | null): string {
+  return isLongTailUni(uni) && sourceAccount != null ? `${uni}|${sourceAccount}` : uni;
+}
+
+// A direct fact is a display-eligible row prototype iff it carries resolved
+// display metadata (display_label and/or ordinal). A display-INELIGIBLE
+// synthetic SUM core (e.g. selling_general_administrative = SUM(S&M+G&A)) has
+// BOTH display_label and ordinal null — it builds no row prototype, and a
+// derived single-quarter cell must not pull it back via the shared uni_account
+// (spec §G7, plan note). Metric cells are never prototypes (handled separately).
+function isDisplayEligiblePrototype(c: Cell): boolean {
+  if (c.source_table !== "facts") return false;
+  if (METRIC_ONLY_UNI.has(c.uni_account)) return false;
+  // Long-tail member needs a source_account to form a distinct rowId/label.
+  if (isLongTailUni(c.uni_account) && c.source_account == null) return false;
+  return c.display_label != null || c.ordinal != null;
+}
+
 function isFyPeriod(p: string): boolean {
   return /^FY\d{4}$/.test(p);
 }
@@ -123,8 +166,6 @@ export function buildMatrix(
   version: Version,
   frequency: Frequency,
 ): Matrix {
-  const rows = ROWS_BY_STATEMENT[statement];
-
   // Year-end balance-sheet snapshots are stored as `Q4_FYyyyy` / instant_period_end
   // (a balance sheet is point-in-time; the fiscal-year-end snapshot IS the
   // Q4-end snapshot — there is no separate `FYyyyy` instant row). In annual
@@ -182,13 +223,143 @@ export function buildMatrix(
   const periodSet = new Set<string>(filtered.map((c) => c.period));
   const periods = Array.from(periodSet).sort(comparePeriods);
 
-  // Long-tail bucket rows by design hold many source_accounts under the same
-  // uni_account (e.g. operating_expense_long_tail = G&A + S&M when SG&A
-  // sub-accounts are split by the issuer). Detect those so we sum across
-  // children rather than last-write-wins.
+  // -------------------------------------------------------------------------
+  // RATIO statement: unchanged — fixed RATIO_ROWS dictionary, summed long-tail
+  // (RATIO has no long-tail buckets today, but keep the dictionary path intact;
+  // this task only restructures IS/BS/CF row building — spec §8 "RATIO as-is").
+  // -------------------------------------------------------------------------
+  if (statement === "RATIO") {
+    return buildDictionaryMatrix(filtered, statement, periods);
+  }
+
+  // -------------------------------------------------------------------------
+  // IS / BS / CF: data-driven PDF-faithful rows. Each row prototype comes from
+  // a DIRECT, display-eligible fact (carries source_account + display metadata);
+  // rows are ordered by `ordinal` (nulls last, stable) with label = display_label
+  // (fallback source_account). Derived single-quarter metrics (derived_q2/q3/q4)
+  // attach by uni_account to the matching prototype row — they never create a
+  // ghost row, and they never resurrect a display-ineligible synthetic core.
+  // (spec §P1.2/P2.6/G5/G2.)
+  // -------------------------------------------------------------------------
+
+  // Pass 1: build row prototypes from display-eligible direct facts.
+  // Map rowId -> prototype state. `seq` records first-seen order so the sort is
+  // stable for equal/null ordinals. `protoPeriod`/`protoOrdinal`/`protoLabel`
+  // are chosen deterministically (latest period wins) so a row's label/ordinal
+  // don't depend on cell iteration order (spec §G5).
+  type Proto = {
+    rowId: string;
+    uni: string;
+    seq: number;
+    ordinal: number | null;
+    label: string;
+    protoPeriod: string; // period that currently owns label/ordinal
+    isLongTail: boolean;
+  };
+  const protos = new Map<string, Proto>();
+  let seqCounter = 0;
+  for (const c of filtered) {
+    if (!isDisplayEligiblePrototype(c)) continue;
+    const rowId = rowIdOf(c.uni_account, c.source_account);
+    const label = c.display_label ?? c.source_account ?? c.uni_account;
+    const existing = protos.get(rowId);
+    if (!existing) {
+      protos.set(rowId, {
+        rowId,
+        uni: c.uni_account,
+        seq: seqCounter++,
+        ordinal: c.ordinal,
+        label,
+        protoPeriod: c.period,
+        isLongTail: isLongTailUni(c.uni_account),
+      });
+      continue;
+    }
+    // Deterministic prototype: the latest period's fact owns label + ordinal.
+    if (comparePeriods(c.period, existing.protoPeriod) > 0) {
+      existing.protoPeriod = c.period;
+      existing.ordinal = c.ordinal;
+      existing.label = label;
+    }
+  }
+
+  // Order rows by ordinal asc (nulls last), tie-broken by first-seen seq (stable).
+  const orderedProtos = Array.from(protos.values()).sort((a, b) => {
+    const ao = a.ordinal;
+    const bo = b.ordinal;
+    if (ao == null && bo == null) return a.seq - b.seq;
+    if (ao == null) return 1; // nulls last
+    if (bo == null) return -1;
+    if (ao !== bo) return ao - bo;
+    return a.seq - b.seq;
+  });
+
+  // For derived single-quarter attach we resolve a uni_account back to the
+  // display-eligible prototype rowId. A display-INELIGIBLE synthetic core never
+  // entered `protos`, so its uni_account has no entry here and a derived cell for
+  // it is correctly dropped (not pulled back into the statement). Core rowId ===
+  // uni_account; long-tail buckets are not the attach target for bucket-less
+  // derived metrics (those are keyed by uni_account only), so map only core unis.
+  const uniToCoreRowId = new Map<string, string>();
+  for (const p of orderedProtos) {
+    if (!p.isLongTail) uniToCoreRowId.set(p.uni, p.rowId);
+  }
+
+  // Initialize the pivot grid.
+  const cellMap: Record<string, Record<string, MatrixCell>> = {};
+  for (const p of orderedProtos) {
+    cellMap[p.rowId] = {};
+    for (const per of periods) cellMap[p.rowId][per] = { status: "PENDING" };
+  }
+
+  // Pass 2: fill cells.
+  for (const c of filtered) {
+    // Metric-only absolute-value rows (ebitda / fcf) never render inline.
+    if (METRIC_ONLY_UNI.has(c.uni_account)) continue;
+
+    if (DERIVED_SINGLE_QUARTER_PKINDS.has(c.period_kind)) {
+      // Attach by uni_account to its display-eligible core prototype. If no such
+      // prototype exists (display-ineligible synthetic core), drop it — never
+      // create a ghost row, never pull the synthetic back.
+      const rowId = uniToCoreRowId.get(c.uni_account);
+      if (rowId == null) continue;
+      if (cellMap[rowId]?.[c.period] === undefined) continue;
+      cellMap[rowId][c.period] = { cell: c, status: c.status };
+      continue;
+    }
+
+    // Direct facts (and any other allowed cell): write to their own prototype
+    // row. Only display-eligible facts have a row; everything else is dropped.
+    const rowId = rowIdOf(c.uni_account, c.source_account);
+    if (cellMap[rowId]?.[c.period] === undefined) continue;
+    cellMap[rowId][c.period] = { cell: c, status: c.status };
+  }
+
+  return {
+    periods,
+    rows: orderedProtos.map((p) => ({
+      key: p.rowId,
+      label: p.label,
+      kind: p.isLongTail ? "long_tail_bucket" : "core",
+      indent: 0,
+    })),
+    cells: cellMap,
+  };
+}
+
+// Legacy fixed-dictionary matrix builder, retained for RATIO (and as a label
+// fallback path). Rows come from ROWS_BY_STATEMENT; long-tail buckets sum their
+// children with rollup suppression. IS/BS/CF no longer use this — they are
+// data-driven off the ticker's actual disclosed facts (Task 11).
+function buildDictionaryMatrix(
+  filtered: Cell[],
+  statement: Statement,
+  periods: string[],
+): Matrix {
+  const rows = ROWS_BY_STATEMENT[statement];
+
   const longTailKeys = new Set(rows.filter((r) => r.kind === "long_tail_bucket").map((r) => r.key));
 
-  // Pivot
   const cellMap: Record<string, Record<string, MatrixCell>> = {};
   for (const row of rows) {
     cellMap[row.key] = {};
@@ -196,13 +367,9 @@ export function buildMatrix(
       cellMap[row.key][p] = { status: "PENDING" };
     }
   }
-  // Buffer for long-tail aggregation: [uni_account][period] -> list of children
   const longTailBuf: Record<string, Record<string, Cell[]>> = {};
   for (const c of filtered) {
-    if (!cellMap[c.uni_account]) {
-      // Not in dictionary — skip (parser produced an unknown uni_account)
-      continue;
-    }
+    if (!cellMap[c.uni_account]) continue;
     if (!cellMap[c.uni_account][c.period]) continue;
     if (longTailKeys.has(c.uni_account)) {
       (longTailBuf[c.uni_account] ??= {})[c.period] ??= [];
@@ -211,10 +378,6 @@ export function buildMatrix(
       cellMap[c.uni_account][c.period] = { cell: c, status: c.status };
     }
   }
-  // Aggregate long-tail buckets: sum value * weight; keep child list in provenance.
-  // Suppress children whose xbrl_tag rolls up into a core row that already has a
-  // populated cell for the same period (double-display avoidance — see
-  // `LONG_TAIL_ROLLUP_HINTS` in constants.ts and the SG&A long-tail design note).
   for (const k of longTailKeys) {
     const byPeriod = longTailBuf[k];
     if (!byPeriod) continue;
@@ -235,13 +398,8 @@ export function buildMatrix(
         }
         return true;
       });
-      if (children.length === 0) {
-        // All children rolled up into populated core rows; leave the bucket
-        // cell as PENDING ("—") to avoid visually duplicating the core row.
-        continue;
-      }
+      if (children.length === 0) continue;
       const summed = children.reduce((s, c) => s + c.value * (c.weight ?? 1), 0);
-      // Use first child as template for shape; override value + tag + provenance.
       const base = children[0];
       const synthetic: Cell = {
         ...base,
