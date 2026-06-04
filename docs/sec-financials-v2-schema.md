@@ -271,7 +271,7 @@ unit 一律 `Pure`，分三種 display category：pct-style（margins / ETR，�
 | `dio` | GAAP | `365 × avg_inventories / cost_of_goods_sold_TTM`（EL2，days）| ✅ |
 | `dpo` | GAAP | `365 × avg_accounts_payable / cost_of_goods_sold_TTM`（EL2，days，COGS 為採購代理）| ✅ |
 | `ccc` | GAAP | `dio + dso − dpo`（EL2，days，可為負；缺任一 component → skip）| ✅ |
-| `revenue_yoy` | GAAP | `(revenue − revenue_year_ago) / revenue_year_ago`（EL2 YoY，pct；prior>0 else skip；quarterly=quarter_duration/derived_q4、annual=fy_annual_duration，**非 ttm**；period_start=None）| ✅ |
+| `revenue_yoy` | GAAP | `(revenue − revenue_year_ago) / revenue_year_ago`（EL2 YoY，pct；prior>0 else skip；quarterly=quarter_duration/derived_q2/q3/q4、annual=fy_annual_duration，**非 ttm**；period_start=None）| ✅ |
 | `net_income_yoy` | GAAP | `(net_income − year_ago) / year_ago`（同上）| ✅ |
 | `eps_diluted_yoy` | GAAP | `(eps_diluted − year_ago) / year_ago`（同上；EPS 無 derived_q4 → Q4 不出）| ✅ |
 

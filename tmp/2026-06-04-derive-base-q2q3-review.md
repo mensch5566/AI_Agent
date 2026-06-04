@@ -116,9 +116,17 @@ layout (derive-analytics is). Its tests still live in the prototype mirror. A se
   output rows: INTC 82 / AAOI 159 / SNDK 62 / MU 369 / LITE 367.
 - **Local re-derive counts (derived_q2 / derived_q3)**: INTC 21/21, AAOI 33/34, SNDK 0/21, MU 89/76,
   LITE 91/95. (SNDK derived_q2=0 — flagged below, needs explanation before apply.)
-- **Analytics row deltas after TTM fix**: INTC 75→77, MU 521→536 (new Q2/Q3 TTM windows); AAOI 278 /
-  SNDK 53 / LITE 664 unchanged by the TTM fix (AAOI/SNDK chronic-loss → ROE/ROIC skip; LITE unchanged —
-  to confirm).
+- **TTM-fix benefit (empirical with/without `_SINGLE_Q_KINDS` diff, corrects an earlier overclaim —
+  Codex P3)**: the *visible* derived_q2/q3-labelled analytics rows are **EL1 free_cash_flow** (per-period),
+  NOT TTM (e.g. INTC's 75→77 delta = 2 FCF rows). The real TTM benefit shows up as `ttm_duration` rows
+  whose trailing-4 window *spans* derived Q2/Q3: running `compute_crossperiod_metrics` with vs without
+  derived_q2/q3 in `_SINGLE_Q_KINDS` yields **INTC +2, MU +15 NEW `net_debt_to_ebitda` ttm rows**
+  (their inline EBITDA windows need the derived Q2/Q3 D&A); **LITE/AAOI/SNDK +0** (LITE discloses direct
+  single quarters → already covered; AAOI chronic-loss → net_debt_to_ebitda skips; SNDK history too
+  short). roe/roa/roic did NOT gain for these tickers (their windows lacked balance endpoints or the
+  loss-skip applied), so the fix is **not purely latent** but its current realized effect is confined to
+  `net_debt_to_ebitda` on INTC/MU. The general correctness (any IS/CF TTM numerator) is covered by the
+  unit tests, not by these counts.
 - **INTC spot-check**: Q2_FY2025 OCF = 2050.0 = 6M(2863, SOURCE_OF_TRUTH) − Q1(813, SOURCE_OF_TRUTH),
   same xbrl_tag `NetCashProvidedByUsedInOperatingActivities`. Q3 OCF=2546, capex Q2/Q3=3550/2425, D&A
   Q2/Q3=3013/2992 — all `rule_id=Q2_6M_MINUS_Q1`/`Q3_9M_MINUS_6M`.
@@ -155,3 +163,41 @@ layout (derive-analytics is). Its tests still live in the prototype mirror. A se
 Confirm Changes 1–4 are production-correct or list P1/P2. On convergence: apply migration → re-upsert
 all 5 (`--apply`, per-write authorization) → empirical additivity check → close P2.1. Then P2.2
 (fy_end_month fail-closed) → frontend Build.
+
+---
+
+## 9. Codex round-1 findings + convergence (2026-06-04)
+
+No P1. 1 P2 (blocking) + 2 P3 — **all verified true by author and fixed** (no pushback warranted).
+
+### P2 (BLOCKING, fixed) — upsert stale-row guard didn't list the Q2/Q3 rule_ids
+
+Codex correct: `scripts/upsert_sec_financials.py` `DERIVE_BASE_RULE_IDS_FALLBACK` (the "all rule_ids
+ever produced" snapshot-delete guard) omitted `Q2_6M_MINUS_Q1` / `Q3_9M_MINUS_6M`. This batch would be
+fine (payload `managed_rule_ids` covers them), but if a future run stopped emitting Q2/Q3 for a ticker
+(e.g. its single quarters became directly disclosed), the snapshot delete would not clear the old
+derived_q2/q3 rows → stranded stale metrics.
+
+**Fix**: added both rule_ids to `DERIVE_BASE_RULE_IDS_FALLBACK`; extracted `derive_base_delete_scope()`
+helper (symmetric with `analytics_delete_scope`) and used it at the inline delete site; 3 new tests
+(`test_derive_base_fallback_includes_q2_q3_rules`, `_delete_scope_unions_payload_with_fallback`,
+`_empty_payload_uses_full_fallback`). **scripts/tests 278 passed.** This was the explicit gate — now
+closed.
+
+### P3 (fixed) — YoY docs didn't reflect derived_q2/q3 inheritance
+
+`_SINGLE_Q_KINDS` now feeds `flow_q`, so `_emit_yoy` *can* emit `derived_q2/q3` YoY rows (none in the
+current 5-ticker data, but future data can). Updated `docs/financials-data-rules.md` + `sec-financials-
+v2-schema.md` to say quarterly YoY inherits `quarter_duration ∪ derived_q2/q3/q4` (allow, not guard out
+— Q2/Q3 revenue/NI YoY is meaningful; frontend already routes derived_q2/q3 in RATIO quarterly). EPS YoY
+stays Q1–Q3 (EPS non-additive → derive-base never reconstructs EPS single quarters).
+
+### P3 (fixed) — handoff TTM-benefit overclaim
+
+Codex correct: the visible derived_q2/q3-labelled analytics rows are EL1 free_cash_flow, not TTM.
+Corrected §6 with the empirical with/without `_SINGLE_Q_KINDS` diff: real TTM benefit = INTC +2 / MU +15
+`net_debt_to_ebitda` ttm rows (windows spanning derived Q2/Q3 D&A); LITE/AAOI/SNDK +0. Not latent, but
+realized effect confined to net_debt_to_ebitda on INTC/MU; general correctness rests on the unit tests.
+
+**Commits for the round-1 fixes**: AI_Agent (upsert + tests + YoY docs + handoff) — see next commit.
+Production still NOT applied; awaiting Codex re-confirm of the P2 fix before migration + `--apply`.

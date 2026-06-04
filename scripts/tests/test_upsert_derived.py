@@ -491,6 +491,32 @@ def test_analytics_delete_scope_empty_payload_uses_full_fallback():
     assert scope == set(upsert.DERIVE_ANALYTICS_RULE_IDS_FALLBACK)
 
 
+def test_derive_base_fallback_includes_q2_q3_rules():
+    """P2.1 (Codex P2): the derive-base snapshot-delete fallback — the
+    'all rule_ids ever produced' stale-row guard — must include the new Q2/Q3
+    reconstruction rule_ids, else a future run that stops emitting Q2/Q3 for a
+    ticker (e.g. its single quarters become directly disclosed) would strand old
+    derived_q2/derived_q3 metrics in Supabase."""
+    upsert = _import_upsert()
+    assert {"Q2_6M_MINUS_Q1", "Q3_9M_MINUS_6M"} <= set(upsert.DERIVE_BASE_RULE_IDS_FALLBACK)
+
+
+def test_derive_base_delete_scope_unions_payload_with_fallback():
+    """Even when a run's managed_rule_ids omits Q2/Q3 (the run emitted none),
+    the delete scope must still cover them so previously-written Q2/Q3 rows are
+    cleared. Symmetric with analytics_delete_scope."""
+    upsert = _import_upsert()
+    scope = set(upsert.derive_base_delete_scope(["Q4_FY_MINUS_9M"]))
+    assert set(upsert.DERIVE_BASE_RULE_IDS_FALLBACK) <= scope
+    assert {"Q2_6M_MINUS_Q1", "Q3_9M_MINUS_6M"} <= scope
+
+
+def test_derive_base_delete_scope_empty_payload_uses_full_fallback():
+    upsert = _import_upsert()
+    scope = set(upsert.derive_base_delete_scope(None))
+    assert scope == set(upsert.DERIVE_BASE_RULE_IDS_FALLBACK)
+
+
 def test_verify_freshness_accepts_custom_required_keys(tmp_path):
     """Phase 0 P0.3: derive-analytics has a different minimum-input set than
     derive-base, so verify_derived_freshness must accept required_keys to gate

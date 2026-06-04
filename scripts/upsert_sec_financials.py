@@ -60,6 +60,9 @@ BATCH_SIZE = 500
 #       derivable via IBT identity), the orphan rows still get cleared.
 # Update when adding a new derive-base rule.
 DERIVE_BASE_RULE_IDS_FALLBACK = (
+    # Q2 / Q3 single-quarter reconstruction from disclosed YTD (P2.1).
+    "Q2_6M_MINUS_Q1",
+    "Q3_9M_MINUS_6M",
     # Q4 reconstruction
     "Q4_FY_MINUS_9M",
     "Q4_FY_MINUS_Q1Q2Q3",
@@ -125,6 +128,20 @@ def analytics_delete_scope(payload_managed_rule_ids) -> list[str]:
     """
     return sorted(
         set(payload_managed_rule_ids or ()) | set(DERIVE_ANALYTICS_RULE_IDS_FALLBACK)
+    )
+
+
+def derive_base_delete_scope(payload_managed_rule_ids) -> list[str]:
+    """Delete scope for derive-base snapshot replacement (symmetric with
+    analytics_delete_scope).
+
+    Union of the run's self-declared managed_rule_ids with the owned fallback,
+    so a rule that stopped firing this run (e.g. a ticker that no longer emits
+    Q2/Q3 reconstructions because its single quarters became directly disclosed)
+    still has its orphan Supabase rows cleared rather than stranded.
+    """
+    return sorted(
+        set(payload_managed_rule_ids or ()) | set(DERIVE_BASE_RULE_IDS_FALLBACK)
     )
 
 
@@ -776,7 +793,7 @@ def main():
             # cleared. Without this, a rule swap (e.g. Q4_FY_MINUS_Q1Q2Q3 →
             # Q4_FY_MINUS_9M after 9M becomes derivable via IBT identity) would
             # leave the old DB row stranded, creating silent duplicates.
-            delete_scope = sorted(set(managed) | set(DERIVE_BASE_RULE_IDS_FALLBACK))
+            delete_scope = derive_base_delete_scope(managed)
             client = supabase_client()
             del_r = (client.table("sec_financial_metrics")
                      .delete()
