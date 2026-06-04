@@ -373,3 +373,52 @@ must attach to a **display-eligible** prototype row (not a YTD/synthetic-exclude
 
 **Status**: v4 (= §13 architecture + §12 carried findings + §14 G1–G5 gates). Awaiting Codex round-3 /
 human closure before writing-plans.
+
+## 15. Codex round-3 — final spec gates (2026-06-04)
+
+No new P1; G1–G5 converged. Two P2 spec-seams + one P3, all verified true, all accepted. Binding.
+
+### G6 (P2.1) — `source_account` is **four** classes, not three
+
+Verified: LITE has `Income before income taxes` / `Loss before income taxes`; SNDK has `Gain on business
+divestiture` / `Business separation costs` / `Loss on business divestiture` — these are **preserved
+PDF-label strings** (contain spaces; from NLM-audit / manual label discovery), neither tag-like nor
+synthetic/null. The classifier (applied in order):
+
+1. **null** → resolve via `uni_account → canonical concept` (G7).
+2. **synthetic** (`source_account` starts with `SUM(` or carries the synthetic marker) → G7.
+3. **preserved_pdf_label** (contains whitespace / is not a QName-shaped token) → **`display_label =
+   source_account` verbatim** (it is already the PDF text); `ordinal` only via NLM exact/normalized-label
+   match or explicit manual mapping — **never** the namespace-strip resolver.
+4. **tag-like** (QName-shaped, e.g. `GrossProfit`) → §13.2 namespace-strip → labels/edges.
+
+The plan must enumerate which facts land in each class for the 5 tickers; none silently dropped.
+
+### G7 (P2.2) — synthetic/null `uni_account → canonical concept` can MISS; hard fallback + display-vs-aggregate
+
+Verified: `depreciation_and_amortization → DepreciationAndAmortization` is **absent from labels AND
+edges** for INTC/LITE (they report `Depreciation` + `Amortization` as separate lines), and absent from
+edges for AAOI; `selling_general_administrative → SellingGeneralAndAdministrativeExpense` is absent for
+AAOI (reports `S&M` + `G&A` separately). So G2's canonical path fails for exactly the SUM-synthetic rows.
+
+Rules:
+- When the canonical concept is **not in labels** or **not in the selected presentation network** →
+  route to **NLM / manual ordinal (and label) mapping**; **never** render `SUM(...)` as a display label.
+- **Display-vs-aggregate (the deeper resolution)**: a synthetic SUM that aggregates **multiple PDF
+  lines** is **NOT a PDF row → non-display in the statement**; its **component long-tail rows are the PDF
+  rows and display** (e.g. INTC/LITE CF show `Depreciation` and `Amortization` as two lines; AAOI IS
+  shows `Selling & marketing` and `G&A`). The combined SUM row stays only in the analytics layer (EBITDA
+  input). **NLM (reading the actual PDF) is the arbiter** of whether the combined line exists as one PDF
+  row (then display it with the NLM label) or the components are the PDF rows (then SUM is non-display).
+- G4's 100% coverage gate catches a silent ship, but this fallback path is now hardcoded in the spec so
+  implementation does not naively try to label/order the SUM rows.
+
+### G8 (P3) — NLM `uni_account` fallback match must be unique
+
+The NLM match priority's `uni_account` tier (G1) may fire **only when, within
+(statement, period, display-eligible row set), exactly one candidate fact has that `uni_account`**.
+More than one → `unmatched` / manual audit, never a guess. Guards against future long-tail-bucket or
+same-classification expansion mis-ordering.
+
+**Status**: v5 (= §13 architecture + §12 + §14 G1–G5 + §15 G6–G8). Codex: "v4 可進下一階段，補這 2 P2
+即可" → with G6–G8 folded, design gate is **closed pending human sign-off**; next step writing-plans.
