@@ -202,10 +202,10 @@ therefore:
 - **`rowId` = `uni_account` for core rows** (so a derived single-quarter metric cell attaches to its PDF row by
   `uni_account`); **`rowId` = `uni_account + '|' + source_account` for long-tail bucket members** (many
   share one bucket `uni_account`, so they need `source_account` to disambiguate — long-tail has no
-  `derived_q4` attach problem because those Q4 values are bucket-less).
+  derived single-quarter attach problem because those derived `derived_q2/q3/q4` values are bucket-less).
 - **Metric-only rows with no fact prototype (ebitda, free_cash_flow) are EXCLUDED from IS/BS/CF**, not
   rendered as `(uni_account|null)` ghost rows. Exclusion is by "no direct-fact prototype", NOT "is a
-  metric" (derived_q4 metrics still attach).
+  metric" (derived single-quarter `derived_q2/q3/q4` metrics still attach).
 - `Matrix.rows[].key` stays a single string (`rowId`); chart selection / cellMap / tooltip / long-tail
   must consume `rowId` + a separate `displayLabel`, never assume `key === uni_account`.
 
