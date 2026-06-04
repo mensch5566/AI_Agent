@@ -94,7 +94,7 @@ export async function GET(
       supabase
         .from("sec_financial_facts")
         .select(
-          "ticker, period, period_end, period_kind, statement, version, uni_account, source_account, xbrl_tag, value, weight, unit, status, ordinal, long_tail_metadata, provenance",
+          "ticker, period, period_end, period_kind, statement, version, uni_account, source_account, display_label, xbrl_tag, value, weight, unit, status, ordinal, long_tail_metadata, provenance",
         )
         .eq("ticker", t)
         .order("cell_id")
