@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import type { ApiResponse, Cell, MatrixCell, PeriodKind, Statement, Version } from "./types";
-import { LONG_TAIL_ROLLUP_HINTS, ROWS_BY_STATEMENT, comparePeriods } from "./constants";
+import {
+  DERIVED_NONGAAP_ABSOLUTE_ROWS,
+  IS_ROWS,
+  CF_ROWS,
+  LONG_TAIL_ROLLUP_HINTS,
+  ROWS_BY_STATEMENT,
+  comparePeriods,
+} from "./constants";
 
 /**
  * useFinancialMatrix(ticker)
@@ -440,6 +447,71 @@ function buildDictionaryMatrix(
   return {
     periods,
     rows: rows.map((r) => ({ key: r.key, label: r.label, kind: r.kind, indent: r.indent ?? 0 })),
+    cells: cellMap,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Derived / Non-GAAP ABSOLUTE-VALUE subsection (Task 13, spec §P2.3).
+//
+// `ebitda` (statement=IS) and `free_cash_flow` (statement=CF) are derived $
+// measures that are METRIC_ONLY_UNI — buildMatrix deliberately drops them from
+// the inline IS/CF statements, and they are NOT in RATIO_ROWS, so neither
+// matrix surfaces them. This selector scans the raw cells array and gathers ONLY
+// those metric cells into a Matrix-shaped result so the Viewer can render a
+// dedicated "Derived / Non-GAAP" subsection (formatted as $, not ratios).
+//
+// Rows always render in the canonical DERIVED_NONGAAP_ABSOLUTE_ROWS order (even
+// when a ticker has no data for one of them), for visual continuity. Period and
+// version filtering mirror the IS/CF duration rules: quarter_duration ∪
+// derived_q2/q3/q4 in quarterly mode, fy_annual_duration in annual mode.
+// ---------------------------------------------------------------------------
+
+// Canonical $-row labels, sourced from the statement dictionaries so the
+// subsection reads identically to the (now-removed) inline EBITDA / FCF lines.
+const DERIVED_NONGAAP_LABELS: Record<string, string> = {
+  ebitda: IS_ROWS.find((r) => r.key === "ebitda")?.label ?? "EBITDA",
+  free_cash_flow: CF_ROWS.find((r) => r.key === "free_cash_flow")?.label ?? "Free Cash Flow",
+};
+
+export function buildDerivedNonGaapRows(
+  cells: Cell[],
+  version: Version,
+  frequency: Frequency,
+): Matrix {
+  const wanted = new Set<string>(DERIVED_NONGAAP_ABSOLUTE_ROWS);
+  const allowedPkinds =
+    frequency === "quarterly" ? QUARTERLY_PKINDS_IS_CF : ANNUAL_PKINDS_IS_CF;
+
+  const filtered = cells.filter((c) => {
+    if (!wanted.has(c.uni_account)) return false;
+    if (c.source_table !== "metrics") return false;
+    if (c.version !== version) return false;
+    return allowedPkinds.includes(c.period_kind);
+  });
+
+  const periods = Array.from(new Set(filtered.map((c) => c.period))).sort(comparePeriods);
+
+  // Fixed row order from the canonical list; always present for continuity.
+  const rowKeys = DERIVED_NONGAAP_ABSOLUTE_ROWS;
+  const cellMap: Record<string, Record<string, MatrixCell>> = {};
+  for (const key of rowKeys) {
+    cellMap[key] = {};
+    for (const p of periods) cellMap[key][p] = { status: "PENDING" };
+  }
+  for (const c of filtered) {
+    if (cellMap[c.uni_account]?.[c.period] === undefined) continue;
+    cellMap[c.uni_account][c.period] = { cell: c, status: c.status };
+  }
+
+  return {
+    periods,
+    rows: rowKeys.map((key) => ({
+      key,
+      label: DERIVED_NONGAAP_LABELS[key] ?? key,
+      kind: "derived_nongaap_absolute",
+      indent: 0,
+    })),
     cells: cellMap,
   };
 }

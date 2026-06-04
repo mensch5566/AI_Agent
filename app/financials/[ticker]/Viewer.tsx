@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useFinancialData, buildMatrix, type Frequency } from "@/app/components/financials-v2/useFinancialMatrix";
+import { useFinancialData, buildMatrix, buildDerivedNonGaapRows, type Frequency } from "@/app/components/financials-v2/useFinancialMatrix";
 import { StatementMatrix } from "@/app/components/financials-v2/StatementMatrix";
+import { DerivedNonGaapMatrix } from "@/app/components/financials-v2/DerivedNonGaapMatrix";
 import { MatrixChart } from "@/app/components/financials-v2/MatrixChart";
 import { SegmentDashboard } from "@/app/components/financials-v2/SegmentDashboard";
 import { TickerPicker } from "@/app/components/financials-v2/TickerPicker";
@@ -44,6 +45,13 @@ export default function Viewer({ ticker }: { ticker: string }) {
   const nongaapMatrix = useMemo(
     () => buildMatrix(cells, statement, "NON_GAAP", frequency),
     [cells, statement, frequency],
+  );
+
+  // Derived / Non-GAAP absolute-value $ rows (EBITDA, FCF) — surfaced only in
+  // the Ratios/analytics area, never inline in the statements (spec §P2.3).
+  const derivedNonGaapMatrix = useMemo(
+    () => buildDerivedNonGaapRows(cells, "GAAP", frequency),
+    [cells, frequency],
   );
 
   const showNongaapCol = showNonGaap && view === "IS";
@@ -246,6 +254,9 @@ export default function Viewer({ ticker }: { ticker: string }) {
                 onToggleRow={handleToggleRow}
                 rowsWithData={rowsWithData}
               />
+              {view === "RATIO" && (
+                <DerivedNonGaapMatrix matrix={derivedNonGaapMatrix} />
+              )}
             </>
           )}
 

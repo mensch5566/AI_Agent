@@ -6,7 +6,17 @@ import type { Statement } from "./types";
 
 // Pre-onboarded tickers. Expand as we ingest more SEC filings.
 // Should match docs/STATUS.md ticker registry.
-export const KNOWN_TICKERS = ["AAOI", "INTC", "LITE", "SNDK"] as const;
+export const KNOWN_TICKERS = ["AAOI", "INTC", "LITE", "MU", "SNDK"] as const;
+
+// Derived / Non-GAAP ABSOLUTE-VALUE rows ($, not ratios). These are computed
+// derived measures that earlier tasks removed from the inline IS/CF statements
+// (PDF-faithful view shows only disclosed lines) — they live as METRIC_ONLY_UNI
+// metrics cells (ebitda → statement=IS, free_cash_flow → statement=CF) and are
+// NOT in RATIO_ROWS. They re-surface in the "Derived / Non-GAAP" subsection of
+// the analytics area, formatted with the statement-scoped $ formatter
+// (fmtStatementValue), NOT as ratios. (`ebitda_margin_pct`/`fcf_margin_pct` are
+// the RATIO-side companions and stay in RATIO_ROWS.)
+export const DERIVED_NONGAAP_ABSOLUTE_ROWS = ["ebitda", "free_cash_flow"] as const;
 
 export type MetricSpec = {
   key: string;            // uni_account
