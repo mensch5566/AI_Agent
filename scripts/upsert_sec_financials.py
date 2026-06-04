@@ -43,6 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "Tools" / "research-tools"))
 
 from _shared import sec_json_adapter as A  # noqa: E402
+from _shared.presentation_resolver import select_network  # noqa: E402
 
 OBSIDIAN_BASE = Path(os.environ.get(
     "OBSIDIAN_VAULT",
@@ -269,20 +270,128 @@ def load_json(path: Path) -> dict | None:
 
 
 def load_sources(ticker: str) -> dict:
-    """Load all 7 source JSONs (some may be absent)."""
+    """Load all source JSONs (some may be absent).
+
+    Adds (Task 8) the PDF-faithful display inputs: `gaap_labels` (labels.json)
+    and per-statement audited NLM ordering artifacts. Both are optional —
+    absence just means fewer display ordinals resolve (the next task's coverage
+    gate decides whether that's acceptable).
+    """
     base = skill_output_dir(ticker)
+    nlm_dir = base / "nlm-statement-order"
     return {
         "gaap_facts": load_json(base / "parse-10QK-gaap" / f"{ticker}_gaap_facts.json"),
         "gaap_edges_cal": load_json(base / "parse-10QK-gaap" / f"{ticker}_gaap_edges_cal.json"),
         "gaap_edges_pre": load_json(base / "parse-10QK-gaap" / f"{ticker}_gaap_edges_pre.json"),
+        "gaap_labels": load_json(base / "parse-10QK-gaap" / f"{ticker}_gaap_labels.json"),
         "sign_flip": load_json(base / "parse-10QK-gaap" / f"{ticker}_sign_flip_concepts.json"),
         "nongaap": load_json(base / "parse-8k-nongaap" / f"{ticker}_nongaap.json"),
         "supplement_facts": load_json(base / "parse-SEC-supplement" / f"{ticker}_supplement_facts_v3.json"),
         "supplement_edges": load_json(base / "parse-SEC-supplement" / f"{ticker}_supplement_edges_v3.json"),
+        "nlm_order": {
+            stmt: load_json(nlm_dir / f"{ticker}_{stmt}_nlm_order.json")
+            for stmt in ("IS", "BS", "CF")
+        },
     }
 
 
 # ---- Pipeline ----------------------------------------------------------------
+
+
+def _extract_labels_map(gaap_labels) -> dict:
+    """Tolerant extraction of labels.json → ``{concept_qname: [{role,lang,text}]}``.
+
+    parse-10QK-gaap's build_separated emits a top-level mapping; defensively
+    unwrap a ``{"labels": {...}}`` envelope if present.
+    """
+    if not gaap_labels:
+        return {}
+    if isinstance(gaap_labels, dict) and "labels" in gaap_labels and isinstance(gaap_labels["labels"], dict):
+        return gaap_labels["labels"]
+    return gaap_labels if isinstance(gaap_labels, dict) else {}
+
+
+def _read_audited_order(artifact: dict) -> dict:
+    """Read ``{cell_id: ordinal}`` from an AUDITED artifact via
+    nlm_statement_order.read_audited_order.
+
+    Imported lazily by file path (the module lives alongside this one in
+    ``scripts/``) so the upsert module never mutates global ``sys.path`` at
+    import time — that pollutes module resolution for the rest of a pytest run.
+    """
+    import importlib.util
+    mod_path = Path(__file__).resolve().parent / "nlm_statement_order.py"
+    spec = importlib.util.spec_from_file_location("_nlm_statement_order", str(mod_path))
+    nlm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(nlm)
+    return nlm.read_audited_order(artifact)
+
+
+def _build_audited_orders(nlm_order: dict | None) -> dict:
+    """Build the per-statement audited-order map the adapter consumes.
+
+    For each statement whose NLM artifact is present AND status=="audited",
+    produce::
+
+        {statement: {"cell_id_to_ordinal": {cell_id: ordinal},
+                     "source_doc": str, "period": str, "artifact_hash": str}}
+
+    A ``pending_audit`` (or absent) artifact contributes nothing — G1/G7:
+    unaudited order MUST never feed production. ``read_audited_order`` already
+    enforces the status gate (returns {} otherwise), so an unaudited artifact
+    yields an empty cell_id map and is skipped.
+    """
+    import hashlib
+    out: dict = {}
+    for stmt, artifact in (nlm_order or {}).items():
+        if not artifact:
+            continue
+        cell_map = _read_audited_order(artifact)
+        if not cell_map:
+            continue  # not audited, or no matched lines
+        artifact_hash = hashlib.sha256(
+            json.dumps(artifact, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
+        out[stmt] = {
+            "cell_id_to_ordinal": cell_map,
+            "source_doc": artifact.get("source_doc"),
+            "period": artifact.get("period"),
+            "artifact_hash": artifact_hash,
+        }
+    return out
+
+
+def attach_display_to_batch(batch: A.NormalizedBatch, sources: dict) -> None:
+    """Resolve PDF-faithful display_label + ordinal + provenance on GAAP facts.
+
+    Per statement (IS/BS/CF): select the presentation network from edges_pre,
+    then call the adapter's ``attach_display_metadata`` over that statement's
+    facts. Non-GAAP facts are not statement-display rows here (they have their
+    own version/path); only GAAP facts get display metadata. Spec Task 8.
+    """
+    edges = (sources.get("gaap_edges_pre") or {}).get("edges", []) \
+        if isinstance(sources.get("gaap_edges_pre"), dict) else []
+    labels = _extract_labels_map(sources.get("gaap_labels"))
+    audited_orders = _build_audited_orders(sources.get("nlm_order"))
+
+    gaap_facts = [f for f in batch.facts if f.version == "GAAP"]
+    for statement in ("IS", "BS", "CF"):
+        stmt_facts = [f for f in gaap_facts if f.statement == statement]
+        if not stmt_facts:
+            continue
+        facts_concepts = {
+            (f.source_account or "").rsplit(":", 1)[-1]
+            for f in stmt_facts if f.source_account
+        }
+        network_role = select_network(edges, statement, facts_concepts or None)
+        A.attach_display_metadata(
+            stmt_facts,
+            statement=statement,
+            edges=edges,
+            labels=labels,
+            network_role=network_role,
+            audited_orders=audited_orders,
+        )
 
 
 def normalize(ticker: str, sources: dict) -> A.NormalizedBatch:
@@ -325,6 +434,11 @@ def normalize(ticker: str, sources: dict) -> A.NormalizedBatch:
     ]:
         if sources[key]:
             batch.edges.extend(A.adapt_edges(sources[key], ticker, edge_type))
+
+    # Task 8: resolve PDF-faithful display_label + ordinal + provenance on GAAP
+    # facts (parse skills untouched — all resolution lives here at the upsert
+    # boundary). Reads labels.json + edges_pre + audited NLM ordering artifacts.
+    attach_display_to_batch(batch, sources)
 
     return batch
 
@@ -433,8 +547,15 @@ def upsert_batch(client, table: str, rows: list[dict]) -> int:
 
 
 def row_to_dict(row) -> dict:
-    """asdict + JSON-friendly fixups (drop None unit/value where col is NOT NULL etc.)."""
+    """asdict + JSON-friendly fixups (drop None unit/value where col is NOT NULL etc.).
+
+    `display_eligible` is an adapter-internal flag (a display-ineligible synthetic
+    SUM core builds no Statement-view row prototype) — there is NO such DB column,
+    so it is stripped here. `display_label` IS a column (migration
+    2026060500_add_display_label.sql) and is kept.
+    """
     d = asdict(row)
+    d.pop("display_eligible", None)
     return d
 
 

@@ -34,6 +34,13 @@ from .audit_metadata import (
 )
 from .dimensional_aliases import build_axis_key, build_member_key
 from .period_kind import infer_period_kind, normalize_supplement_period_kind
+from .presentation_resolver import (
+    AmbiguityError,
+    NeedsNlmOrder,
+    resolve_label_ordinal,
+    resolve_via_uni,
+)
+from .source_account_class import classify_source_account
 from .unit_canonicalize import (
     PCT_UNITS,
     UnitNormalizationError,
@@ -130,6 +137,15 @@ class FactRow:
     ordinal: int | None
     long_tail_metadata: dict | None
     provenance: dict
+    # PDF-faithful display metadata (Task 8 / spec G4 prep). Resolved by
+    # attach_display_metadata() AFTER the per-source adapt functions run.
+    #   display_label    — PDF line label (null → frontend falls back to source_account)
+    #   display_eligible — False for a synthetic SUM-of-multiple-PDF-lines core:
+    #                       it builds NO Statement-view row (its component
+    #                       long-tail rows are the PDF lines). NOT a DB column —
+    #                       stripped before upsert (see row_to_dict).
+    display_label: str | None = None
+    display_eligible: bool = True
 
 
 @dataclass
@@ -448,6 +464,205 @@ def _adapt_one_gaap_fact(
         long_tail_metadata=f.get("long_tail_metadata"),
         provenance=provenance,
     )
+
+
+# ---- Task 8: PDF-faithful display metadata resolution -----------------------
+#
+# After the per-source adapt functions build the FactRow list, this layer
+# resolves a `display_label` + `ordinal` + `provenance` ordinal lineage per
+# DISPLAY-ELIGIBLE fact (spec §13-§16, G2/G3/G4/G6/G7). Parse skills stay
+# untouched — all resolution lives here at the upsert boundary.
+#
+# Routing (spec G6, classifier order null → synthetic → preserved_pdf_label →
+# tag_like):
+#   tag_like / preserved_pdf_label → resolve_label_ordinal(local, ...)
+#     (for preserved_pdf_label the source_account IS the PDF text → fall back to
+#      it as the display_label when the resolver yields no label)
+#   synthetic / null              → resolve_via_uni(uni_account, ...)
+#   on NeedsNlmOrder / AmbiguityError → look up the cell's ordinal in the
+#     AUDITED NLM artifact (keyed by cell_id); set ordinal + ordinal_source="nlm"
+#     when present, else leave ordinal=None (next task's coverage gate catches it).
+#
+# Display-ineligibility (spec G7): a synthetic source_account that SUMS MULTIPLE
+# PDF lines (SUM(D&A components), SUM(S&M+G&A)) is display_eligible=False → it
+# builds NO statement row (its component long-tail rows are the PDF lines). The
+# core SUM stays in storage for EBITDA/analytics; it just never becomes a
+# Statement-view prototype, and a derived single-quarter cell must not pull it
+# back via shared uni_account.
+
+
+def _local_name(source_account: str) -> str:
+    """Bare local name from a tag-like source_account (strip any prefix:)."""
+    return source_account.rsplit(":", 1)[-1]
+
+
+def _set_xbrl_ordinal_provenance(
+    row: "FactRow", ordinal, network_role: str | None
+) -> None:
+    """Stamp ordinal + XBRL-sourced ordinal provenance on a FactRow.
+
+    XBRL ordinals carry source_doc/period = the fact's own filing (the network
+    role is the deterministic prototype), per spec §14.
+    """
+    row.ordinal = ordinal
+    row.provenance["ordinal_source"] = "xbrl"
+    row.provenance["ordinal_source_doc"] = row.provenance.get("source_filing")
+    row.provenance["ordinal_source_period"] = row.period
+    row.provenance["ordinal_match_method"] = "xbrl_presentation"
+    if network_role is not None:
+        row.provenance["ordinal_source_network"] = network_role
+
+
+def _try_audited_nlm_ordinal(row: "FactRow", audited_for_stmt: dict | None) -> None:
+    """Fall back to the AUDITED NLM ordering artifact for this statement.
+
+    `audited_for_stmt` shape (built by the upsert script from
+    nlm_statement_order.read_audited_order + artifact metadata):
+        {
+          "cell_id_to_ordinal": {cell_id: ordinal, ...},   # audited only
+          "source_doc": str, "period": str, "artifact_hash": str,
+        }
+    If the row's cell_id has an audited ordinal → set ordinal +
+    ordinal_source="nlm" provenance. Else leave ordinal=None (coverage gate next
+    task). NEVER feeds a pending_audit artifact (the reader already gated that).
+    """
+    if not audited_for_stmt:
+        return
+    mapping = audited_for_stmt.get("cell_id_to_ordinal") or {}
+    ordinal = mapping.get(row.cell_id)
+    if ordinal is None:
+        return
+    row.ordinal = ordinal
+    row.provenance["ordinal_source"] = "nlm"
+    row.provenance["ordinal_source_doc"] = audited_for_stmt.get("source_doc")
+    row.provenance["ordinal_source_period"] = audited_for_stmt.get("period")
+    row.provenance["ordinal_match_method"] = "nlm_audited_order"
+    if audited_for_stmt.get("artifact_hash") is not None:
+        row.provenance["ordinal_artifact_hash"] = audited_for_stmt["artifact_hash"]
+
+
+def attach_display_metadata(
+    facts: list["FactRow"],
+    *,
+    statement: str,
+    edges: list[dict],
+    labels: dict,
+    network_role: str | None,
+    audited_orders: dict | None = None,
+) -> None:
+    """Resolve display_label + ordinal + provenance for one statement's facts.
+
+    Mutates each FactRow in place. Call once per statement (IS/BS/CF) with that
+    statement's selected presentation network role, its edges_pre, and labels.json.
+    Facts whose `.statement` != `statement` are skipped (caller groups by
+    statement, but the guard keeps this safe if mixed).
+
+    `audited_orders` maps statement → audited-order dict (see
+    _try_audited_nlm_ordinal). Used as the fallback when the XBRL resolver can't
+    resolve an ordinal (NeedsNlmOrder / AmbiguityError) or the network is absent.
+
+    Resolution (spec G2/G3/G6/G7):
+      - classify source_account → 4 classes.
+      - synthetic SUM-of-multiple-PDF-lines → display_eligible=False, no row.
+      - tag_like / preserved_pdf_label → resolve_label_ordinal(local, ...).
+        preserved_pdf_label falls back to source_account as the display_label.
+      - synthetic (non-multi) / null → resolve_via_uni(uni_account, ...).
+      - NeedsNlmOrder / AmbiguityError → audited NLM ordinal (else ordinal=None).
+    """
+    audited_for_stmt = (audited_orders or {}).get(statement)
+
+    for row in facts:
+        if row.statement != statement:
+            continue
+
+        cls = classify_source_account(row.source_account or None)
+
+        # --- Display-ineligibility: synthetic SUM of multiple PDF lines ----- #
+        # These never build a Statement-view row (G7); component long-tail rows
+        # are the PDF lines. Keep in storage for EBITDA/analytics; no label/ordinal.
+        if cls == "synthetic" and _is_sum_of_multiple(row.source_account):
+            row.display_eligible = False
+            row.display_label = None
+            row.ordinal = None
+            continue
+
+        if cls in ("tag_like", "preserved_pdf_label"):
+            label, ordinal = (None, None)
+            try:
+                label, ordinal = resolve_label_ordinal(
+                    _local_name(row.source_account), network_role, edges, labels
+                )
+            except AmbiguityError:
+                # Fail-closed (G3): never silently prefer. Route ordinal to NLM.
+                label, ordinal = (None, None)
+
+            if cls == "preserved_pdf_label":
+                # source_account IS the PDF text → use it as the display label
+                # when the resolver produced none.
+                row.display_label = label or row.source_account
+            else:
+                row.display_label = label
+
+            if ordinal is not None and network_role is not None:
+                _set_xbrl_ordinal_provenance(row, ordinal, network_role)
+            else:
+                _try_audited_nlm_ordinal(row, audited_for_stmt)
+            continue
+
+        # cls in ("synthetic" (single-line), "null") → resolve via uni→canonical
+        try:
+            label, ordinal = resolve_via_uni(
+                row.uni_account, statement, network_role, edges, labels
+            )
+            row.display_label = label
+            if ordinal is not None and network_role is not None:
+                _set_xbrl_ordinal_provenance(row, ordinal, network_role)
+            else:
+                _try_audited_nlm_ordinal(row, audited_for_stmt)
+        except (NeedsNlmOrder, AmbiguityError):
+            # Canonical concept absent from this filing's network/labels → fall
+            # to the audited NLM order. Never render SUM(...) / invent a label.
+            _try_audited_nlm_ordinal(row, audited_for_stmt)
+
+
+def _is_sum_of_multiple(source_account: str | None) -> bool:
+    """True for a synthetic SUM that aggregates MULTIPLE PDF lines.
+
+    These are the display-ineligible cores per spec G7: SUM(D&A components),
+    SUM(S&M+G&A). Detection mirrors the synthetic markers in
+    source_account_class.classify_source_account — any synthetic SUM(...) /
+    components) / +G&A) marker means multiple components were summed.
+    """
+    if not source_account:
+        return False
+    return (
+        source_account.startswith("SUM(")
+        or "components)" in source_account
+        or "+G&A)" in source_account
+    )
+
+
+# ---- Metric-only rows (sec_financial_metrics) — no statement ordinal --------
+#
+# Derived single-quarter cells (derived_q2 / derived_q3 / derived_q4) and
+# absolute-value metrics (ebitda, free_cash_flow) live in sec_financial_metrics,
+# NOT in sec_financial_facts. They attach to fact-prototype rows on the FRONTEND
+# by uni_account; the adapter MUST NOT assign them a Statement-view display
+# ordinal (spec §16). All three derived quarters behave identically.
+
+_DERIVED_SINGLE_QUARTER_PKINDS = frozenset({"derived_q2", "derived_q3", "derived_q4"})
+
+
+def metric_row_carries_statement_ordinal(metric_row: dict) -> bool:
+    """Whether a sec_financial_metrics row should carry a Statement display ordinal.
+
+    Always False: metric rows (derived_q2/q3/q4 single-quarter values, ebitda,
+    free_cash_flow) are not facts. They attach by uni_account on the frontend, so
+    the adapter never assigns them a statement display ordinal (spec §16). Kept as
+    an explicit predicate so the contract is testable and the derived_q2/q3/q4
+    set is provably handled identically.
+    """
+    return False
 
 
 _NONGAAP_ARRAY_TO_STMT = {
