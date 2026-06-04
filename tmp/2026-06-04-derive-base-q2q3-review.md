@@ -150,12 +150,22 @@ layout (derive-analytics is). Its tests still live in the prototype mirror. A se
    ticker. Both `_index_flows` (IS) and `_index_cf_flows` (CF) share the one `_SINGLE_Q_KINDS`, so
    net_debt_to_ebitda's inline EBITDA D&A summation is covered by the same one-line fix (no missed path).
 
-**STILL OPEN (close right after apply):**
+3. **Additivity — EMPIRICALLY PROVEN PRE-APPLY (read-only vs production DB, not deferred).** Compared
+   the full new local output (derive-base + derive-analytics) against the current `sec_financial_metrics`
+   for all 5 tickers, keyed on (period, period_kind, statement, version, uni_account, unit):
+   **changed=0, removed=0 across 2115 existing DB keys** (INTC 113 / AAOI 364 / SNDK 93 / MU 714 / LITE
+   831); added INTC +46 / AAOI +73 / SNDK +22 / MU +191 / LITE +200 (= derived_q2/q3 + new-quarter EL1
+   FCF/EBITDA + new net_debt_to_ebitda ttm). So the re-upsert is provably value-preserving + purely
+   additive — no existing derived_q4 or analytics value moves.
+4. **Cross-pass duplicate semantic key (author adversarial check on the Pass-3 widening)** — none.
+   Pass-2 winners are materialized into `facts_after_p2` before Pass 3, and both Pass-3 identity sources
+   (static allowlist + calc-linkbase) skip when the parent uni_account is already present, so Pass 2 and
+   Pass 3 are mutually exclusive per single-quarter subtotal. 5-ticker output: 0 duplicate semantic keys
+   / cell_ids. (Pre-existing invariant for Q4; widening preserves it.)
 
-3. **Additivity empirical check** — after apply, spot-check ≥1 pre-existing derived_q4 value and ≥1
-   pre-existing annual analytics value are unchanged vs the prior DB (logical proof in §2/§3; want
-   empirical confirmation for T3).
-4. Frontend visual: Q2/Q3 single-quarter CF flows + quarterly TTM ratios render correctly (deferred to
+**STILL OPEN (after apply):**
+
+5. Frontend visual: Q2/Q3 single-quarter CF flows + quarterly TTM ratios render correctly (deferred to
    the frontend Build / preview).
 
 ## 8. Ask
