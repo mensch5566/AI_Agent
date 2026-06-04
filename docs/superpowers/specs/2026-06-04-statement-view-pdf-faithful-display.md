@@ -308,3 +308,68 @@ fallback, but it does not block this feature.
 
 **Status**: v3 (binding architecture = §13 + carried-over §12 findings). Ready for Codex round-2 on v3
 before writing-plans.
+
+## 14. Codex round-2 — accepted gates (2026-06-04)
+
+Codex round-2 accepted the v3 architecture (parse untouched / upsert resolution / XBRL ordinal primary
+/ NLM ordinal fallback) and raised 2 P1 + 3 P2 closure gates. All verified true; all accepted. Binding.
+
+### G1 (P1.1) — NLM ordering fallback: full artifact + matching + provenance + audit contract
+
+The NLM ordering source is a **new T3 data source** and must carry a real contract, not "low
+hallucination" prose:
+
+- **Artifact schema** (`{TICKER}_{STATEMENT}_nlm_order.json`, per ticker×statement that needs it):
+  `{source_doc, accession, period, form, page_or_section, statement, ordinal, pdf_label,
+  matched_cell_id, match_method, confidence, unmatched_reason}` per row.
+- **Match priority** (NLM PDF line → fact): (1) exact `pdf_label` == `display_label`; (2) normalized
+  label (lowercase, strip punctuation/whitespace); (3) `source_account`; (4) `uni_account`. Record the
+  winning `match_method`.
+- **Bidirectional unmatched report**: list every PDF line with no matched fact AND every display-eligible
+  fact with no matched PDF line. Non-empty → surfaced for human audit.
+- **Human audit gate**: NLM order goes to production only after a human signs off the artifact (same
+  discipline as parse-sec-cross-check / parse-SEC-supplement NLM validation). No silent ship.
+- **Provenance on each ordinal-via-NLM fact**: `ordinal_source='nlm'`, `ordinal_source_doc`,
+  `ordinal_source_period`, `ordinal_match_method`, `ordinal_artifact_hash` (hash of the signed
+  artifact). XBRL-sourced ordinals carry `ordinal_source='xbrl'` + the network role_uri + period.
+
+### G2 (P1.2) — `source_account` is 3 classes; synthetic/null must be handled, not guessed
+
+Verified across all 5 tickers: real PDF rows carry non-tag `source_account` —
+- **null**: CF `net_income` (CF opening "Net income"); IS `shares_basic_millions` / `shares_diluted_millions`.
+- **synthetic** `SUM(...)`: CF `depreciation_and_amortization`=`SUM(D&A components)` (INTC/AAOI/LITE);
+  IS `selling_general_administrative`=`SUM(S&M+G&A)` (AAOI).
+
+Classify + resolve:
+1. **tag-like** (`GrossProfit`) → §13.2 namespace-strip → labels/edges.
+2. **synthetic / null** → resolve display_label + ordinal via the row's **`uni_account` → canonical
+   concept** (the primary candidate in `IS_TAG_MAP`/`BS_TAG_MAP`/`CF_TAG_MAP`, e.g. `net_income →
+   NetIncomeLoss`, `shares_basic_millions → WeightedAverageNumberOfSharesOutstandingBasic`,
+   `depreciation_and_amortization → DepreciationAndAmortization`), then labels/edges as normal. These
+   ARE PDF rows and MUST display.
+3. The plan must **enumerate** which facts land in each class for the 5 tickers and assert **none are
+   silently dropped**; any genuinely non-display fact (if found) is excluded explicitly with the reason.
+
+### G3 (P2.1) — namespace-strip fail-closed
+
+If a bare local name resolves to **>1 qname** within the selected presentation network → **fail (or
+route to manual mapping); never silent-prefer**. Once the full qname is resolved, the `labels.json`
+lookup uses **that resolved qname**, not a second local-name lookup. (Current 5 tickers: no ambiguity
+observed — the guard is a forward gate.)
+
+### G4 (P2.2) — coverage gate: denominator + 100%
+
+Coverage denominator = **display-eligible rows only** (exclude YTD period rows, metric-only rows, and
+any explicitly-classified non-display synthetic rows). Gate = **visible-row ordinal coverage 100%**;
+anything < 100% must emit the unmatched list and require **human approval** before ship — not a silent
+90% pass.
+
+### G5 (P2.3) — deterministic label prototype
+
+For a core `rowId = uni_account` whose source tag/label varies across periods, the row's
+`display_label` + `ordinal` come from a **deterministic prototype = latest 10-K (or NLM-matched)
+matched fact**, never decided by data iteration order. `derived_q4` cells attach by `uni_account` and
+must attach to a **display-eligible** prototype row (not a YTD/synthetic-excluded one).
+
+**Status**: v4 (= §13 architecture + §12 carried findings + §14 G1–G5 gates). Awaiting Codex round-3 /
+human closure before writing-plans.
