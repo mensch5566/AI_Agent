@@ -192,12 +192,14 @@ network** (§4.1), which already scopes to one statement; if still ambiguous, pr
 filer extension. Same local-name resolution applies to the `labels.json` lookup.
 
 **P1.2 + P2.6 — row identity contract (this was under-specified; would have broken quarterly IS/CF).**
-`derived_q4` single-quarter values live in `sec_financial_metrics` keyed by `uni_account` with **no
-`source_account`/`ordinal`**, and quarterly IS/CF must show `quarter_duration ∪ derived_q4`
-(`useFinancialMatrix.ts`). The row builder therefore:
+Derived single-quarter values (`derived_q2` / `derived_q3` / `derived_q4` — see the §16 post-P2.1
+addendum; pre-P2.1 only `derived_q4` existed) live in `sec_financial_metrics` keyed by `uni_account`
+with **no `source_account`/`ordinal`**, and quarterly IS/CF must show
+`quarter_duration ∪ derived_q2 ∪ derived_q3 ∪ derived_q4` (`useFinancialMatrix.ts`). The row builder
+therefore:
 - **Row prototypes come from DIRECT FACTS only** (they carry `source_account` + `uni_account` + display
   metadata). A metric cell never creates a row.
-- **`rowId` = `uni_account` for core rows** (so a `derived_q4` metric cell attaches to its PDF row by
+- **`rowId` = `uni_account` for core rows** (so a derived single-quarter metric cell attaches to its PDF row by
   `uni_account`); **`rowId` = `uni_account + '|' + source_account` for long-tail bucket members** (many
   share one bucket `uni_account`, so they need `source_account` to disambiguate — long-tail has no
   `derived_q4` attach problem because those Q4 values are bucket-less).
@@ -368,8 +370,9 @@ anything < 100% must emit the unmatched list and require **human approval** befo
 
 For a core `rowId = uni_account` whose source tag/label varies across periods, the row's
 `display_label` + `ordinal` come from a **deterministic prototype = latest 10-K (or NLM-matched)
-matched fact**, never decided by data iteration order. `derived_q4` cells attach by `uni_account` and
-must attach to a **display-eligible** prototype row (not a YTD/synthetic-excluded one).
+matched fact**, never decided by data iteration order. Derived single-quarter cells
+(`derived_q2` / `derived_q3` / `derived_q4`) attach by `uni_account` and must attach to a
+**display-eligible** prototype row (not a YTD/synthetic-excluded one).
 
 **Status**: v4 (= §13 architecture + §12 carried findings + §14 G1–G5 gates). Awaiting Codex round-3 /
 human closure before writing-plans.
@@ -427,7 +430,34 @@ P1/P2. **Design gate CLOSED — human sign-off given 2026-06-04.** Next: writing
 row stays only in analytics layer" means **Statement-view display-ineligible**, NOT a storage
 relocation. The core synthetic facts `SUM(D&A components)` / `SUM(S&M+G&A)` remain in storage and
 continue feeding EBITDA/analytics unchanged; they simply **do not create a Statement-view row
-prototype**, and `derived_q4` must NOT pull a non-display synthetic core back into the statement via its
-shared `uni_account`. The plan + tests must explicitly cover: (a) non-display synthetic core builds no
-row prototype; (b) the component long-tail rows are the PDF rows; (c) derived_q4 attaches only to
-display-eligible prototypes.
+prototype**, and a derived single-quarter cell (`derived_q2` / `derived_q3` / `derived_q4`) must NOT
+pull a non-display synthetic core back into the statement via its shared `uni_account`. The plan + tests
+must explicitly cover: (a) non-display synthetic core builds no row prototype; (b) the component
+long-tail rows are the PDF rows; (c) derived single-quarter cells attach only to display-eligible
+prototypes.
+
+---
+
+## §16 — Post-P2.1 addendum (2026-06-04): derived single-quarter set generalized
+
+This spec was written when `sec_financial_metrics` carried only `derived_q4` single-quarter rows. **P2.1
+(shipped to production 2026-06-04)** added `derived_q2` (6M−Q1) and `derived_q3` (9M−6M) reconstruction
+to derive-base, so the derived single-quarter set is now **`derived_q2 ∪ derived_q3 ∪ derived_q4`**.
+
+Binding contract update — wherever this spec says "`derived_q4` attaches by `uni_account`" (the row
+identity contract §P1.2/P2.6, the deterministic-prototype rule, and the synthetic-pull-back guard, all
+generalized inline above), read it as **the derived single-quarter set `derived_q2/q3/q4`**:
+
+- All three route into the quarterly IS/CF view (`useFinancialMatrix.ts` `QUARTERLY_PKINDS_IS_CF`;
+  `docs/financials-data-rules.md` §quarterly IS/CF). The migration `20260604120000_add_derived_q2_q3_metrics.sql`
+  is already applied (period_kind CHECK allows derived_q2/q3).
+- The attach semantics are identical for Q2/Q3/Q4 (metric cell keyed by `uni_account`, no
+  `source_account`/`ordinal`, attaches to a display-eligible direct-fact prototype). The implementation
+  plan's Tasks 8 & 11 tests must assert **all three** attach (not only Q4) and that none of them pulls a
+  display-ineligible synthetic core back.
+- Everything else in this spec (4-class classifier, presentation resolver, NLM ordering, coverage hard
+  gate, statement-scoped formatter) is **orthogonal** — it resolves FACTS display metadata
+  (`display_label`/`ordinal`), which derived metrics never carry. No change.
+
+EPS has no derived single quarters (non-additive → derive-base never reconstructs EPS), so EPS quarterly
+columns remain Q1/Q4-direct as before.
