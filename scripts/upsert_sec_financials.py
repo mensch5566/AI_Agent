@@ -729,10 +729,36 @@ def row_to_dict(row) -> dict:
     SUM core builds no Statement-view row prototype) — there is NO such DB column,
     so it is stripped here. `display_label` IS a column (migration
     2026060500_add_display_label.sql) and is kept.
+
+    `ordinal` is a smallint column, but XBRL presentation `order` (and thus the
+    resolved ordinal) arrives as a float (e.g. 3.0). Coerce integer-valued floats
+    to int so PostgREST accepts them. Fail loud on a genuinely fractional order
+    (e.g. 1.5): truncating it to 1 would silently collide with another line's
+    position — a real filer using fractional orders needs a schema decision
+    (smallint → numeric), not a silent truncation.
     """
     d = asdict(row)
     d.pop("display_eligible", None)
+    # Only FactRow carries `ordinal`. DimensionalRow has no such field/column —
+    # never ADD the key (sec_financial_dimensional_facts would reject it).
+    if "ordinal" in d:
+        d["ordinal"] = _coerce_ordinal(d["ordinal"])
     return d
+
+
+def _coerce_ordinal(ordinal):
+    """smallint-safe ordinal: None passes through; an integer-valued float/int is
+    cast to int; a fractional value raises ValueError (no silent truncation)."""
+    if ordinal is None:
+        return None
+    f = float(ordinal)
+    if f != int(f):
+        raise ValueError(
+            f"non-integer ordinal {ordinal!r} cannot be stored in smallint column "
+            f"without truncation/collision. The `ordinal` column needs a schema "
+            f"decision (smallint → numeric) before fractional XBRL orders ship."
+        )
+    return int(f)
 
 
 def apply(batch: A.NormalizedBatch) -> None:
