@@ -1,68 +1,91 @@
-# T14 dry-run finding — resolver doesn't reach 100% coverage on real multi-filing data
+# T14 coverage finding — Codex review (1 bug fixed + 1 contract decision)
 
-**Status**: BLOCKING. The coverage hard gate (Task 9) correctly refuses `--apply`. The PDF-faithful
-statement view must NOT ship until the presentation-network resolution handles the 10-K/10-Q dual-network
-+ YTD-period reality. T1–T13 code is all done + tested; this is a resolver design gap surfaced only by
-real data at T14c.
+**Context**: T14c (real-data dry-run, read-only) of the PDF-faithful statement build revealed the
+coverage hard gate (Task 9) blocking `--apply` at INTC IS 66%. Investigation split it into TWO distinct
+issues. Issue 1 was a clear gate bug (FIXED). Issue 2 is a display-contract decision that needs sign-off
+before implementing. Branch `worktree-statement-view-pdf-faithful`. Reviewer: Codex (adversarial).
 
-## What happened
+Prod safety: only `sec_financial_facts.display_label` column was ADDED (nullable, empty). No `--apply`
+has written any display_label/ordinal. No production data changed.
 
-`display_label` migration applied to prod (T14a, 2026-06-05). INTC dry-run (read-only) coverage:
+---
 
-- **IS 66.2% (94/142)** — 48 display-eligible rows missing `ordinal`
-- **BS 91.2% (103/113)** — 10 missing
-- **CF 84.0% (68/81)** — 13 missing
+## Issue 1 — coverage gate counted NON_GAAP facts (FIXED, commit 00c474c)
 
-The gate blocks apply (correct).
+**Bug**: `coverage_report` / `_is_coverage_eligible` counted Non-GAAP (8-K reconciliation) facts in the
+GAAP-statement coverage denominator. But `attach_display_to_batch` only resolves GAAP facts
+(`version=="GAAP"`); Non-GAAP facts are an OVERLAY keyed by uni_account onto the GAAP face rows and have
+no XBRL presentation network, so they can NEVER carry an XBRL ordinal. They falsely failed the gate
+(INTC: 26 of the 48 IS "missing" were Non-GAAP, all with PDF-label source_accounts like "Gross margin").
 
-## Root cause (diagnosed)
+**Fix**: `_is_coverage_eligible` now excludes `version != "GAAP"`. +1 TDD test
+(`test_non_gaap_facts_excluded_from_coverage_denominator`). Result: INTC IS **66.2% → 81.0%**; scripts
+suite 313 passed.
 
-INTC's `edges_pre` has **two** IS presentation networks, each with 20 children but DIFFERENT line items
-and DIFFERENT period coverage:
+**Scrutinize**: is excluding ALL Non-GAAP from the GAAP coverage gate correct? (Author claim: yes — the
+spec scopes Task 8 resolution to GAAP only; Non-GAAP overlays by uni_account and is ordered via the GAAP
+row it attaches to, never via its own XBRL ordinal. A separate Non-GAAP-view ordering contract, if ever
+needed, is out of scope here.)
 
-| network role | children | periods present |
-|---|---|---|
-| `…ConsolidatedStatementsofIncome` (full 10-K) | 20 | FY2025 only |
-| `…ConsolidatedCondensedStatementsofIncome` (condensed 10-Q) | 20 | Q1_FY2025, Q2_FY2025, Q3_FY2025, Q1_FY2026 only |
+## Issue 2 — note-level GAAP facts not in the face presentation network (CONTRACT DECISION, not implemented)
 
-- The full 10-K statement breaks out `interest_expense`, `interest_income`,
-  `other_nonoperating_income_expense`, `amortization_of_acquired_intangibles`, `goodwill_impairment`,
-  `gain_loss_on_equity_investments`; the condensed 10-Q aggregates these into "interest and other, net".
-- Neither network's `period` set covers the YTD periods `6M_FY2025` / `9M_FY2025` or aligns across both
-  annual (FY2025) and quarterly facts.
-- `select_network` (spec §4.1: largest facts-overlap, tie-break size) sees both at 20 children → picks one
-  (the condensed). The other network's exclusive lines then get no ordinal → coverage gap.
+After Issue 1, INTC residual missing: **IS 22 / BS 10 / CF 13**, ALL GAAP. Diagnosed: these are GAAP
+facts whose XBRL concept is **NOT in the statement's face presentation network** — they are NOTE-LEVEL
+sub-components that roll up into a face aggregate line.
 
-So the spec's "pick ONE latest network and resolve every fact against it" (§4.1/§4.2) is insufficient for a
-filer that has both a full 10-K statement and a condensed 10-Q statement (different line granularity), plus
-YTD periods absent from either presentation network. Note: core concepts (revenue/gross_profit/
-operating_income/net_income) DO resolve to an ordinal in the condensed network (revenue=1, gp=3, oi=8,
-ni=15) — so the per-concept ordinal machinery works; the gap is which network(s) the ordering is sourced
-from and which line items/periods that leaves uncovered. (A secondary observation: `resolve_label_ordinal`
-returns `label=None` for these — labels.json text isn't resolving via preferred_label either; investigate
-alongside.)
+Concrete INTC IS evidence:
+- The chosen face IS network (`ConsolidatedCondensedStatementsofIncome`, 20 children, correctly ordered:
+  revenue=1, GrossProfit=3, OperatingIncomeLoss=8, **NonoperatingIncomeExpense=10** ("Interest and
+  other, net"), NetIncomeLoss=15, EPS=17…) DOES contain the face aggregate `NonoperatingIncomeExpense`.
+- The 22 missing IS facts are 6 uni_accounts: `interest_expense` (InterestExpenseNonoperating),
+  `interest_income` (InvestmentIncomeInterest), `other_nonoperating_income_expense`
+  (OtherNonoperatingIncomeExpense), `amortization_of_acquired_intangibles`, `goodwill_impairment`,
+  `gain_loss_on_equity_investments` — i.e. the NOTE-LEVEL breakdown of "Interest and other, net". On
+  INTC's PDF FACE income statement these do NOT appear as separate lines (only the aggregate does).
 
-## Proposed fix direction (for the focused next task — design first)
+**Safety verification (key)**: categorized ALL residual missing GAAP facts (IS 22 / BS 10 / CF 13) by
+"concept in face network?" → **45/45 are concept-NOT-in-face-network (note-level); 0 are
+in-network-but-failed-to-resolve**. So there is NO hidden resolver bug — every residual is genuinely a
+note-level item, and the resolver resolves every true face concept correctly.
 
-1. **Network selection → network UNION/merge per statement.** Build the canonical row ordering from the
-   most-complete statement network (prefer the full 10-K `ConsolidatedStatementsofIncome` over the
-   `Condensed` one), then SUPPLEMENT with any concept/ordinal only present in the other network so every
-   disclosed line gets a position. Resolve each concept's ordinal ONCE (period-independent) and apply to
-   all periods of that concept (spec §4.2 intent: "one ordering per statement across all period columns").
-2. Decide the merge ordering rule when 10-K and 10-Q disagree on order (10-K is the fuller PDF; prefer it).
-3. Re-check the `label=None` issue (preferred_label → terse/total/label fallback not yielding text).
-4. Genuinely-absent-from-all-XBRL lines (if any remain) route to the NLM ordering artifact (Task 6/7) as
-   designed — but most of INTC's missing lines ARE in the 10-K network, so the union fix should recover
-   them without NLM.
-5. Re-run dry-run for all 5 tickers; coverage must hit 100% (or the residual goes to audited NLM order)
-   before `--apply`.
+### Proposed rule (needs sign-off)
 
-This is a Task-3/Task-8 enhancement (presentation_resolver + attach_display_to_batch) with its own TDD +
-real-data dry-run loop, then Codex review, then the gated production rollout (T14d) + visual verify (T15).
+A **GAAP** fact whose concept is **not present in the statement's face presentation network** is
+**display-INELIGIBLE** for the face statement (builds no face row, excluded from the coverage
+denominator) — the same treatment as a synthetic-SUM-of-multiple (spec G7). The fact stays in storage
+(feeds analytics / long-tail / Comparison view), it just isn't a FACE row.
 
-## State at stop
+**Boundary (important)**: this only fires when the face network IS present but the concept isn't in it.
+When the face network is ABSENT for a statement (AAOI BS/CF), facts are NOT auto-hidden — they route to
+the human-audited NLM ordering artifact (the existing G1 design). So:
+- network present + concept in it → face row (XBRL ordinal).
+- network present + concept NOT in it + no audited NLM order → **display-ineligible (note-level)** ← NEW
+- network absent → NLM ordering for all face rows (unchanged).
 
-- Branch `worktree-statement-view-pdf-faithful`: T1–T13 + vitest, 14 commits, 34 vitest + 323 py + tsc green.
-- Prod: `sec_financial_facts.display_label` column ADDED (nullable, empty) — harmless, frontend falls back
-  to source_account when null, and no `--apply` wrote any display_label yet. No production data changed.
-- NOT done: T14c coverage to 100% (blocked by the above), T14d `--apply`, T15 visual, T16 docs/Codex/finish.
+This is principled (XBRL: the presentation network IS the face-statement definition) and PDF-faithful
+(face shows the aggregate; the breakdown lives in storage/Comparison/notes, not the face). With this rule
+INTC reaches 100% on all three statements.
+
+### Scrutinize / open questions for Codex
+
+1. Is "GAAP concept not in present face network → display-ineligible" the right contract, or should some
+   of these (e.g. interest_expense) still be face rows via NLM? (Author: no — the PDF face shows the
+   aggregate; forcing the components onto the face would be LESS faithful, not more.)
+2. Risk: could a genuine face line ever be excluded because `select_network` picked the wrong/condensed
+   network? (Author: verified 0 such cases for INTC; but the rule should still be validated across all 5
+   tickers' dry-runs before apply — a true face line wrongly hidden would be a silent data-loss.)
+3. Where to implement: `attach_display_metadata` (set `display_eligible=False` when network_role is not
+   None and ordinal is still None after the NLM fallback). Plus a log line so a human can audit what was
+   classified note-level (no silent truncation).
+4. Should the note-level classification be LOGGED per ticker for human review (vs silent)? (Author leans
+   yes — print the note-level list in the dry-run so the user can confirm nothing real was dropped.)
+
+## State / next steps (after Issue 2 sign-off)
+
+1. Implement Issue 2 rule (TDD in attach_display_metadata + adjust coverage test expectations).
+2. Re-dry-run ALL 5 tickers; require 100% per statement (residual, if any, must be genuine
+   network-absent → audited NLM). AAOI BS/CF still need the audited NLM artifact (T7 live run + human
+   audit).
+3. Then the gated production rollout: T14d `--apply` (user auth) → T15 visual verify → T16 docs/Codex/finish.
+
+Branch state: T1–T13 + vitest + Issue 1 fix. 313 py + 34 vitest + tsc green. Commits up to 00c474c.
