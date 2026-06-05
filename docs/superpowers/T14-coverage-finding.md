@@ -155,8 +155,16 @@ shipped tickers.
 **Status**: data VALUES in production are correct and unaffected (additive display metadata).
 The live main-repo production still renders the OLD dictionary-ordered view (correct order,
 generic labels), so users see no regression today — the data-driven PDF-faithful view is
-branch-only and must NOT merge until ordinals are globalized. **Decision pending user** (this is
-a real piece of work: presentation-tree DFS global ordinal + re-apply).
+branch-only and must NOT merge until ordinals are globalized.
+
+> **FIXED** (`compute_global_ordinals`, TDD): merge all matching face-network arcs →
+> pre-order DFS → global 1-based ordinal; the adapter stamps the resolved concept's GLOBAL
+> position instead of the raw sibling-relative `order`. Validated on real MU + LITE IS data —
+> both now render in true PDF order (Revenue → COGS → Gross Profit → [R&D, SG&A, …] → Operating
+> Income → non-operating → **Income before income taxes** → Tax → Net Income → EPS). 356 py
+> pass. STILL PENDING: production re-`--apply` of MU + LITE to overwrite the old scrambled
+> local ordinals with global ones (user-authorized production write), then re-verify in the
+> worktree dev server.
 
 > NOTE: the Claude Preview MCP launches dev servers from the MAIN repo cwd, not the worktree.
 > A `worktree-financials` launch.json config was added to the main repo's `.claude/launch.json`

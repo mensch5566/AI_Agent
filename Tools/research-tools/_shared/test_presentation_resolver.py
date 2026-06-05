@@ -205,3 +205,79 @@ def test_resolve_via_uni_any_canonical_not_on_face_returns_none():
     # (None, None) (never invents an order).
     lbl, ordn = resolve_via_uni_any("income_before_taxes", _TWO_NET_EDGES, {}, "IS")
     assert lbl is None and ordn is None
+
+
+# --------------------------------------------------------------------------- #
+# T15 fix: compute_global_ordinals — pre-order DFS over the MERGED presentation
+# tree of ALL face networks (XBRL `order` is sibling-relative; this flattens to a
+# global top-to-bottom statement position).
+# --------------------------------------------------------------------------- #
+
+from presentation_resolver import compute_global_ordinals
+
+_GROOT = "us-gaap:IncomeStatementAbstract"
+_GOPEX = "us-gaap:OperatingExpensesAbstract"
+# Network A (condensed, one period): root → Revenue, COGS, GrossProfit,
+# OpExAbstract → [R&D, SG&A], OperatingIncome, NonOp, IncomeTax, NetIncome.
+_NET_A = "http://x/role/statement-condensed-consolidated-statements-of-operations"
+# Network B (full, another period): SAME spine but adds IncomeBeforeTaxes between
+# NonOp and IncomeTax (and lacks Revenue) — the cross-period union case.
+_NET_B = "http://x/role/statement-consolidated-statements-of-operations"
+
+def _arc(role, parent, child, order):
+    return {"role_uri": role, "parent_qname": parent, "child_qname": child,
+            "order": order, "period": "FY2025"}
+
+_GLOBAL_EDGES = [
+    _arc(_NET_A, _GROOT, "us-gaap:Revenues", 1.0),
+    _arc(_NET_A, _GROOT, "us-gaap:CostOfGoodsAndServicesSold", 2.0),
+    _arc(_NET_A, _GROOT, "us-gaap:GrossProfit", 3.0),
+    _arc(_NET_A, _GROOT, _GOPEX, 4.0),
+    _arc(_NET_A, _GOPEX, "us-gaap:ResearchAndDevelopmentExpense", 1.0),
+    _arc(_NET_A, _GOPEX, "us-gaap:SellingGeneralAndAdministrativeExpense", 2.0),
+    _arc(_NET_A, _GROOT, "us-gaap:OperatingIncomeLoss", 5.0),
+    _arc(_NET_A, _GROOT, "us-gaap:NonoperatingIncomeExpense", 6.0),
+    _arc(_NET_A, _GROOT, "us-gaap:IncomeTaxExpenseBenefit", 8.0),
+    _arc(_NET_A, _GROOT, "us-gaap:NetIncomeLoss", 9.0),
+    # Network B: income_before_taxes at order 7 (between NonOp=6 and Tax=8).
+    _arc(_NET_B, _GROOT, "us-gaap:NonoperatingIncomeExpense", 6.0),
+    _arc(_NET_B, _GROOT,
+         "us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest", 7.0),
+    _arc(_NET_B, _GROOT, "us-gaap:IncomeTaxExpenseBenefit", 8.0),
+    # a parenthetical/note network must be ignored
+    _arc("http://x/role/statement-operations-parenthetical", _GROOT, "us-gaap:Foo", 1.0),
+]
+
+
+def test_global_ordinals_preorder_dfs_flattens_tree():
+    g = compute_global_ordinals(_GLOBAL_EDGES, "IS")
+    # Pre-order: Revenue, COGS, GrossProfit, [R&D, SG&A under OpEx], OpInc,
+    # NonOp, IncomeBeforeTaxes (from net B), IncomeTax, NetIncome.
+    order = ["Revenues", "CostOfGoodsAndServicesSold", "GrossProfit",
+             "ResearchAndDevelopmentExpense", "SellingGeneralAndAdministrativeExpense",
+             "OperatingIncomeLoss", "NonoperatingIncomeExpense",
+             "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+             "IncomeTaxExpenseBenefit", "NetIncomeLoss"]
+    seq = [g[c] for c in order]
+    assert seq == sorted(seq), f"not monotonically increasing: {list(zip(order, seq))}"
+    # R&D/SG&A (children of OpEx) sit between GrossProfit and OperatingIncome.
+    assert g["GrossProfit"] < g["ResearchAndDevelopmentExpense"] < g["OperatingIncomeLoss"]
+
+
+def test_global_ordinals_cross_network_concept_slots_correctly():
+    # income_before_taxes exists ONLY in network B but must land between NonOp
+    # and IncomeTax in the MERGED order (the whole point of the union merge).
+    g = compute_global_ordinals(_GLOBAL_EDGES, "IS")
+    ibt = "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"
+    assert g["NonoperatingIncomeExpense"] < g[ibt] < g["IncomeTaxExpenseBenefit"]
+
+
+def test_global_ordinals_excludes_parenthetical_and_absent():
+    g = compute_global_ordinals(_GLOBAL_EDGES, "IS")
+    assert "Foo" not in g          # parenthetical network ignored
+    assert "NotAConcept" not in g  # absent concept → not in map
+
+
+def test_global_ordinals_empty_when_no_face_network():
+    # BS keyword matches nothing here → empty map (AAOI-style; caller → NLM).
+    assert compute_global_ordinals(_GLOBAL_EDGES, "BS") == {}

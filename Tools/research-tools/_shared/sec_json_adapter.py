@@ -36,8 +36,10 @@ from .dimensional_aliases import build_axis_key, build_member_key
 from .period_kind import infer_period_kind, normalize_supplement_period_kind
 from .presentation_resolver import (
     AmbiguityError,
+    CANONICAL_CONCEPT,
     NeedsNlmOrder,
     _local,
+    compute_global_ordinals,
     resolve_label_ordinal,
     resolve_label_ordinal_any,
     resolve_via_uni,
@@ -591,6 +593,20 @@ def attach_display_metadata(
     """
     audited_for_stmt = (audited_orders or {}).get(statement)
 
+    # T15 fix: the stamped ordinal is a GLOBAL pre-order-DFS position over the
+    # merged presentation tree of all face networks — NOT the raw sibling-relative
+    # XBRL `order` (which collides across abstract groups and scrambles row order).
+    # The per-network resolvers still decide label + resolved-or-not; we only swap
+    # the NUMBER for the resolved concept's global position here.
+    global_ord = compute_global_ordinals(edges, statement)
+
+    def _global_for(concept_local, fallback):
+        """Global ordinal for a resolved concept, falling back to the per-network
+        ordinal if (defensively) the concept isn't in the merged tree."""
+        if not concept_local:
+            return fallback
+        return global_ord.get(concept_local, fallback)
+
     for row in facts:
         if row.statement != statement:
             continue
@@ -614,6 +630,8 @@ def attach_display_metadata(
                 _local_name(row.source_account), edges, labels, statement
             )
             match_method = "xbrl_presentation"
+            # The concept whose GLOBAL position we stamp (the matched tag itself).
+            resolved_concept = _local_name(row.source_account)
 
             if cls == "preserved_pdf_label":
                 # source_account IS the PDF text → use it as the display label
@@ -637,12 +655,15 @@ def attach_display_metadata(
                     if uni_ordinal is not None:
                         ordinal = uni_ordinal
                         match_method = "xbrl_presentation_via_uni"
+                        # Borrow positions the row at its canonical concept's slot.
+                        resolved_concept = CANONICAL_CONCEPT.get(row.uni_account)
             else:
                 row.display_label = label
 
             if ordinal is not None and network_role is not None:
                 _set_xbrl_ordinal_provenance(
-                    row, ordinal, network_role, match_method=match_method
+                    row, _global_for(resolved_concept, ordinal),
+                    network_role, match_method=match_method,
                 )
             else:
                 _try_audited_nlm_ordinal(row, audited_for_stmt)
@@ -659,7 +680,11 @@ def attach_display_metadata(
             )
             row.display_label = label
             if ordinal is not None and network_role is not None:
-                _set_xbrl_ordinal_provenance(row, ordinal, network_role)
+                _set_xbrl_ordinal_provenance(
+                    row,
+                    _global_for(CANONICAL_CONCEPT.get(row.uni_account), ordinal),
+                    network_role,
+                )
             else:
                 _try_audited_nlm_ordinal(row, audited_for_stmt)
         except (NeedsNlmOrder, AmbiguityError):

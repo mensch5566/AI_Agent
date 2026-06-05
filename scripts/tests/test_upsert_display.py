@@ -105,7 +105,9 @@ def test_tag_like_resolves_label_ordinal_xbrl():
     f = _fact("gross_profit", "GrossProfit")
     _run([f])
     assert f.display_label == "Gross margin"   # terseLabel = PDF wording
-    assert f.ordinal == 3.0
+    # GLOBAL ordinal (T15): _IS_EDGES are flat under the root, so the pre-order
+    # DFS ranks them by `order` → GrossProfit(order 3) is the 1st concept = 1.
+    assert f.ordinal == 1
     assert f.display_eligible is True
     assert f.provenance["ordinal_source"] == "xbrl"
     assert f.provenance["ordinal_source_doc"] == "10-K"
@@ -170,7 +172,8 @@ def test_null_source_resolved_via_uni_canonical():
     f = _fact("shares_basic_millions", None)
     _run([f])
     assert f.display_label == "Basic shares outstanding"
-    assert f.ordinal == 10.0
+    # GLOBAL ordinal (T15): WtdAvgSharesBasic(order 10) is the 3rd/last concept.
+    assert f.ordinal == 3
     assert f.display_eligible is True
     assert f.provenance["ordinal_source"] == "xbrl"
 
@@ -338,7 +341,7 @@ def test_tag_like_in_accepted_and_resolves_still_eligible():
     _run_accepted([f], _ACCEPTED)
     assert f.display_eligible is True
     assert f.display_label == "Gross margin"
-    assert f.ordinal == 3.0
+    assert f.ordinal == 1  # GLOBAL position
     assert "display_exclusion_reason" not in f.provenance
 
 
@@ -391,8 +394,9 @@ def test_preserved_pdf_label_core_borrows_ordinal_via_uni_canonical():
         _run_ibt([f])
         # Period-exact PDF wording preserved as the display label.
         assert f.display_label == pdf_text
-        # Ordinal BORROWED from the canonical face concept — no NLM needed.
-        assert f.ordinal == 7.0
+        # Ordinal BORROWED from the canonical face concept (GLOBAL position) — no
+        # NLM needed. _IBT_EDGES: Revenues(1), IBT_CONCEPT(7) → IBT is 2nd = 2.
+        assert f.ordinal == 2
         assert f.display_eligible is True
         assert f.provenance["ordinal_source"] == "xbrl"
         # Distinct match method so a human can audit the borrow.
@@ -404,7 +408,7 @@ def test_preserved_pdf_label_core_borrow_survives_note_level_pass():
     # so the note-level exclusion (tag_like-only anyway) never fires.
     f = _fact("income_before_taxes", "Income before income taxes", cell_id="cid::ibt2")
     _run_ibt([f], accepted={"Revenues", _IBT_CONCEPT})
-    assert f.ordinal == 7.0
+    assert f.ordinal == 2  # GLOBAL position (IBT is 2nd in _IBT_EDGES)
     assert f.display_eligible is True
     assert "display_exclusion_reason" not in f.provenance
 

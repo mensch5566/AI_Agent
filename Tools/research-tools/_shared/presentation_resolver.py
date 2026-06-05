@@ -64,6 +64,65 @@ def select_network(edges, statement, facts_concepts=None):
     return max(roles.items(), key=score)[0]
 
 
+def compute_global_ordinals(edges, statement):
+    """Global PDF-order ordinal per concept, via pre-order DFS over the MERGED
+    presentation tree of ALL face networks matching `statement` (T15 fix).
+
+    XBRL presentation ``order`` is sibling-relative within one parent abstract, so
+    it COLLIDES across groups (Revenue, Operating-Expenses, EPS all restart at 1).
+    A statement row sorted on raw ``order`` therefore scrambles. This flattens the
+    tree depth-first — each parent's children in ``order``, recursing — to a single
+    global sequence matching the statement's top-to-bottom PDF layout.
+
+    Arcs from EVERY matching face network (10-K full ∪ 10-Q condensed ∪ prior
+    periods, whose role names differ only by case/era) are MERGED and de-duped, so
+    a concept disclosed in only one period's network still lands in its correct
+    slot relative to the others (e.g. LITE income_before_taxes, present only in the
+    full network, slots between non-operating income and income tax).
+
+    Returns ``{bare_local_name: 1-based int}``. A concept on no face tree is absent
+    (caller falls back to NLM/manual). First DFS visit wins on a duplicate local
+    name; the empty dict is returned when no face network matches (AAOI BS/CF).
+    """
+    arcs = set()
+    for e in edges:
+        n = _norm(e.get("role_uri", ""))
+        if any(x in n for x in _EXCLUDE):
+            continue
+        if not any(k in n for k in _KW[statement]):
+            continue
+        order = e.get("order")
+        arcs.add((e.get("parent_qname"), e["child_qname"],
+                  float(order) if order is not None else 0.0))
+    if not arcs:
+        return {}
+
+    children = {}
+    childset = set()
+    for parent, child, order in arcs:
+        children.setdefault(parent, []).append((order, child))
+        childset.add(child)
+    # Roots = parents that are never themselves a child (incl. a None parent).
+    roots = sorted((p for p in children if p not in childset), key=lambda p: str(p))
+
+    out = {}
+    counter = [0]
+    visited = set()
+
+    def visit(node):
+        for _order, child in sorted(children.get(node, []), key=lambda oc: (oc[0], oc[1])):
+            if child in visited:
+                continue
+            visited.add(child)
+            counter[0] += 1
+            out.setdefault(_local(child), counter[0])
+            visit(child)
+
+    for r in roots:
+        visit(r)
+    return out
+
+
 def accepted_face_concepts(edges, statement):
     """Set of bare local concept names that appear on ANY matching face network
     for `statement` — the UNION across all `matching_face_networks`.
