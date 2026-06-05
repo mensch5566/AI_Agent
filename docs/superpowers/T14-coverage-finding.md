@@ -170,6 +170,41 @@ branch-only and must NOT merge until ordinals are globalized.
 > A `worktree-financials` launch.json config was added to the main repo's `.claude/launch.json`
 > to point Preview at the worktree for this verification.
 
+### T15 completeness diagnosis (ground-truth, 2026-06-06)
+
+**Honest correction**: an initial alarm ("note-level exclusion hides ~8 material lines per
+ticker; foundational premise wrong; material data loss across MU+LITE") was WRONG — caused by
+unreliable diagnostics (regex over-match on the dry-run print, hand-traces that didn't replicate
+the real upsert's network/label inputs, and wrong period filters for instant BS facts).
+
+**Reliable method** (period-independent production query: core uni_accounts with ≥1 GAAP fact but
+an ordinal in ZERO periods = structurally dropped), cross-checked against the rendered frontend
+DOM (ground truth of what the user sees):
+
+| dropped core uni | genuine miss? | why |
+|---|---|---|
+| **MU BS `long_term_debt`** | **YES — real** | MU's face presentation declares the aggregate `LongTermDebtAndCapitalLeaseObligations` (zero facts); parse mapped only granular `LongTermDebt` ($11,533M) which is note-level → hidden. The $11.5B debt line vanishes. |
+| MU BS income_taxes_payable / deferred_revenue_current / lease-current | no | MU folds them into "Other current liabilities" on the face (DOM confirms) |
+| LITE BS `ppe_gross` / `accumulated_depreciation` | no | LITE face shows PP&E **net**; gross + accum-dep are the breakdown |
+| LITE CF `depreciation_and_amortization` | no | LITE reports depreciation + amortization separately (both shown) |
+| MU CF `deferred_income_tax` | no | folded into "Other" |
+
+**Conclusion**: the note-level auto-exclusion (T14 Issue 2) is working AS DESIGNED — it correctly
+hides genuine breakdowns each filer folds into aggregates/"Other"/net on its own face. The ONE
+genuine confirmed miss is **MU BS long_term_debt**, a per-ticker parse concept-coverage gap
+(parse-10QK-gaap maps granular `LongTermDebt` but not MU's face aggregate
+`LongTermDebtAndCapitalLeaseObligations`). LITE renders complete + correct across all 3 statements.
+
+**Ground-truth render status**: LITE IS/BS/CF ✅ complete, PDF order + labels correct. MU IS ✅
+(note: two "Net income" rows = ProfitLoss + NetIncomeLoss with NCI between — reflects MU's XBRL,
+worth an eyeball). MU CF ✅. **MU BS ✗ — missing the long-term-debt line.**
+
+**Fix locus** (NOT done — user diagnosing first): parse-10QK-gaap concept coverage for MU's
+aggregate debt+lease face concept (定案/T3, ticker-specific). Possibly also a guard so a
+material core line whose face concept is unmapped fails LOUD (coverage gate) instead of being
+silently note-level-hidden. Other shipped-later tickers (INTC/SNDK/AAOI) should get the same
+ground-truth completeness check before they ship.
+
 ### Path to 100% (per residual class — iterative)
 1. ~~preserved_pdf_label core lines (LITE income_before_taxes)~~ ✅ **DONE** —
    added `resolve_via_uni_any` (multi-network uni→canonical ORDINAL borrow, laxer
