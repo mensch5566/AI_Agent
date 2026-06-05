@@ -140,12 +140,25 @@ MU is fully PDF-faithful end-to-end → the contract is sound. Note-level exclus
    the display label, stamping `ordinal_match_method=xbrl_presentation_via_uni`
    for audit. SNDK long-tail (uni not in CANONICAL_CONCEPT) → NeedsNlmOrder →
    unchanged NLM routing (safety verified by test + dry-run). +8 tests, 348 py.
-2. **INTC CF net_income ×5** (NEXT — needs a small design call): INTC's CF starts
-   with `ProfitLoss` (net income incl NCI), not `NetIncomeLoss`; the carried-in
-   net_income (NetIncomeLoss canonical) isn't a CF face concept. Options: (a)
-   context-aware canonical (net_income→ProfitLoss in CF) — risky, different line
-   item; (b) NLM order for INTC CF; (c) leave as needs-NLM. **Decision pending
-   user.**
+2. **INTC CF net_income ×5 — RECLASSIFIED: this is an UPSTREAM DATA-CORRECTNESS
+   bug, NOT a display/ordinal problem.** NLM verification (work profile, INTC
+   FY25 10-K, 2026-06-05) confirmed with SEC citation: INTC's Consolidated
+   Statements of Cash Flows STARTS with `Net income (loss) = $26M` = `ProfitLoss`
+   (incl NCI), NOT the −$267M `NetIncomeLoss` attributable to Intel. Our pipeline
+   stored −267 (NetIncomeLoss) on the CF starting line for every period (value
+   matches IS NetIncomeLoss exactly; ProfitLoss differs by the NCI amount). So:
+     - The CF "net income" starting-line VALUE is wrong (−267 vs the printed 26);
+       under PDF-faithful display this is unacceptable.
+     - `NetIncomeLoss` is genuinely absent from INTC's CF presentation network
+       (top line concept = `ProfitLoss`, order 1) — which is WHY resolve_via_uni
+       found no ordinal. The coverage gate correctly fail-loud'd (it refused to
+       attach an ordinal to a fact that doesn't belong on the CF face).
+     - All three "ordinal borrow" options were premised on the value being
+       correct & only the order missing — that premise is FALSE. None apply.
+   **Correct fix lives upstream in parse-10QK-gaap (定案/T3): the CF
+   reconciliation starting line for NCI filers must take `ProfitLoss`, not
+   `NetIncomeLoss`.** Needs its own design→review→ADR cycle (separate from T14
+   display). NOT autonomous; user-directed. **Decision pending user.**
 3. SNDK long-tail ×8 + AAOI BS/CF ×516: NLM ordering artifacts → **human audit
    gate** (T7 live run). Cannot be autonomous.
 4. Re-dry-run all 5 → 100% → then T14d --apply (user auth) → T15 visual → T16.
