@@ -130,6 +130,38 @@ MU is fully PDF-faithful end-to-end → the contract is sound. Note-level exclus
 - **AAOI BS/CF — 516 (no presentation network)**: the designed NLM-ordering case (Task 6/7). Needs the
   live NLM query (`produce_nlm_order` AAOI BS+CF) + **human audit** of the artifact.
 
+### T15 visual verification — BLOCKER FOUND: ordinals are LOCAL-to-parent, not global
+
+Running the worktree dev server (the Statement view's data-driven `buildMatrix`) against
+the shipped MU/LITE display metadata revealed:
+
+- ✅ **Labels render PDF-faithfully** — LITE IS shows "Revenue from contract with customer",
+  "Cost of sales", "Gross profit", "Selling, general and administrative", and the fix target
+  **"Income (loss) before income taxes"** (borrowed-ordinal preserved_pdf_label). MU likewise.
+- ✅ Values + PDF number format correct; derived Q4 italic; long-tail rows present.
+- ❌ **Row ORDER is scrambled.** Ordinals COLLIDE: for LITE IS, 4 distinct concepts sit at
+  `ordinal=1` (Revenue, R&D, Basic-EPS-shares, Basic-EPS-per-share), 4 at `ordinal=2`
+  (Cost of sales, Diluted shares/EPS, SG&A), etc. Revenue renders 4th, Gross profit 12th.
+
+**Root cause**: the XBRL presentation linkbase `order` attribute is RELATIVE TO SIBLINGS under
+the same parent abstract — NOT a global statement position. `resolve_label_ordinal` (T4)
+returns the raw edge `order`, so concepts under different abstracts (Revenue group / Operating
+Expenses group / EPS group) all collapse onto the same small integers. The fix is to compute a
+GLOBAL ordinal by depth-first traversal of the presentation tree (parent's order, then child's
+order — e.g. a tuple/decimal path key like 1, 2.1, 2.2, 3 …), using the `parent_qname` already
+on each edge. This is a resolver-design change (T4/T8) + a re-`--apply` of ordinals for the
+shipped tickers.
+
+**Status**: data VALUES in production are correct and unaffected (additive display metadata).
+The live main-repo production still renders the OLD dictionary-ordered view (correct order,
+generic labels), so users see no regression today — the data-driven PDF-faithful view is
+branch-only and must NOT merge until ordinals are globalized. **Decision pending user** (this is
+a real piece of work: presentation-tree DFS global ordinal + re-apply).
+
+> NOTE: the Claude Preview MCP launches dev servers from the MAIN repo cwd, not the worktree.
+> A `worktree-financials` launch.json config was added to the main repo's `.claude/launch.json`
+> to point Preview at the worktree for this verification.
+
 ### Path to 100% (per residual class — iterative)
 1. ~~preserved_pdf_label core lines (LITE income_before_taxes)~~ ✅ **DONE** —
    added `resolve_via_uni_any` (multi-network uni→canonical ORDINAL borrow, laxer
