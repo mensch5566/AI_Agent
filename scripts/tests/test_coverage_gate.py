@@ -152,3 +152,26 @@ def test_coverage_pct_helper_and_empty_statement():
     assert U.coverage_gate_blocks_apply(report) is True
     # No BS/CF rows → those statements absent from report (vacuously fine).
     assert "BS" not in report or report["BS"]["eligible"] == 0
+
+
+def test_non_gaap_facts_excluded_from_coverage_denominator():
+    """Bug fix (T14): Non-GAAP (8-K reconciliation) facts overlay GAAP face rows
+    by uni_account and have NO XBRL presentation network — attach_display_to_batch
+    only resolves GAAP facts, so a Non-GAAP fact can never carry an ordinal.
+    Counting them in the GAAP-statement coverage denominator falsely fails the
+    gate. They must be EXCLUDED."""
+    rows = [
+        # one GAAP face row with an ordinal → 100% of the GAAP denominator
+        _fact("revenue", statement="IS", ordinal=1.0, version="GAAP"),
+        # Non-GAAP overlay facts with NO ordinal (PDF-label source_account) —
+        # must NOT count against coverage.
+        _fact("gross_profit", statement="IS", ordinal=None, version="NON_GAAP",
+              source_account="Gross margin"),
+        _fact("operating_income", statement="IS", ordinal=None, version="NON_GAAP",
+              source_account="Operating income"),
+    ]
+    report = U.coverage_report(rows)
+    assert report["IS"]["eligible"] == 1          # only the GAAP fact
+    assert report["IS"]["with_ordinal"] == 1
+    assert U.coverage_pct(report["IS"]) == 100.0
+    assert U.coverage_gate_blocks_apply(report) is False  # Non-GAAP didn't break it

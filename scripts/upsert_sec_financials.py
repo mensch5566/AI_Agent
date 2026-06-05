@@ -482,6 +482,14 @@ def _is_coverage_eligible(row) -> bool:
     """True iff `row` belongs in the coverage denominator (display-eligible FACT)."""
     if _row_attr(row, "statement") not in _COVERAGE_STATEMENTS:
         return False
+    # Non-GAAP (8-K reconciliation) facts are an OVERLAY keyed by uni_account onto
+    # the GAAP face rows — they are NOT independent face-statement rows and have no
+    # XBRL presentation network, so attach_display_to_batch only resolves GAAP
+    # facts (it skips version!=GAAP). Counting Non-GAAP facts in the GAAP-statement
+    # coverage denominator would falsely fail the gate (they can never carry an
+    # XBRL ordinal). Exclude them.
+    if _row_attr(row, "version") != "GAAP":
+        return False
     if _row_attr(row, "period_kind") == _YTD_PERIOD_KIND:
         return False
     if _row_attr(row, "period_kind") in _DERIVED_SINGLE_QUARTER_PKINDS:
