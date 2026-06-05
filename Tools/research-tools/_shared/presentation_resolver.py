@@ -8,12 +8,12 @@ _EXCLUDE = ("parenthetical", "details", "note", "reconciliation")
 def _norm(role):
     return re.sub(r"[-_]", "", role.split("/role/")[-1].lower())
 
-def select_network(edges, statement, facts_concepts=None):
-    """Pick the primary presentation network role_uri for `statement`.
-    Latest-network primary; keyword set case/hyphen/underscore-insensitive;
-    exclude parenthetical/details/note/reconciliation networks; tie-break by the
-    network whose child set overlaps most with the ticker's facts (facts_concepts),
-    then by size. Returns None when no matching network exists (e.g. AAOI BS/CF)."""
+def _face_network_childsets(edges, statement):
+    """Map role_uri -> set of bare child local names, for every presentation
+    network matching `statement`'s keyword set and not in the exclude list.
+    Shared helper behind matching_face_networks / select_network /
+    accepted_face_concepts so they agree on exactly which networks count as
+    "face" networks for the statement."""
     roles = {}
     for e in edges:
         r = e.get("role_uri", "")
@@ -21,14 +21,84 @@ def select_network(edges, statement, facts_concepts=None):
         if any(x in n for x in _EXCLUDE):
             continue
         if any(k in n for k in _KW[statement]):
-            roles.setdefault(r, set()).add(e["child_qname"].split(":")[-1])
+            roles.setdefault(r, set()).add(_local(e["child_qname"]))
+    return roles
+
+
+def matching_face_networks(edges, statement):
+    """All role_uris that match `statement`'s face-network keyword set and are
+    not excluded (parenthetical/details/note/reconciliation), in a deterministic
+    order.
+
+    A filer can legitimately have more than one face network for the same
+    statement (e.g. a 10-K full statement network + a 10-Q condensed network).
+    Returns the empty list when none match (e.g. AAOI BS/CF). Order: primary
+    (select_network's pick) first, then the rest sorted by role_uri for
+    determinism."""
+    roles = _face_network_childsets(edges, statement)
+    if not roles:
+        return []
+    primary = select_network(edges, statement)
+    rest = sorted(r for r in roles if r != primary)
+    return [primary] + rest
+
+
+def select_network(edges, statement, facts_concepts=None):
+    """Pick the primary presentation network role_uri for `statement`.
+    Latest-network primary; keyword set case/hyphen/underscore-insensitive;
+    exclude parenthetical/details/note/reconciliation networks; tie-break by the
+    network whose child set overlaps most with the ticker's facts (facts_concepts),
+    then by size, then PREFER the non-condensed role (a 10-K full statement beats
+    a 10-Q condensed statement when otherwise tied). Returns None when no matching
+    network exists (e.g. AAOI BS/CF)."""
+    roles = _face_network_childsets(edges, statement)
     if not roles:
         return None
     def score(item):
         role, childs = item
         ov = len(childs & facts_concepts) if facts_concepts else 0
-        return (ov, len(childs))
+        # Tie-break: after overlap + size, prefer the role whose normalized name
+        # does NOT contain "condensed" (10-K full beats 10-Q condensed).
+        not_condensed = 0 if "condensed" in _norm(role) else 1
+        return (ov, len(childs), not_condensed)
     return max(roles.items(), key=score)[0]
+
+
+def accepted_face_concepts(edges, statement):
+    """Set of bare local concept names that appear on ANY matching face network
+    for `statement` — the UNION across all `matching_face_networks`.
+
+    This is the exclusion basis for note-level auto-exclusion (T14 Issue2): a
+    GAAP fact whose concept is NOT in this union does not appear on any face
+    statement and is a note-level sub-component. The union (not a single
+    network) ensures we never drop a line that is only present in the other
+    (e.g. condensed) network. Empty set when no face network exists."""
+    roles = _face_network_childsets(edges, statement)
+    out = set()
+    for childs in roles.values():
+        out |= childs
+    return out
+
+
+def resolve_label_ordinal_any(concept_local, edges, labels, statement, facts_concepts=None):
+    """Resolve (display_label, ordinal) for a bare local concept across ALL
+    matching face networks for `statement` (T14 Issue2).
+
+    Tries the primary network (select_network) first, then the remaining
+    `matching_face_networks` in order, returning the FIRST non-None ordinal hit
+    (carrying that network's label). A concept present only in the condensed
+    network — or only in the full network when condensed is primary — still
+    resolves. AmbiguityError in one network skips that network (does not crash);
+    another clean network can still resolve it. Returns ``(None, None)`` when no
+    matching network resolves the concept."""
+    for role in matching_face_networks(edges, statement):
+        try:
+            label, ordinal = resolve_label_ordinal(concept_local, role, edges, labels)
+        except AmbiguityError:
+            continue
+        if ordinal is not None:
+            return (label, ordinal)
+    return (None, None)
 
 
 # Standard XBRL label roles used in the PDF-faithful fallback chain (spec §13.2).

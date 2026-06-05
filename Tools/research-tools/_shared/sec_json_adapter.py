@@ -37,7 +37,9 @@ from .period_kind import infer_period_kind, normalize_supplement_period_kind
 from .presentation_resolver import (
     AmbiguityError,
     NeedsNlmOrder,
+    _local,
     resolve_label_ordinal,
+    resolve_label_ordinal_any,
     resolve_via_uni,
 )
 from .source_account_class import classify_source_account
@@ -548,6 +550,7 @@ def attach_display_metadata(
     edges: list[dict],
     labels: dict,
     network_role: str | None,
+    accepted_concepts: set | None = None,
     audited_orders: dict | None = None,
 ) -> None:
     """Resolve display_label + ordinal + provenance for one statement's facts.
@@ -557,17 +560,28 @@ def attach_display_metadata(
     Facts whose `.statement` != `statement` are skipped (caller groups by
     statement, but the guard keeps this safe if mixed).
 
+    `accepted_concepts` = the UNION of bare concept local names across ALL face
+    networks matching `statement` (presentation_resolver.accepted_face_concepts).
+    Used for the narrow note-level exclusion below.
+
     `audited_orders` maps statement → audited-order dict (see
     _try_audited_nlm_ordinal). Used as the fallback when the XBRL resolver can't
     resolve an ordinal (NeedsNlmOrder / AmbiguityError) or the network is absent.
 
-    Resolution (spec G2/G3/G6/G7):
+    Resolution (spec G2/G3/G6/G7 + T14 Issue2):
       - classify source_account → 4 classes.
-      - synthetic SUM-of-multiple-PDF-lines → display_eligible=False, no row.
-      - tag_like / preserved_pdf_label → resolve_label_ordinal(local, ...).
-        preserved_pdf_label falls back to source_account as the display_label.
+      - synthetic SUM-of-multiple-PDF-lines → display_eligible=False, no row (G7).
+      - tag_like / preserved_pdf_label → resolve_label_ordinal_any across ALL
+        matching face networks (10-K full ∪ 10-Q condensed). preserved_pdf_label
+        falls back to source_account as the display_label.
       - synthetic (non-multi) / null → resolve_via_uni(uni_account, ...).
       - NeedsNlmOrder / AmbiguityError → audited NLM ordinal (else ordinal=None).
+      - NARROW note-level exclusion (T14 Issue2): a STILL-unresolved `tag_like`
+        GAAP fact whose concept is NOT in the (non-empty) accepted face set is a
+        note-level sub-component → display_eligible=False with a durable
+        provenance reason. NEVER applied to preserved_pdf_label / null /
+        synthetic, nor when there is no face network (accepted empty) — those
+        keep failing the coverage gate (fail-loud; need NLM / manual).
     """
     audited_for_stmt = (audited_orders or {}).get(statement)
 
@@ -587,14 +601,12 @@ def attach_display_metadata(
             continue
 
         if cls in ("tag_like", "preserved_pdf_label"):
-            label, ordinal = (None, None)
-            try:
-                label, ordinal = resolve_label_ordinal(
-                    _local_name(row.source_account), network_role, edges, labels
-                )
-            except AmbiguityError:
-                # Fail-closed (G3): never silently prefer. Route ordinal to NLM.
-                label, ordinal = (None, None)
+            # Resolve across ALL matching face networks (full ∪ condensed), not a
+            # single selected one (T14 Issue2). resolve_label_ordinal_any already
+            # skips AmbiguityError networks internally.
+            label, ordinal = resolve_label_ordinal_any(
+                _local_name(row.source_account), edges, labels, statement
+            )
 
             if cls == "preserved_pdf_label":
                 # source_account IS the PDF text → use it as the display label
@@ -607,6 +619,10 @@ def attach_display_metadata(
                 _set_xbrl_ordinal_provenance(row, ordinal, network_role)
             else:
                 _try_audited_nlm_ordinal(row, audited_for_stmt)
+                # NARROW note-level exclusion (T14 Issue2): only tag_like, only
+                # when a face network exists and this concrete concept is NOT on
+                # it. preserved_pdf_label is excluded by the cls guard below.
+                _maybe_exclude_note_level(row, cls, accepted_concepts)
             continue
 
         # cls in ("synthetic" (single-line), "null") → resolve via uni→canonical
@@ -623,6 +639,42 @@ def attach_display_metadata(
             # Canonical concept absent from this filing's network/labels → fall
             # to the audited NLM order. Never render SUM(...) / invent a label.
             _try_audited_nlm_ordinal(row, audited_for_stmt)
+
+
+def _maybe_exclude_note_level(
+    row: "FactRow", cls: str, accepted_concepts: set | None
+) -> None:
+    """Narrow note-level auto-exclusion (T14 Issue2, Codex-mandated).
+
+    Applies ONLY when ALL of:
+      - the fact is still unresolved (``row.ordinal is None``),
+      - its class is ``tag_like`` (a concrete XBRL concept — NEVER
+        preserved_pdf_label / null / synthetic, which legitimately need
+        NLM/manual and must keep failing the coverage gate, fail-loud),
+      - a face network IS present for this statement
+        (``accepted_concepts`` non-empty), AND
+      - the concept (``_local(source_account)``) is NOT in ``accepted_concepts``
+        (the UNION of ALL matching face networks — 10-K full ∪ 10-Q condensed).
+
+    Then the fact is a note-level sub-component that rolls up into a face
+    aggregate: mark it display-INELIGIBLE (no face row, dropped from coverage)
+    and write a durable provenance reason so a human can audit the call. Existing
+    provenance keys are preserved.
+    """
+    if row.ordinal is not None:
+        return
+    if cls != "tag_like":
+        return
+    if not accepted_concepts:  # None or empty → no face network → fail-loud
+        return
+    if _local(row.source_account or "") in accepted_concepts:
+        return
+    row.display_eligible = False
+    row.display_label = None
+    row.ordinal = None
+    if row.provenance is None:
+        row.provenance = {}
+    row.provenance["display_exclusion_reason"] = "note_level_not_in_face_network"
 
 
 def _is_sum_of_multiple(source_account: str | None) -> bool:

@@ -242,3 +242,111 @@ def test_all_three_derived_quarters_behave_identically():
     }
     assert results == {"derived_q2": False, "derived_q3": False, "derived_q4": False}
     assert len(set(results.values())) == 1  # all identical
+
+
+# --------------------------------------------------------------------------- #
+# T14 Issue2: narrow note-level exclusion (tag_like NOT in accepted face set)
+# --------------------------------------------------------------------------- #
+#
+# The accepted face set for _IS_NETWORK = the 3 concepts in _IS_EDGES:
+#   GrossProfit, IncomeLossFromContinuingOperationsBeforeIncomeTaxes,
+#   WeightedAverageNumberOfSharesOutstandingBasic
+_ACCEPTED = {
+    "GrossProfit",
+    "IncomeLossFromContinuingOperationsBeforeIncomeTaxes",
+    "WeightedAverageNumberOfSharesOutstandingBasic",
+}
+
+
+def _run_accepted(facts, accepted, audited_orders=None):
+    attach_display_metadata(
+        facts,
+        statement="IS",
+        edges=_IS_EDGES,
+        labels=_IS_LABELS,
+        network_role=_IS_NETWORK,
+        accepted_concepts=accepted,
+        audited_orders=audited_orders or {},
+    )
+
+
+def test_tag_like_not_in_accepted_set_excluded_with_reason():
+    # InterestExpenseNonoperating is a note-level sub-component — concrete XBRL
+    # concept (tag_like) but NOT on the face network. Auto-excluded.
+    f = _fact("interest_expense", "InterestExpenseNonoperating")
+    _run_accepted([f], _ACCEPTED)
+    assert f.display_eligible is False
+    assert f.display_label is None
+    assert f.ordinal is None
+    assert f.provenance["display_exclusion_reason"] == "note_level_not_in_face_network"
+    # Existing provenance keys preserved.
+    assert f.provenance["source_filing"] == "10-K"
+
+
+def test_tag_like_in_accepted_but_unresolved_stays_eligible():
+    # Concept IS on the face network (in accepted set) but the labels/edges did
+    # not yield an ordinal here → must NOT be hidden; gate must still block.
+    f = _fact("income_before_income_taxes",
+              "IncomeLossFromContinuingOperationsBeforeIncomeTaxes")
+    # Remove the matching edge ordinal by using a statement whose network has no
+    # ordinal: simplest is to give an accepted concept that resolves to None.
+    # IncomeLossFromContinuingOperations... IS an edge (order 7.0) so it WOULD
+    # resolve. Use a fresh accepted-only concept with no edge instead.
+    f2 = _fact("some_face_line", "SomeFaceLineConcept")
+    accepted = _ACCEPTED | {"SomeFaceLineConcept"}
+    _run_accepted([f2], accepted)
+    assert f2.display_eligible is True               # NOT auto-hidden
+    assert f2.ordinal is None                        # gate will block
+    assert "display_exclusion_reason" not in f2.provenance
+
+
+def test_preserved_pdf_label_unresolved_not_auto_hidden():
+    # preserved_pdf_label (has spaces) must NEVER be auto-excluded — needs NLM.
+    f = _fact("interest_and_other_net", "Interest and other, net")
+    _run_accepted([f], _ACCEPTED)
+    assert f.display_eligible is True
+    assert f.ordinal is None
+    assert "display_exclusion_reason" not in f.provenance
+    # preserved label falls back to the source_account verbatim.
+    assert f.display_label == "Interest and other, net"
+
+
+def test_null_source_unresolved_not_auto_hidden():
+    # null source resolves via uni→canonical; canonical absent → must NOT hide.
+    f = _fact("net_income", None, cell_id="cid::ni3")
+    _run_accepted([f], _ACCEPTED)
+    assert f.display_eligible is True
+    assert "display_exclusion_reason" not in f.provenance
+
+
+def test_accepted_empty_no_face_network_tag_like_not_hidden():
+    # No face network at all (accepted empty) → tag_like unresolved must NOT be
+    # auto-hidden (fail-loud; gate blocks). Mirrors AAOI BS/CF with no network.
+    f = _fact("inventory", "InventoryNet", statement="BS", period_kind="instant")
+    attach_display_metadata(
+        [f], statement="BS", edges=[], labels={}, network_role=None,
+        accepted_concepts=set(), audited_orders={},
+    )
+    assert f.display_eligible is True
+    assert f.ordinal is None
+    assert "display_exclusion_reason" not in f.provenance
+
+
+def test_tag_like_in_accepted_and_resolves_still_eligible():
+    # Sanity: a normal face concept still resolves with ordinal + stays eligible.
+    f = _fact("gross_profit", "GrossProfit")
+    _run_accepted([f], _ACCEPTED)
+    assert f.display_eligible is True
+    assert f.display_label == "Gross margin"
+    assert f.ordinal == 3.0
+    assert "display_exclusion_reason" not in f.provenance
+
+
+def test_synthetic_sum_unaffected_by_accepted_set():
+    # G7 synthetic SUM-of-multiple path unchanged even with accepted_concepts.
+    f = _fact("selling_general_administrative", "SUM(S&M+G&A)")
+    _run_accepted([f], _ACCEPTED)
+    assert f.display_eligible is False
+    assert f.ordinal is None
+    # G7 path, NOT the note-level path.
+    assert "display_exclusion_reason" not in f.provenance

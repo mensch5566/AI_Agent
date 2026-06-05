@@ -43,7 +43,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "Tools" / "research-tools"))
 
 from _shared import sec_json_adapter as A  # noqa: E402
-from _shared.presentation_resolver import select_network  # noqa: E402
+from _shared.presentation_resolver import (  # noqa: E402
+    accepted_face_concepts,
+    select_network,
+)
 
 OBSIDIAN_BASE = Path(os.environ.get(
     "OBSIDIAN_VAULT",
@@ -384,14 +387,54 @@ def attach_display_to_batch(batch: A.NormalizedBatch, sources: dict) -> None:
             for f in stmt_facts if f.source_account
         }
         network_role = select_network(edges, statement, facts_concepts or None)
+        # T14 Issue2: accepted face concepts = UNION across ALL matching face
+        # networks (10-K full ∪ 10-Q condensed), basis for narrow note-level
+        # exclusion of tag_like facts not present on any face statement.
+        accepted = accepted_face_concepts(edges, statement)
         A.attach_display_metadata(
             stmt_facts,
             statement=statement,
             edges=edges,
             labels=labels,
             network_role=network_role,
+            accepted_concepts=accepted,
             audited_orders=audited_orders,
         )
+
+    _print_note_level_exclusions(batch.ticker, gaap_facts)
+
+
+def _print_note_level_exclusions(ticker: str, gaap_facts: list) -> None:
+    """Audit print: every GAAP fact auto-excluded as note-level (T14 Issue2).
+
+    Lists ticker / statement / uni_account / source_account / xbrl_tag / period
+    for each fact now display_eligible=False with provenance reason
+    `note_level_not_in_face_network`, grouped + counted per statement. No silent
+    truncation — a human must be able to audit every concept classified
+    note-level. Printed dry-run & real-run alike."""
+    excluded = [
+        f for f in gaap_facts
+        if f.display_eligible is False
+        and (f.provenance or {}).get("display_exclusion_reason")
+            == "note_level_not_in_face_network"
+    ]
+    print("\n  === Note-level exclusions (T14 Issue2: tag_like not in face network) ===")
+    if not excluded:
+        print("    (none)")
+        return
+    by_stmt: dict[str, list] = {}
+    for f in excluded:
+        by_stmt.setdefault(f.statement, []).append(f)
+    for statement in ("IS", "BS", "CF"):
+        rows = by_stmt.get(statement)
+        if not rows:
+            continue
+        print(f"    {statement}: {len(rows)} excluded")
+        for f in rows:
+            print(
+                f"        - {ticker} / {statement} / {f.uni_account} / "
+                f"{f.source_account} / {f.xbrl_tag} / {f.period}"
+            )
 
 
 def normalize(ticker: str, sources: dict) -> A.NormalizedBatch:
