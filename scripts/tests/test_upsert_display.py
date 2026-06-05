@@ -350,3 +350,87 @@ def test_synthetic_sum_unaffected_by_accepted_set():
     assert f.ordinal is None
     # G7 path, NOT the note-level path.
     assert "display_exclusion_reason" not in f.provenance
+
+
+# --------------------------------------------------------------------------- #
+# T14 item1: preserved_pdf_label CORE line borrows ordinal via uni→canonical
+# (LITE income_before_taxes: stored as PDF text, canonical concept ON the face
+# network → resolve the face ordinal WITHOUT NLM, keep the period-exact label).
+# --------------------------------------------------------------------------- #
+
+_IBT_CONCEPT = "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"
+
+# IS network where income_before_taxes's canonical concept IS a face edge (order
+# 7.0) — mirrors LITE. No labels entry for it (the preserved fact owns its label).
+_IBT_NETWORK = "http://lite/role/statement-condensed-consolidated-statements-of-operations"
+_IBT_EDGES = [
+    {"role_uri": _IBT_NETWORK, "child_qname": "us-gaap:Revenues", "order": 1.0,
+     "preferred_label": _STD, "period": "FY2025"},
+    {"role_uri": _IBT_NETWORK, "child_qname": f"us-gaap:{_IBT_CONCEPT}",
+     "order": 7.0, "preferred_label": _STD, "period": "FY2025"},
+]
+_IBT_LABELS = {
+    "us-gaap:Revenues": [{"role": _STD, "text": "Net revenue"}],
+}
+
+
+def _run_ibt(facts, accepted=None, audited_orders=None):
+    attach_display_metadata(
+        facts, statement="IS", edges=_IBT_EDGES, labels=_IBT_LABELS,
+        network_role=_IBT_NETWORK, accepted_concepts=accepted,
+        audited_orders=audited_orders or {},
+    )
+
+
+def test_preserved_pdf_label_core_borrows_ordinal_via_uni_canonical():
+    # LITE: "Income before income taxes" / "Loss before income taxes" stored as
+    # PDF text; uni_account=income_before_taxes maps to the face concept.
+    for pdf_text in ("Income before income taxes", "Loss before income taxes",
+                     "Income (loss) before income taxes"):
+        f = _fact("income_before_taxes", pdf_text, cell_id=f"cid::{pdf_text}")
+        _run_ibt([f])
+        # Period-exact PDF wording preserved as the display label.
+        assert f.display_label == pdf_text
+        # Ordinal BORROWED from the canonical face concept — no NLM needed.
+        assert f.ordinal == 7.0
+        assert f.display_eligible is True
+        assert f.provenance["ordinal_source"] == "xbrl"
+        # Distinct match method so a human can audit the borrow.
+        assert f.provenance["ordinal_match_method"] == "xbrl_presentation_via_uni"
+
+
+def test_preserved_pdf_label_core_borrow_survives_note_level_pass():
+    # Even with an accepted-set provided, the borrow resolves the ordinal first,
+    # so the note-level exclusion (tag_like-only anyway) never fires.
+    f = _fact("income_before_taxes", "Income before income taxes", cell_id="cid::ibt2")
+    _run_ibt([f], accepted={"Revenues", _IBT_CONCEPT})
+    assert f.ordinal == 7.0
+    assert f.display_eligible is True
+    assert "display_exclusion_reason" not in f.provenance
+
+
+def test_preserved_pdf_label_longtail_unmapped_uni_still_needs_nlm():
+    # SNDK safety: a preserved_pdf_label long-tail item whose uni_account is NOT
+    # in CANONICAL_CONCEPT gets NO borrow → stays eligible, ordinal None (→ NLM),
+    # never auto-hidden.
+    f = _fact("nonoperating_long_tail", "Other charges, net", cell_id="cid::lt")
+    _run_ibt([f], accepted={"Revenues", _IBT_CONCEPT})
+    assert f.display_label == "Other charges, net"
+    assert f.ordinal is None
+    assert f.display_eligible is True
+    assert "display_exclusion_reason" not in f.provenance
+
+
+def test_preserved_pdf_label_core_falls_to_nlm_when_concept_absent():
+    # If the canonical concept is NOT on this filing's face network, the borrow
+    # returns nothing → fall to the audited NLM ordinal (unchanged path).
+    f = _fact("income_before_taxes", "Income before income taxes", cell_id="cid::ibt3")
+    attach_display_metadata(
+        [f], statement="IS", edges=[], labels={}, network_role=None,
+        audited_orders={"IS": {"cell_id_to_ordinal": {"cid::ibt3": 9},
+                               "source_doc": "L_10K.pdf", "period": "FY2025",
+                               "artifact_hash": "abc"}},
+    )
+    assert f.ordinal == 9
+    assert f.provenance["ordinal_source"] == "nlm"
+    assert f.display_label == "Income before income taxes"

@@ -41,6 +41,7 @@ from .presentation_resolver import (
     resolve_label_ordinal,
     resolve_label_ordinal_any,
     resolve_via_uni,
+    resolve_via_uni_any,
 )
 from .source_account_class import classify_source_account
 from .unit_canonicalize import (
@@ -499,18 +500,23 @@ def _local_name(source_account: str) -> str:
 
 
 def _set_xbrl_ordinal_provenance(
-    row: "FactRow", ordinal, network_role: str | None
+    row: "FactRow", ordinal, network_role: str | None,
+    match_method: str = "xbrl_presentation",
 ) -> None:
     """Stamp ordinal + XBRL-sourced ordinal provenance on a FactRow.
 
     XBRL ordinals carry source_doc/period = the fact's own filing (the network
     role is the deterministic prototype), per spec §14.
+
+    `match_method` distinguishes a direct concept match ("xbrl_presentation")
+    from a preserved_pdf_label ordinal BORROWED via the uni→canonical concept
+    ("xbrl_presentation_via_uni", T14 item1) so a human can audit the borrow.
     """
     row.ordinal = ordinal
     row.provenance["ordinal_source"] = "xbrl"
     row.provenance["ordinal_source_doc"] = row.provenance.get("source_filing")
     row.provenance["ordinal_source_period"] = row.period
-    row.provenance["ordinal_match_method"] = "xbrl_presentation"
+    row.provenance["ordinal_match_method"] = match_method
     if network_role is not None:
         row.provenance["ordinal_source_network"] = network_role
 
@@ -607,16 +613,37 @@ def attach_display_metadata(
             label, ordinal = resolve_label_ordinal_any(
                 _local_name(row.source_account), edges, labels, statement
             )
+            match_method = "xbrl_presentation"
 
             if cls == "preserved_pdf_label":
                 # source_account IS the PDF text → use it as the display label
-                # when the resolver produced none.
+                # when the resolver produced none. Keep this period's EXACT
+                # wording ("Income" vs "Loss before income taxes").
                 row.display_label = label or row.source_account
+                # T14 item1: a preserved_pdf_label fact stores PDF text as its
+                # source_account, so the local-name match above never resolves.
+                # If its uni_account is a CORE key whose canonical XBRL concept
+                # IS on the face network (e.g. LITE income_before_taxes), borrow
+                # THAT ordinal — no NLM needed, label stays the PDF text.
+                # Long-tail buckets (no canonical mapping) → NeedsNlmOrder →
+                # unchanged NLM routing (SNDK nonoperating_long_tail).
+                if ordinal is None:
+                    try:
+                        _, uni_ordinal = resolve_via_uni_any(
+                            row.uni_account, edges, labels, statement
+                        )
+                    except NeedsNlmOrder:
+                        uni_ordinal = None
+                    if uni_ordinal is not None:
+                        ordinal = uni_ordinal
+                        match_method = "xbrl_presentation_via_uni"
             else:
                 row.display_label = label
 
             if ordinal is not None and network_role is not None:
-                _set_xbrl_ordinal_provenance(row, ordinal, network_role)
+                _set_xbrl_ordinal_provenance(
+                    row, ordinal, network_role, match_method=match_method
+                )
             else:
                 _try_audited_nlm_ordinal(row, audited_for_stmt)
                 # NARROW note-level exclusion (T14 Issue2): only tag_like, only

@@ -161,3 +161,47 @@ def test_resolve_any_concept_in_no_network_returns_none():
     lbl, ordn = resolve_label_ordinal_any(
         "NotOnAnyFace", _TWO_NET_EDGES, _TWO_NET_LABELS, "IS")
     assert lbl is None and ordn is None
+
+
+# --------------------------------------------------------------------------- #
+# T14 item1: resolve_via_uni_any — multi-network uni→canonical ORDINAL borrow
+# (for the preserved_pdf_label fallback; laxer than resolve_via_uni — no labels
+# guard, since the caller owns its own PDF-text display label).
+# --------------------------------------------------------------------------- #
+
+from presentation_resolver import resolve_via_uni_any, CANONICAL_CONCEPT
+
+# LITE's real canonical concept for income_before_taxes (preserved_pdf_label
+# periods store PDF text like "Income before income taxes" instead of this tag).
+_IBT = "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"
+
+
+def test_canonical_concept_has_income_before_taxes():
+    assert CANONICAL_CONCEPT.get("income_before_taxes") == _IBT
+
+
+def test_resolve_via_uni_any_maps_and_borrows_ordinal_across_networks():
+    # Canonical concept only present in the condensed network → must still
+    # resolve via the multi-network walk. No labels entry for it → label None,
+    # but the ORDINAL comes back (the borrow target).
+    edges = [
+        {"role_uri": _COND, "child_qname": f"us-gaap:{_IBT}", "order": 8.0,
+         "preferred_label": "http://www.xbrl.org/2003/role/label"},
+        {"role_uri": _COND, "child_qname": "us-gaap:Revenues", "order": 1.0},
+    ]
+    lbl, ordn = resolve_via_uni_any("income_before_taxes", edges, {}, "IS")
+    assert ordn == 8.0   # ordinal borrowed even with no labels entry
+
+
+def test_resolve_via_uni_any_unknown_uni_raises_needs_nlm():
+    # A long-tail bucket has no canonical mapping → NeedsNlmOrder (caller routes
+    # to NLM, unchanged). This is the SNDK nonoperating_long_tail safety case.
+    with pytest.raises(NeedsNlmOrder):
+        resolve_via_uni_any("nonoperating_long_tail", _TWO_NET_EDGES, {}, "IS")
+
+
+def test_resolve_via_uni_any_canonical_not_on_face_returns_none():
+    # uni maps to a canonical concept, but that concept is on NO face network →
+    # (None, None) (never invents an order).
+    lbl, ordn = resolve_via_uni_any("income_before_taxes", _TWO_NET_EDGES, {}, "IS")
+    assert lbl is None and ordn is None

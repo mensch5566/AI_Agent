@@ -177,6 +177,16 @@ CANONICAL_CONCEPT = {
     "shares_diluted_millions": "WeightedAverageNumberOfDilutedSharesOutstanding",
     "depreciation_and_amortization": "DepreciationAndAmortization",
     "selling_general_administrative": "SellingGeneralAndAdministrativeExpense",
+    # T14 item1: income_before_taxes is a CORE face line that some filers (LITE)
+    # store with a PDF-text source_account (preserved_pdf_label) rather than the
+    # tag. Mapping its uni_account → the canonical concept lets the preserved
+    # branch borrow the face ordinal without NLM (resolve_via_uni_any). NOTE:
+    # this is LITE's concept variant; a filer using a different us-gaap variant
+    # (…MinorityInterest…) won't match and falls through to NLM (safe — never a
+    # wrong ordinal). Promote this value to a tuple of accepted variants if a
+    # second variant is ever observed.
+    "income_before_taxes":
+        "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
 }
 
 
@@ -208,3 +218,28 @@ def resolve_via_uni(uni_account, statement, network_role, edges, labels):
             f"is not disclosed in network {network_role!r} / labels map")
 
     return resolve_label_ordinal(canonical, network_role, edges, labels)
+
+
+def resolve_via_uni_any(uni_account, edges, labels, statement):
+    """Multi-network sibling of :func:`resolve_via_uni` for the preserved_pdf_label
+    ORDINAL-borrow path (T14 item1).
+
+    Maps ``uni_account`` → its canonical XBRL concept (CANONICAL_CONCEPT) and
+    resolves ``(label, ordinal)`` for THAT concept across ALL matching face
+    networks (:func:`resolve_label_ordinal_any` — 10-K full ∪ 10-Q condensed).
+
+    Deliberately LAXER than :func:`resolve_via_uni`: it does NOT require the
+    canonical concept to key into ``labels``. The only caller is a
+    preserved_pdf_label fact, which already owns its display label (the
+    period-exact PDF text) and needs ONLY the face ordinal. The canonical
+    concept must still actually appear on a face network for an ordinal to come
+    back — otherwise returns ``(None, None)`` (never invents an order).
+
+    Raises :class:`NeedsNlmOrder` when ``uni_account`` has no canonical mapping
+    (e.g. a long-tail bucket) → caller routes to NLM, unchanged.
+    """
+    canonical = CANONICAL_CONCEPT.get(uni_account)
+    if canonical is None:
+        raise NeedsNlmOrder(
+            f"no known canonical concept for uni_account {uni_account!r}")
+    return resolve_label_ordinal_any(canonical, edges, labels, statement)

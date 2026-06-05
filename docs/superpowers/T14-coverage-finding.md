@@ -103,8 +103,14 @@ tag_like-only note-level exclusion + `provenance.display_exclusion_reason` + dry
 | **MU**   | 100% | 100% | 100% |
 | INTC | 100% | 100% | 93.2% (5) |
 | SNDK | 90.9% (8) | 100% | 100% |
-| LITE | 95.7% (24) | 100% | 100% |
+| LITE | ~~95.7% (24)~~ → **100%** | 100% | 100% |
 | AAOI | 100% | 0% (357) | 0% (159) |
+
+> **UPDATE (Path-to-100% item 1 SHIPPED)** — LITE IS now 100% (558/558).
+> The 24 `income_before_taxes` preserved_pdf_label periods now borrow their
+> face ordinal via the uni→canonical concept (commit below). Verified by
+> read-only dry-run: LITE IS/BS/CF all 100%, gate PASSED; MU/INTC/SNDK/AAOI
+> byte-identical to the table above (no regression). Only items 2–4 remain.
 
 MU is fully PDF-faithful end-to-end → the contract is sound. Note-level exclusions printed per run (INTC
 50, etc.), all genuine sub-components. Remaining residuals (all correctly fail-loud, NOT auto-hidden):
@@ -125,10 +131,23 @@ MU is fully PDF-faithful end-to-end → the contract is sound. Note-level exclus
   live NLM query (`produce_nlm_order` AAOI BS+CF) + **human audit** of the artifact.
 
 ### Path to 100% (per residual class — iterative)
-1. preserved_pdf_label core lines (LITE income_before_taxes): add uni→canonical ordinal fallback in the
-   preserved branch + extend CANONICAL_CONCEPT. (pure-XBRL, autonomous, TDD)
-2. INTC CF net_income: decide canonical-vs-NLM (needs a small design call).
-3. SNDK long-tail + AAOI BS/CF: NLM ordering artifacts → **human audit gate** (T7 live run).
+1. ~~preserved_pdf_label core lines (LITE income_before_taxes)~~ ✅ **DONE** —
+   added `resolve_via_uni_any` (multi-network uni→canonical ORDINAL borrow, laxer
+   than `resolve_via_uni`: no labels guard since the preserved fact owns its
+   PDF-text label) + extended `CANONICAL_CONCEPT["income_before_taxes"]`. The
+   preserved branch borrows the face ordinal when its local-name match misses,
+   keeping the period-exact PDF wording ("Income"/"Loss before income taxes") as
+   the display label, stamping `ordinal_match_method=xbrl_presentation_via_uni`
+   for audit. SNDK long-tail (uni not in CANONICAL_CONCEPT) → NeedsNlmOrder →
+   unchanged NLM routing (safety verified by test + dry-run). +8 tests, 348 py.
+2. **INTC CF net_income ×5** (NEXT — needs a small design call): INTC's CF starts
+   with `ProfitLoss` (net income incl NCI), not `NetIncomeLoss`; the carried-in
+   net_income (NetIncomeLoss canonical) isn't a CF face concept. Options: (a)
+   context-aware canonical (net_income→ProfitLoss in CF) — risky, different line
+   item; (b) NLM order for INTC CF; (c) leave as needs-NLM. **Decision pending
+   user.**
+3. SNDK long-tail ×8 + AAOI BS/CF ×516: NLM ordering artifacts → **human audit
+   gate** (T7 live run). Cannot be autonomous.
 4. Re-dry-run all 5 → 100% → then T14d --apply (user auth) → T15 visual → T16.
 
 State: branch T1–T13 + vitest + Issue 1 (00c474c) + Issue 2 (aceb8d8). Prod unchanged (display_label
