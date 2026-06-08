@@ -728,7 +728,9 @@ def row_to_dict(row) -> dict:
     `display_eligible` is an adapter-internal flag (a display-ineligible synthetic
     SUM core builds no Statement-view row prototype) — there is NO such DB column,
     so it is stripped here. `display_label` IS a column (migration
-    2026060500_add_display_label.sql) and is kept.
+    2026060500_add_display_label.sql) and is kept. `display_negated` IS also a
+    column (migration 2026060700_add_display_negated.sql) — the PDF-faithful sign
+    flag — and flows through asdict unchanged (nullable boolean).
 
     `ordinal` is a smallint column, but XBRL presentation `order` (and thus the
     resolved ordinal) arrives as a float (e.g. 3.0). Coerce integer-valued floats

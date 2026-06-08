@@ -140,24 +140,27 @@ def accepted_face_concepts(edges, statement):
 
 
 def resolve_label_ordinal_any(concept_local, edges, labels, statement, facts_concepts=None):
-    """Resolve (display_label, ordinal) for a bare local concept across ALL
-    matching face networks for `statement` (T14 Issue2).
+    """Resolve (display_label, ordinal, negated) for a bare local concept across
+    ALL matching face networks for `statement` (T14 Issue2).
 
     Tries the primary network (select_network) first, then the remaining
     `matching_face_networks` in order, returning the FIRST non-None ordinal hit
-    (carrying that network's label). A concept present only in the condensed
-    network — or only in the full network when condensed is primary — still
-    resolves. AmbiguityError in one network skips that network (does not crash);
-    another clean network can still resolve it. Returns ``(None, None)`` when no
-    matching network resolves the concept."""
+    (carrying that network's label AND that network's negated flag — all three
+    come from the SAME matched edge, in lockstep, never resolved separately). A
+    concept present only in the condensed network — or only in the full network
+    when condensed is primary — still resolves. AmbiguityError in one network
+    skips that network (does not crash); another clean network can still resolve
+    it. Returns ``(None, None, False)`` when no matching network resolves the
+    concept."""
     for role in matching_face_networks(edges, statement):
         try:
-            label, ordinal = resolve_label_ordinal(concept_local, role, edges, labels)
+            label, ordinal, negated = resolve_label_ordinal(
+                concept_local, role, edges, labels)
         except AmbiguityError:
             continue
         if ordinal is not None:
-            return (label, ordinal)
-    return (None, None)
+            return (label, ordinal, negated)
+    return (None, None, False)
 
 
 # Standard XBRL label roles used in the PDF-faithful fallback chain (spec §13.2).
@@ -179,16 +182,37 @@ def _local(qname):
     return qname.rsplit(":", 1)[-1]
 
 
+def _edge_negated(edge) -> bool:
+    """PDF-faithful sign flag for ONE matched presentation arc (spec §13.2).
+
+    True iff the arc's ``preferred_label`` role, normalized via :func:`_norm`
+    (part after ``/role/``, lowercased, dashes/underscores stripped), begins with
+    ``"negated"`` — covering negatedLabel, negatedTerseLabel, negatedTotalLabel,
+    negatedNetLabel, negatedPeriodStart/EndLabel. No preferred_label → False.
+
+    When True the PDF renders ``-storedValue`` (TRUE negation, not -abs): a stored
+    -26 with a negated role displays as +26.
+    """
+    preferred = edge.get("preferred_label")
+    if not preferred:
+        return False
+    return _norm(preferred).startswith("negated")
+
+
 def resolve_label_ordinal(concept_local, network_role, edges, labels):
-    """Resolve PDF-faithful (display_label, ordinal) for a bare local concept
-    name within the selected presentation network. Spec §13.2, G3.
+    """Resolve PDF-faithful (display_label, ordinal, negated) for a bare local
+    concept name within the selected presentation network. Spec §13.2, G3.
 
     - Only edges where ``edge['role_uri'] == network_role`` are considered.
     - Match edges whose ``child_qname`` local name equals ``concept_local``.
     - Fail-closed (G3): if matched edges reference more than one DISTINCT full
       ``child_qname``, raise :class:`AmbiguityError` — never silently pick one.
-    - 0 matches → return ``(None, None)`` so the caller can fall back.
+    - 0 matches → return ``(None, None, False)`` so the caller can fall back.
     - ``ordinal`` = the matched edge's ``order``.
+    - ``negated`` = the matched edge's PDF-faithful sign flag (:func:`_edge_negated`
+      — preferred_label role normalized startswith "negated"). Comes from the SAME
+      matched edge as label + ordinal, so display sign, label and order stay in
+      lockstep.
     - ``display_label``: from ``labels[full_qname]`` pick the text whose role ==
       the edge's ``preferred_label``; fallback chain when that role is absent:
       terseLabel → totalLabel → standard label → None.
@@ -197,7 +221,7 @@ def resolve_label_ordinal(concept_local, network_role, edges, labels):
                if e.get("role_uri") == network_role
                and _local(e["child_qname"]) == concept_local]
     if not matched:
-        return (None, None)
+        return (None, None, False)
 
     distinct = {e["child_qname"] for e in matched}
     if len(distinct) > 1:
@@ -208,13 +232,14 @@ def resolve_label_ordinal(concept_local, network_role, edges, labels):
     edge = matched[0]
     full_qname = edge["child_qname"]
     ordinal = edge.get("order")
+    negated = _edge_negated(edge)
 
     texts = {lab["role"]: lab["text"] for lab in labels.get(full_qname, [])}
     preferred = edge.get("preferred_label")
     for role in (preferred, _TERSE_LABEL, _TOTAL_LABEL, _STD_LABEL):
         if role and role in texts:
-            return (texts[role], ordinal)
-    return (None, ordinal)
+            return (texts[role], ordinal, negated)
+    return (None, ordinal, negated)
 
 
 class NeedsNlmOrder(Exception):
@@ -250,9 +275,11 @@ CANONICAL_CONCEPT = {
 
 
 def resolve_via_uni(uni_account, statement, network_role, edges, labels):
-    """Resolve PDF-faithful (display_label, ordinal) for a synthetic/null-source
-    fact by mapping its ``uni_account`` to its canonical XBRL concept and
-    resolving THAT within the selected presentation network. Spec G2, G7.
+    """Resolve PDF-faithful (display_label, ordinal, negated) for a synthetic/null-
+    source fact by mapping its ``uni_account`` to its canonical XBRL concept and
+    resolving THAT within the selected presentation network. Spec G2, G7. The
+    ``negated`` flag comes from the matched canonical edge (delegated to
+    :func:`resolve_label_ordinal`).
 
     - ``canonical = CANONICAL_CONCEPT.get(uni_account)``; if no mapping →
       raise :class:`NeedsNlmOrder`.
@@ -284,8 +311,8 @@ def resolve_via_uni_any(uni_account, edges, labels, statement):
     ORDINAL-borrow path (T14 item1).
 
     Maps ``uni_account`` → its canonical XBRL concept (CANONICAL_CONCEPT) and
-    resolves ``(label, ordinal)`` for THAT concept across ALL matching face
-    networks (:func:`resolve_label_ordinal_any` — 10-K full ∪ 10-Q condensed).
+    resolves ``(label, ordinal, negated)`` for THAT concept across ALL matching
+    face networks (:func:`resolve_label_ordinal_any` — 10-K full ∪ 10-Q condensed).
 
     Deliberately LAXER than :func:`resolve_via_uni`: it does NOT require the
     canonical concept to key into ``labels``. The only caller is a

@@ -14,7 +14,7 @@ def test_bs_returns_none_when_absent():   # AAOI case
     edges = [{"role_uri": "http://ao-inc.com/role/statement-consolidated-statements-of-operations", "child_qname": "us-gaap:Revenues", "order": 1.0, "period":"FY2025"}]
     assert select_network(edges, "BS") is None
 
-from presentation_resolver import resolve_label_ordinal, AmbiguityError
+from presentation_resolver import resolve_label_ordinal, AmbiguityError, _TERSE_LABEL
 import pytest
 
 _LABELS = {"us-gaap:GrossProfit": [
@@ -23,21 +23,72 @@ _LABELS = {"us-gaap:GrossProfit": [
 _EDGES = [{"role_uri":"r/operations","child_qname":"us-gaap:GrossProfit","order":5.0,"preferred_label":"http://www.xbrl.org/2003/role/terseLabel"}]
 
 def test_resolves_pdf_label_and_order():
-    lbl, ordn = resolve_label_ordinal("GrossProfit", "r/operations", _EDGES, _LABELS)
+    lbl, ordn, neg = resolve_label_ordinal("GrossProfit", "r/operations", _EDGES, _LABELS)
     assert lbl == "Gross margin" and ordn == 5.0   # terseLabel = PDF wording
+    assert neg is False                            # terseLabel is NOT a negated role
 
 def test_ambiguous_local_name_fails_closed():
     edges = _EDGES + [{"role_uri":"r/operations","child_qname":"intc:GrossProfit","order":6.0,"preferred_label":"x"}]
     with pytest.raises(AmbiguityError):
         resolve_label_ordinal("GrossProfit", "r/operations", edges, _LABELS)
 
+
+# --------------------------------------------------------------------------- #
+# PDF-faithful sign: display_negated from the matched arc's preferred_label.
+# True iff _norm(preferred).startswith("negated"). TRUE negation, never -abs.
+# --------------------------------------------------------------------------- #
+
+_NEG_TERSE = "http://www.xbrl.org/2009/role/negatedTerseLabel"
+_NEG_LABEL = "http://www.xbrl.org/2009/role/negatedLabel"
+
+
+def test_negated_terse_label_sets_negated_true():
+    # MU BS TreasuryStockCommonValue: arc preferred_label = negatedTerseLabel.
+    edges = [{"role_uri": "r/bs", "child_qname": "us-gaap:TreasuryStockCommonValue",
+              "order": 4.0, "preferred_label": _NEG_TERSE}]
+    labels = {"us-gaap:TreasuryStockCommonValue": [
+        {"role": _NEG_TERSE, "text": "Treasury stock"}]}
+    lbl, ordn, neg = resolve_label_ordinal(
+        "TreasuryStockCommonValue", "r/bs", edges, labels)
+    assert neg is True
+    assert lbl == "Treasury stock" and ordn == 4.0
+
+
+def test_negated_label_role_sets_negated_true():
+    # MU IS IncomeTaxExpenseBenefit / InterestExpenseNonoperating: negatedLabel.
+    edges = [{"role_uri": "r/is", "child_qname": "us-gaap:IncomeTaxExpenseBenefit",
+              "order": 8.0, "preferred_label": _NEG_LABEL}]
+    _, _, neg = resolve_label_ordinal(
+        "IncomeTaxExpenseBenefit", "r/is", edges, {})
+    assert neg is True
+
+
+def test_non_negated_terse_label_sets_negated_false():
+    # CostOfGoodsAndServicesSold with a plain terseLabel → NOT negated.
+    edges = [{"role_uri": "r/is", "child_qname": "us-gaap:CostOfGoodsAndServicesSold",
+              "order": 2.0, "preferred_label": _TERSE_LABEL}]
+    _, _, neg = resolve_label_ordinal(
+        "CostOfGoodsAndServicesSold", "r/is", edges, {})
+    assert neg is False
+
+
+def test_no_match_returns_negated_false():
+    _, ordn, neg = resolve_label_ordinal("NotPresent", "r/is", _EDGES, _LABELS)
+    assert ordn is None and neg is False
+
+
+def test_missing_preferred_label_negated_false():
+    edges = [{"role_uri": "r/is", "child_qname": "us-gaap:Revenues", "order": 1.0}]
+    _, _, neg = resolve_label_ordinal("Revenues", "r/is", edges, {})
+    assert neg is False
+
 from presentation_resolver import resolve_via_uni, NeedsNlmOrder
 
 def test_uni_canonical_present():
     edges = [{"role_uri":"r/cf","child_qname":"us-gaap:NetIncomeLoss","order":1.0,"preferred_label":"http://www.xbrl.org/2003/role/label"}]
     labels = {"us-gaap:NetIncomeLoss":[{"role":"http://www.xbrl.org/2003/role/label","text":"Net income"}]}
-    lbl, ordn = resolve_via_uni("net_income", "CF", "r/cf", edges, labels)
-    assert lbl == "Net income" and ordn == 1.0
+    lbl, ordn, neg = resolve_via_uni("net_income", "CF", "r/cf", edges, labels)
+    assert lbl == "Net income" and ordn == 1.0 and neg is False
 
 def test_uni_canonical_miss_raises_needs_nlm():
     # D&A reported as components → combined canonical absent → must NOT render SUM(...)
@@ -118,9 +169,9 @@ def test_accepted_face_concepts_empty_when_no_network():
 
 def test_resolve_any_concept_only_in_condensed():
     # OperatingIncomeLoss lives only in the condensed network. Primary = full.
-    lbl, ordn = resolve_label_ordinal_any(
+    lbl, ordn, neg = resolve_label_ordinal_any(
         "OperatingIncomeLoss", _TWO_NET_EDGES, _TWO_NET_LABELS, "IS")
-    assert lbl == "Operating income" and ordn == 5.0
+    assert lbl == "Operating income" and ordn == 5.0 and neg is False
 
 
 def test_resolve_any_concept_only_in_full_even_when_primary_condensed():
@@ -131,8 +182,8 @@ def test_resolve_any_concept_only_in_full_even_when_primary_condensed():
         {"role_uri": _COND, "child_qname": "us-gaap:Extra2", "order": 7.0},
     ]
     assert select_network(edges, "IS") == _COND  # condensed now primary (size)
-    lbl, ordn = resolve_label_ordinal_any("GrossProfit", edges, _TWO_NET_LABELS, "IS")
-    assert lbl == "Gross margin" and ordn == 3.0
+    lbl, ordn, neg = resolve_label_ordinal_any("GrossProfit", edges, _TWO_NET_LABELS, "IS")
+    assert lbl == "Gross margin" and ordn == 3.0 and neg is False
 
 
 def test_resolve_any_ambiguity_in_one_network_skips_to_other():
@@ -152,15 +203,15 @@ def test_resolve_any_ambiguity_in_one_network_skips_to_other():
     labels = {"us-gaap:GrossProfit": [
         {"role": "http://www.xbrl.org/2003/role/label", "text": "Gross profit"}]}
     assert select_network(edges, "IS") == _FULL  # full is primary
-    lbl, ordn = resolve_label_ordinal_any("GrossProfit", edges, labels, "IS")
+    lbl, ordn, neg = resolve_label_ordinal_any("GrossProfit", edges, labels, "IS")
     # Skipped the ambiguous full network, resolved from condensed (order 9.0).
-    assert lbl == "Gross profit" and ordn == 9.0
+    assert lbl == "Gross profit" and ordn == 9.0 and neg is False
 
 
 def test_resolve_any_concept_in_no_network_returns_none():
-    lbl, ordn = resolve_label_ordinal_any(
+    lbl, ordn, neg = resolve_label_ordinal_any(
         "NotOnAnyFace", _TWO_NET_EDGES, _TWO_NET_LABELS, "IS")
-    assert lbl is None and ordn is None
+    assert lbl is None and ordn is None and neg is False
 
 
 # --------------------------------------------------------------------------- #
@@ -189,8 +240,9 @@ def test_resolve_via_uni_any_maps_and_borrows_ordinal_across_networks():
          "preferred_label": "http://www.xbrl.org/2003/role/label"},
         {"role_uri": _COND, "child_qname": "us-gaap:Revenues", "order": 1.0},
     ]
-    lbl, ordn = resolve_via_uni_any("income_before_taxes", edges, {}, "IS")
+    lbl, ordn, neg = resolve_via_uni_any("income_before_taxes", edges, {}, "IS")
     assert ordn == 8.0   # ordinal borrowed even with no labels entry
+    assert neg is False  # plain label role on the canonical edge
 
 
 def test_resolve_via_uni_any_unknown_uni_raises_needs_nlm():
@@ -203,8 +255,8 @@ def test_resolve_via_uni_any_unknown_uni_raises_needs_nlm():
 def test_resolve_via_uni_any_canonical_not_on_face_returns_none():
     # uni maps to a canonical concept, but that concept is on NO face network →
     # (None, None) (never invents an order).
-    lbl, ordn = resolve_via_uni_any("income_before_taxes", _TWO_NET_EDGES, {}, "IS")
-    assert lbl is None and ordn is None
+    lbl, ordn, neg = resolve_via_uni_any("income_before_taxes", _TWO_NET_EDGES, {}, "IS")
+    assert lbl is None and ordn is None and neg is False
 
 
 # --------------------------------------------------------------------------- #

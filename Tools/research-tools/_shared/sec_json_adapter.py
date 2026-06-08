@@ -149,8 +149,14 @@ class FactRow:
     #                       it builds NO Statement-view row (its component
     #                       long-tail rows are the PDF lines). NOT a DB column —
     #                       stripped before upsert (see row_to_dict).
+    #   display_negated  — PDF-faithful sign flag from the SAME matched presentation
+    #                       arc that yielded (display_label, ordinal). True => the
+    #                       frontend renders -value (TRUE negation, not -abs). None
+    #                       until resolved (legacy tickers not yet re-upserted).
+    #                       IS a DB column (migration 2026060700).
     display_label: str | None = None
     display_eligible: bool = True
+    display_negated: bool | None = None
 
 
 @dataclass
@@ -626,9 +632,10 @@ def attach_display_metadata(
             # Resolve across ALL matching face networks (full ∪ condensed), not a
             # single selected one (T14 Issue2). resolve_label_ordinal_any already
             # skips AmbiguityError networks internally.
-            label, ordinal = resolve_label_ordinal_any(
+            label, ordinal, negated = resolve_label_ordinal_any(
                 _local_name(row.source_account), edges, labels, statement
             )
+            row.display_negated = negated
             match_method = "xbrl_presentation"
             # The concept whose GLOBAL position we stamp (the matched tag itself).
             resolved_concept = _local_name(row.source_account)
@@ -647,13 +654,15 @@ def attach_display_metadata(
                 # unchanged NLM routing (SNDK nonoperating_long_tail).
                 if ordinal is None:
                     try:
-                        _, uni_ordinal = resolve_via_uni_any(
+                        _, uni_ordinal, uni_negated = resolve_via_uni_any(
                             row.uni_account, edges, labels, statement
                         )
                     except NeedsNlmOrder:
-                        uni_ordinal = None
+                        uni_ordinal, uni_negated = None, False
                     if uni_ordinal is not None:
                         ordinal = uni_ordinal
+                        # Sign comes from the SAME borrowed canonical edge.
+                        row.display_negated = uni_negated
                         match_method = "xbrl_presentation_via_uni"
                         # Borrow positions the row at its canonical concept's slot.
                         resolved_concept = CANONICAL_CONCEPT.get(row.uni_account)
@@ -675,10 +684,11 @@ def attach_display_metadata(
 
         # cls in ("synthetic" (single-line), "null") → resolve via uni→canonical
         try:
-            label, ordinal = resolve_via_uni(
+            label, ordinal, negated = resolve_via_uni(
                 row.uni_account, statement, network_role, edges, labels
             )
             row.display_label = label
+            row.display_negated = negated
             if ordinal is not None and network_role is not None:
                 _set_xbrl_ordinal_provenance(
                     row,

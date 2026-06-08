@@ -23,6 +23,7 @@ type Cell = {
   version: string;
   uni_account: string;
   source_account: string | null;
+  display_negated: boolean | null;
   xbrl_tag: string | null;
   value: number;
   weight: number | null;
@@ -94,13 +95,13 @@ export async function GET(
       supabase
         .from("sec_financial_facts")
         .select(
-          "ticker, period, period_end, period_kind, statement, version, uni_account, source_account, display_label, xbrl_tag, value, weight, unit, status, ordinal, long_tail_metadata, provenance",
+          "ticker, period, period_end, period_kind, statement, version, uni_account, source_account, display_label, display_negated, xbrl_tag, value, weight, unit, status, ordinal, long_tail_metadata, provenance",
         )
         .eq("ticker", t)
         .order("cell_id")
         .range(from, from + PAGE - 1),
     ),
-    fetchAllPages<Omit<Cell, "source_table" | "source_account" | "xbrl_tag" | "weight" | "ordinal" | "long_tail_metadata">>(
+    fetchAllPages<Omit<Cell, "source_table" | "source_account" | "xbrl_tag" | "weight" | "ordinal" | "long_tail_metadata" | "display_negated">>(
       (from) =>
         supabase
           .from("sec_financial_metrics")
@@ -154,6 +155,7 @@ export async function GET(
       weight: null,
       ordinal: null,
       long_tail_metadata: null,
+      display_negated: null,
       source_table: "metrics",
     });
   }

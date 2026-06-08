@@ -35,6 +35,7 @@ from _shared.sec_json_adapter import FactRow, attach_display_metadata  # noqa: E
 _STD = "http://www.xbrl.org/2003/role/label"
 _TERSE = "http://www.xbrl.org/2003/role/terseLabel"
 _TOTAL = "http://www.xbrl.org/2003/role/totalLabel"
+_NEG = "http://www.xbrl.org/2009/role/negatedLabel"
 
 # IS presentation network (role contains "operations" → matched by select_network).
 _IS_NETWORK = "http://x/role/statement-consolidated-statements-of-operations"
@@ -47,6 +48,10 @@ _IS_EDGES = [
      "order": 7.0, "preferred_label": _STD, "period": "FY2025"},
     {"role_uri": _IS_NETWORK, "child_qname": "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
      "order": 10.0, "preferred_label": _STD, "period": "FY2025"},
+    # PDF-faithful negation: IncomeTaxExpenseBenefit on a negatedLabel arc → the
+    # stored positive expense renders as (parenthesized) negative in the PDF.
+    {"role_uri": _IS_NETWORK, "child_qname": "us-gaap:IncomeTaxExpenseBenefit",
+     "order": 12.0, "preferred_label": _NEG, "period": "FY2025"},
 ]
 
 _IS_LABELS = {
@@ -56,6 +61,9 @@ _IS_LABELS = {
     ],
     "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic": [
         {"role": _STD, "text": "Basic shares outstanding"},
+    ],
+    "us-gaap:IncomeTaxExpenseBenefit": [
+        {"role": _NEG, "text": "Income tax (provision) benefit"},
     ],
     # NOTE: no label entry for IncomeLossFromContinuingOperations... — the
     # preserved_pdf_label fact uses source_account verbatim, not this lookup.
@@ -109,10 +117,22 @@ def test_tag_like_resolves_label_ordinal_xbrl():
     # DFS ranks them by `order` → GrossProfit(order 3) is the 1st concept = 1.
     assert f.ordinal == 1
     assert f.display_eligible is True
+    assert f.display_negated is False          # plain terseLabel arc → not negated
     assert f.provenance["ordinal_source"] == "xbrl"
     assert f.provenance["ordinal_source_doc"] == "10-K"
     assert f.provenance["ordinal_source_period"] == "FY2025"
     assert f.provenance["ordinal_match_method"] == "xbrl_presentation"
+
+
+def test_tag_like_negated_arc_sets_display_negated_true():
+    # IncomeTaxExpenseBenefit on a negatedLabel arc: stored positive expense, but
+    # the PDF shows it parenthesized → display_negated True (TRUE negation, not -abs).
+    f = _fact("income_tax_expense", "IncomeTaxExpenseBenefit")
+    _run([f])
+    assert f.display_negated is True
+    assert f.display_eligible is True
+    assert f.display_label == "Income tax (provision) benefit"
+    assert f.provenance["ordinal_source"] == "xbrl"
 
 
 # --------------------------------------------------------------------------- #
@@ -172,9 +192,11 @@ def test_null_source_resolved_via_uni_canonical():
     f = _fact("shares_basic_millions", None)
     _run([f])
     assert f.display_label == "Basic shares outstanding"
-    # GLOBAL ordinal (T15): WtdAvgSharesBasic(order 10) is the 3rd/last concept.
+    # GLOBAL ordinal (T15): WtdAvgSharesBasic(order 10) is the 3rd concept
+    # (IncomeTaxExpenseBenefit order 12 sorts after it → 4th).
     assert f.ordinal == 3
     assert f.display_eligible is True
+    assert f.display_negated is False          # standard label arc → not negated
     assert f.provenance["ordinal_source"] == "xbrl"
 
 

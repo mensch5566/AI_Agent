@@ -52,15 +52,24 @@ function etrNotMeaningful(c: Cell): boolean {
   return !!ibt && typeof ibt.value === "number" && ibt.value <= 0;
 }
 
-function displayValue(
+export function displayValue(
   c: Cell | undefined,
   signFlipConcepts: Set<string>,
   statement: Statement,
 ): string {
   if (!c) return "—";
   if (etrNotMeaningful(c)) return "N/M";
-  const flip = !!c.xbrl_tag && signFlipConcepts.has(c.xbrl_tag);
-  const v = flip ? -Math.abs(c.value) : c.value;
+  // PDF-faithful sign. When display_negated is present (non-null) it takes
+  // precedence and does TRUE negation (-value, NOT -abs) — a stored -26 with a
+  // negated arc renders as +26. When null (ticker not yet re-upserted) fall back
+  // to the legacy sign_flip_concepts path so other tickers don't regress.
+  let v: number;
+  if (c.display_negated != null) {
+    v = c.display_negated ? -c.value : c.value;
+  } else {
+    const flip = !!c.xbrl_tag && signFlipConcepts.has(c.xbrl_tag);
+    v = flip ? -Math.abs(c.value) : c.value;
+  }
   // IS/BS/CF use the PDF-faithful statement-scoped formatter ($ whole numbers
   // with separators + parens, EPS 2dp). It owns money + EPS units and returns
   // null for anything else (e.g. a stray Pure/share cell), in which case we fall
