@@ -66,6 +66,18 @@ pure frontend render-strategy switch over the same `cells` payload.
      `statement ∈ {IS,BS,CF}`: if `viewMode === 'uni'`, return
      `buildDictionaryMatrix(filtered, statement, periods)`; else run the existing
      data-driven (PDF) path. `RATIO` is unchanged (already dictionary).
+   - **METRIC_ONLY_UNI suppression (Codex round-2 P1).** `buildDictionaryMatrix`
+     builds rows straight from `ROWS_BY_STATEMENT`, which still lists `ebitda`
+     (IS) and `free_cash_flow` (CF) (`constants.ts:54,119`). The PDF path suppresses
+     these via `METRIC_ONLY_UNI` (`useFinancialMatrix.ts:117,150`) because the
+     worktree renders them in a SEPARATE `DerivedNonGaapMatrix` subsection (added
+     T13; absent on `main`) that shows in BOTH modes. Without suppression, uni mode
+     would render EBITDA / Free Cash Flow inline AND again in the subsection →
+     double display. Fix: inside `buildDictionaryMatrix`, drop rows whose key is in
+     `METRIC_ONLY_UNI` (`rows.filter(r => !METRIC_ONLY_UNI.has(r.key))`). No-op for
+     `RATIO` (its `RATIO_ROWS` contains no raw `ebitda`/`free_cash_flow` key), so the
+     filter is safe to apply unconditionally. Net: ebitda/fcf live only in the
+     DerivedNonGaap subsection in both modes — consistent.
    - **Fix (Codex P1):** in `buildDictionaryMatrix`'s synthetic long-tail SUM cell
      (`useFinancialMatrix.ts:~408` `{ ...base, … }`), the spread currently carries
      `display_negated` (and could carry stale display metadata) from `children[0]`.
@@ -76,9 +88,17 @@ pure frontend render-strategy switch over the same `cells` payload.
 
 2. **`Viewer.tsx`**
    - `const [viewMode, setViewMode] = useState<'pdf'|'uni'>('pdf')` — deterministic
-     default (hydration-safe). A `useEffect` reads `localStorage['fin-view-mode-v1']`
-     on mount and applies it; another effect persists on change. (Codex P2:
-     never read `localStorage` in the `useState` initializer under App Router.)
+     default (hydration-safe; never read `localStorage` in the initializer under App
+     Router). Plus a `hydrated` flag (`useState(false)`).
+     - **Read effect** (mount, `[]`): read `localStorage['fin-view-mode-v1']`; if a
+       valid value, `setViewMode(it)`; then `setHydrated(true)`.
+     - **Persist effect** (`[viewMode, hydrated]`): **guarded** — `if (!hydrated)
+       return;` then write. (Codex round-2 P2: without the guard, the persist effect
+       fires on the initial `'pdf'` render and overwrites a stored `'uni'` before the
+       read effect commits.)
+     - Accepted: a one-paint flash from `'pdf'` → stored mode on first load (no
+       blocking gate). If undesirable later, gate the matrix render behind
+       `hydrated`; out of scope for v1.
    - Matrix `useMemo` passes `viewMode` to `buildMatrix`; `viewMode` joins deps.
    - **Reset chart selection on mode switch (Codex P2):** uni rows key by
      `uni_account`, PDF rows by `rowId` — a selected PDF-only key (e.g.
@@ -87,10 +107,13 @@ pure frontend render-strategy switch over the same `cells` payload.
      `selectedKeys` to the statement preset (same effect already used on `statement`
      change). [Decision: reset, not per-mode memory — simplest, predictable.]
    - **Toggle scope (Codex P2):** render the 2-segment toggle **only when
-     `view ∈ {IS,BS,CF}`**. `SEGMENT` bypasses `StatementMatrix` (renders
-     `SegmentDashboard`); `RATIO` already uses the dictionary path so the toggle is a
-     no-op there. Labels: **「依財報」**(pdf) / **「標準科目」**(uni), placed near the
-     frequency (quarterly/annual) control.
+     `view ∈ {IS,BS,CF}`**. `SEGMENT` aliases `statement → "IS"` and still computes an
+     IS matrix in the background, but renders `SegmentDashboard` (not
+     `StatementMatrix`), so `viewMode` has no user-visible effect there (Codex
+     round-2 P3 wording fix: it's "not user-visible", not "no code path"). `RATIO`
+     already uses the dictionary path so the toggle would be a no-op. Labels:
+     **「依財報」**(pdf) / **「標準科目」**(uni), placed near the frequency
+     (quarterly/annual) control.
 
 3. **`StatementMatrix.tsx`** — UNCHANGED. Renders any `Matrix`; both modes inherit
    the corrected PDF number format (`5,985`) + `display_negated` sign logic.
