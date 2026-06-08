@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildMatrix } from "../useFinancialMatrix";
+import { buildMatrix, buildDictionaryMatrix } from "../useFinancialMatrix";
 import type { Cell, CellStatus, PeriodKind, Statement, Version } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +40,7 @@ function fact(partial: Partial<Cell> & {
     unit: partial.unit ?? "USD_millions",
     status: (partial.status ?? "SOURCE_OF_TRUTH") as CellStatus,
     ordinal: partial.ordinal ?? null,
+    display_negated: partial.display_negated ?? null,
     long_tail_metadata: partial.long_tail_metadata ?? null,
     provenance: partial.provenance ?? {},
     source_table: "facts",
@@ -303,5 +304,59 @@ describe("buildMatrix — RATIO statement unchanged", () => {
     expect(keys).toContain("current_ratio");
     expect(keys.length).toBeGreaterThan(10);
     expect(m.cells["gross_margin_pct"]["Q1_FY2025"].cell?.value).toBe(0.45);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// View-mode toggle (PDF-faithful ⇄ uni_account).
+// ---------------------------------------------------------------------------
+describe("view-mode: uni_account (buildDictionaryMatrix)", () => {
+  it("never renders METRIC_ONLY_UNI (ebitda) as an inline IS row", () => {
+    const cells = [
+      fact({ uni_account: "revenue", source_account: "Revenues", statement: "IS",
+             period: "Q2_FY2026", value: 100 }),
+      fact({ uni_account: "ebitda", source_account: "EBITDA", statement: "IS",
+             period: "Q2_FY2026", value: 40 }),
+    ];
+    const m = buildDictionaryMatrix(cells, "IS", ["Q2_FY2026"]);
+    expect(m.rows.some((r) => r.key === "ebitda")).toBe(false);
+    expect(m.rows.some((r) => r.key === "revenue")).toBe(true);
+  });
+
+  it("long-tail SUM cell clears display_negated → bucket keeps natural summed sign", () => {
+    const cells = [
+      fact({ uni_account: "operating_expense_long_tail", source_account: "A", statement: "IS",
+             period: "Q2_FY2026", value: 10, weight: 1, display_negated: true,
+             long_tail_metadata: { rolls_up_to: "total_operating_expenses" } }),
+      fact({ uni_account: "operating_expense_long_tail", source_account: "B", statement: "IS",
+             period: "Q2_FY2026", value: 5, weight: 1, display_negated: false,
+             long_tail_metadata: { rolls_up_to: "total_operating_expenses" } }),
+    ];
+    const m = buildDictionaryMatrix(cells, "IS", ["Q2_FY2026"]);
+    const mc = m.cells["operating_expense_long_tail"]?.["Q2_FY2026"];
+    expect(mc?.cell?.value).toBe(15);
+    expect(mc?.cell?.display_negated).toBeNull();
+  });
+});
+
+describe("view-mode: buildMatrix viewMode routing", () => {
+  it("'uni' yields fixed canonical rows; 'pdf' yields data-driven rows", () => {
+    const cells = [
+      fact({ uni_account: "revenue", source_account: "Revenues", statement: "IS",
+             period: "Q2_FY2026", value: 100, display_label: "Net sales", ordinal: 1 }),
+    ];
+    const uni = buildMatrix(cells, "IS", "GAAP", "quarterly", "uni");
+    const pdf = buildMatrix(cells, "IS", "GAAP", "quarterly", "pdf");
+    expect(uni.rows.some((r) => r.key === "revenue" && r.label === "Revenue")).toBe(true);
+    expect(pdf.rows.some((r) => r.label === "Net sales")).toBe(true);
+  });
+
+  it("defaults to pdf when viewMode omitted (back-compat 4-arg arity)", () => {
+    const cells = [
+      fact({ uni_account: "revenue", source_account: "Revenues", statement: "IS",
+             period: "Q2_FY2026", value: 100, display_label: "Net sales", ordinal: 1 }),
+    ];
+    const def = buildMatrix(cells, "IS", "GAAP", "quarterly");
+    expect(def.rows.some((r) => r.label === "Net sales")).toBe(true);
   });
 });

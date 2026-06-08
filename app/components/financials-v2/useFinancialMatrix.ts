@@ -172,6 +172,7 @@ export function buildMatrix(
   statement: Statement,
   version: Version,
   frequency: Frequency,
+  viewMode: "pdf" | "uni" = "pdf",
 ): Matrix {
   // Year-end balance-sheet snapshots are stored as `Q4_FYyyyy` / instant_period_end
   // (a balance sheet is point-in-time; the fiscal-year-end snapshot IS the
@@ -236,6 +237,13 @@ export function buildMatrix(
   // this task only restructures IS/BS/CF row building — spec §8 "RATIO as-is").
   // -------------------------------------------------------------------------
   if (statement === "RATIO") {
+    return buildDictionaryMatrix(filtered, statement, periods);
+  }
+
+  // uni_account mode: route the three statements through the fixed-dictionary
+  // builder (canonical core rows + long-tail SUM buckets). PDF mode falls through
+  // to the data-driven path below. (spec: view-mode toggle.)
+  if (viewMode === "uni") {
     return buildDictionaryMatrix(filtered, statement, periods);
   }
 
@@ -358,12 +366,16 @@ export function buildMatrix(
 // fallback path). Rows come from ROWS_BY_STATEMENT; long-tail buckets sum their
 // children with rollup suppression. IS/BS/CF no longer use this — they are
 // data-driven off the ticker's actual disclosed facts (Task 11).
-function buildDictionaryMatrix(
+export function buildDictionaryMatrix(
   filtered: Cell[],
   statement: Statement,
   periods: string[],
 ): Matrix {
-  const rows = ROWS_BY_STATEMENT[statement];
+  // ebitda / free_cash_flow are DERIVED (never on a filing's face three statements);
+  // they render only in the Ratios-tab DerivedNonGaap subsection, so they must never
+  // appear inline here. Matches the PDF path's METRIC_ONLY_UNI suppression. No-op for
+  // RATIO (its RATIO_ROWS contains no raw ebitda/free_cash_flow key).
+  const rows = ROWS_BY_STATEMENT[statement].filter((r) => !METRIC_ONLY_UNI.has(r.key));
 
   const longTailKeys = new Set(rows.filter((r) => r.kind === "long_tail_bucket").map((r) => r.key));
 
@@ -413,6 +425,10 @@ function buildDictionaryMatrix(
         uni_account: k,
         source_account: children.length === 1 ? base.source_account : "SUM(long_tail)",
         xbrl_tag: null,
+        // bucket sign = the summed value's own sign; never inherit a child's
+        // display_negated (the `...base` spread copies children[0]'s flag, which
+        // would make displayValue negate the WHOLE bucket — latent sign bug).
+        display_negated: null,
         value: summed,
         weight: 1,
         provenance: {
