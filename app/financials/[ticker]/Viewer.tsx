@@ -31,6 +31,10 @@ export default function Viewer({ ticker }: { ticker: string }) {
   const [view, setView] = useState<View>("IS");
   const [frequency, setFrequency] = useState<Frequency>("quarterly");
   const [showNonGaap, setShowNonGaap] = useState(false);
+  // Statement render mode: 'pdf' = filing-faithful (data-driven), 'uni' = canonical
+  // uni_account rows + long-tail buckets. Persisted in localStorage (hydration-safe).
+  const [viewMode, setViewMode] = useState<"pdf" | "uni">("pdf");
+  const [modeHydrated, setModeHydrated] = useState(false);
 
   const cells = data?.cells ?? [];
   const dimensional = data?.dimensional ?? [];
@@ -39,8 +43,8 @@ export default function Viewer({ ticker }: { ticker: string }) {
   const statement: Statement = view === "SEGMENT" ? "IS" : view;
 
   const gaapMatrix = useMemo(
-    () => buildMatrix(cells, statement, "GAAP", frequency),
-    [cells, statement, frequency],
+    () => buildMatrix(cells, statement, "GAAP", frequency, viewMode),
+    [cells, statement, frequency, viewMode],
   );
   const nongaapMatrix = useMemo(
     () => buildMatrix(cells, statement, "NON_GAAP", frequency),
@@ -100,9 +104,28 @@ export default function Viewer({ ticker }: { ticker: string }) {
   // statement's preset. We don't filter by rowsWithData here — keys that
   // lack data render as empty lines but stay selectable; the issuer-
   // specific gaps are usually obvious to the analyst.
+  // Also reset on viewMode change: uni rows key by uni_account, pdf rows by rowId,
+  // so a stale PDF-only selection would silently null the chart after switching.
   useEffect(() => {
     setSelectedKeys((CHART_DEFAULT_KEYS[statement] ?? []).slice(0, CHART_MAX_SELECTION));
-  }, [statement]);
+  }, [statement, viewMode]);
+
+  // Read persisted view mode once on mount (App Router: never read localStorage in
+  // a useState initializer — SSR has no window).
+  useEffect(() => {
+    const saved = typeof window !== "undefined"
+      ? window.localStorage.getItem("fin-view-mode-v1")
+      : null;
+    if (saved === "pdf" || saved === "uni") setViewMode(saved);
+    setModeHydrated(true);
+  }, []);
+
+  // Persist — guarded so the initial 'pdf' render never overwrites a stored 'uni'
+  // before the read effect commits.
+  useEffect(() => {
+    if (!modeHydrated) return;
+    window.localStorage.setItem("fin-view-mode-v1", viewMode);
+  }, [viewMode, modeHydrated]);
 
   // Look up a row's unit by peeking the first populated cell in the GAAP
   // matrix (falls back to Non-GAAP if GAAP has no value yet — e.g. Q4 from
@@ -202,6 +225,27 @@ export default function Viewer({ ticker }: { ticker: string }) {
                     className="rounded-none border-r last:border-r-0 border-border"
                   >
                     {f}
+                  </Button>
+                ))}
+              </div>
+            )}
+
+            {(view === "IS" || view === "BS" || view === "CF") && (
+              <div
+                className="inline-flex rounded-md border border-border overflow-hidden ml-2"
+                role="group"
+                aria-label="statement view mode"
+              >
+                {([["pdf", "依財報"], ["uni", "標準科目"]] as const).map(([m, label]) => (
+                  <Button
+                    key={m}
+                    size="sm"
+                    variant={viewMode === m ? "default" : "ghost"}
+                    aria-pressed={viewMode === m}
+                    onClick={() => setViewMode(m)}
+                    className="rounded-none border-r last:border-r-0 border-border"
+                  >
+                    {label}
                   </Button>
                 ))}
               </div>
