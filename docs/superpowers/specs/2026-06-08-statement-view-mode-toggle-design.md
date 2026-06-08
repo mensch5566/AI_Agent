@@ -79,6 +79,10 @@ pure frontend render-strategy switch over the same `cells` payload.
      `RATIO` (its `RATIO_ROWS` contains no raw `ebitda`/`free_cash_flow` key), so the
      filter is safe to apply unconditionally. Net: ebitda/fcf live only in the
      DerivedNonGaap subsection in both modes — consistent.
+   - **Decision (user-confirmed 2026-06-08):** EBITDA / Free Cash Flow are DERIVED
+     values that never appear on a filing's face three statements, so suppressing
+     them inline in BOTH modes is *more* PDF-faithful, not a regression vs `main`.
+     They render only in the Ratios-tab DerivedNonGaap subsection.
    - **Fix (Codex P1):** in `buildDictionaryMatrix`'s synthetic long-tail SUM cell
      (`useFinancialMatrix.ts:~408` `{ ...base, … }`), the spread currently carries
      `display_negated` (and could carry stale display metadata) from `children[0]`.
