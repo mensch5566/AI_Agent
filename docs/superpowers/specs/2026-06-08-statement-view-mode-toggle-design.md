@@ -2,7 +2,7 @@
 type: design-spec
 topic: statement-view-mode-toggle
 date: 2026-06-08
-status: draft
+status: design-converged
 tier: T2  # frontend feature; no production data writes, no irreversible pipeline change
 branch: worktree-statement-view-pdf-faithful
 related:
@@ -23,9 +23,10 @@ collapse into `*_long_tail` bucket rows (summed). That mode is cross-ticker
 comparable; the PDF mode is faithful to each filing.
 
 **Goal:** add a single global toggle so the user can switch the whole viewer
-between the two modes. Both render strategies already exist in code — PDF mode is
-the worktree's current data-driven `buildMatrix`; uni_account mode is `main`'s
-prior `buildMatrix` (known-good, "the finished version" per the user).
+between the two modes. Both render strategies already exist in the worktree — PDF
+mode is the current data-driven `buildMatrix`; uni_account mode is the existing
+`buildDictionaryMatrix` (today used for RATIO; matches the known-good `main` uni
+layout, "the finished version" per the user). No `main` restore needed.
 
 Non-goal: changing data, the API, the DB, or the parse/derive pipeline. This is a
 pure frontend render-strategy switch over the same `cells` payload.
