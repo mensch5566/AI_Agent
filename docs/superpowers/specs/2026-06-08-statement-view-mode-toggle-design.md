@@ -38,59 +38,77 @@ pure frontend render-strategy switch over the same `cells` payload.
   long as each builder is internally consistent (its `rows[].key` match its `cells`
   keys). PDF builder keys rows by `rowId` (uni_account, or uni+source for long-tail
   members); uni builder keys rows by `uni_account`.
-- `main`'s `buildMatrix` (uni_account mode) reads only fields that still exist on
-  the current `Cell` type (`uni_account`, `source_account`, `long_tail_metadata`,
-  `period_kind`, `period`, `value`, `unit`, `weight`). The current `Cell` is a
-  superset (adds `display_label` / `ordinal` / `display_negated`), so `main`'s
-  builder restores essentially verbatim.
+- The uni_account builder already lives in the worktree: `buildDictionaryMatrix`
+  (`useFinancialMatrix.ts:361`), used today for `RATIO`. It reads `ROWS_BY_STATEMENT`
+  + sums `*_long_tail` members. So uni mode is "route IS/BS/CF through the existing
+  dictionary builder", NOT a restore from `main`.
 - Viewer wiring: `Viewer.tsx` computes the matrix in a `useMemo` —
   `buildMatrix(cells, statement, "GAAP"|"NON_GAAP", frequency)` — and passes it to
   `<StatementMatrix statement=… gaap=… signFlipConcepts=… />`. The toggle plugs in
   exactly here (pick the builder by mode).
 
-## Design (Approach A — two builders, one render shell, mode flag)
+## Design (Approach A — reuse the existing dictionary builder, one render shell, mode flag)
+
+> Revised after Codex design-gate review (GPT-5.5). The uni_account builder
+> **already exists** in the worktree as the private `buildDictionaryMatrix(filtered,
+> statement, periods)` (`useFinancialMatrix.ts:361`), today used only for `RATIO`.
+> It builds rows from `ROWS_BY_STATEMENT` (= `IS_ROWS/BS_ROWS/CF_ROWS`) and SUMs
+> `*_long_tail` members with rollup suppression — exactly the uni mode we want. So
+> we do **not** restore anything from `main`; we route IS/BS/CF to this existing
+> function in uni mode. This also sidesteps the `METRIC_ONLY_UNI` resurrection trap
+> (a literal `main` restore would re-inline `ebitda`/`free_cash_flow`).
 
 ### Components
 
-1. **`useFinancialMatrix.ts`**
-   - Keep the current data-driven builder, exported as `buildMatrix` (PDF mode) —
-     unchanged.
-   - Restore `main`'s prior uni_account builder as a NEW export
-     `buildMatrixUni(cells, statement, channel, frequency)` (same signature). Bring
-     it back via `git show main:…/useFinancialMatrix.ts` and adapt only imports /
-     type names if they drifted. Its rows come from `IS_ROWS/BS_ROWS/CF_ROWS`; its
-     long-tail bucket rows aggregate (`SUM`) the matching `*_long_tail` members.
-   - Both builders live side by side; neither calls the other.
+1. **`useFinancialMatrix.ts` — `buildMatrix`**
+   - Add a `viewMode: 'pdf' | 'uni'` parameter (default `'pdf'`).
+   - Cell filtering + `periods` computation stay shared. After filtering, for
+     `statement ∈ {IS,BS,CF}`: if `viewMode === 'uni'`, return
+     `buildDictionaryMatrix(filtered, statement, periods)`; else run the existing
+     data-driven (PDF) path. `RATIO` is unchanged (already dictionary).
+   - **Fix (Codex P1):** in `buildDictionaryMatrix`'s synthetic long-tail SUM cell
+     (`useFinancialMatrix.ts:~408` `{ ...base, … }`), the spread currently carries
+     `display_negated` (and could carry stale display metadata) from `children[0]`.
+     `StatementMatrix.displayValue` then applies TRUE negation to the WHOLE summed
+     bucket → wrong sign. Explicitly set `display_negated: null` (xbrl_tag already
+     null) on the synthetic cell so a bucket renders its natural summed sign. (Add a
+     regression test; this is a latent bug independent of the toggle.)
 
 2. **`Viewer.tsx`**
-   - Add `const [viewMode, setViewMode] = useState<'pdf'|'uni'>(…)` initialized from
-     `localStorage` (key `fin-view-mode-v1`, default `'pdf'`), and an effect that
-     writes back on change.
-   - The matrix `useMemo` selects the builder:
-     `(viewMode === 'pdf' ? buildMatrix : buildMatrixUni)(cells, statement, channel, frequency)`.
-     `viewMode` joins the memo deps.
-   - Render a 2-segment toggle near the frequency (quarterly/annual) control:
-     labels e.g. **「依財報」**(pdf) / **「標準科目」**(uni). Global — one control,
-     applies to whichever statement tab is active.
+   - `const [viewMode, setViewMode] = useState<'pdf'|'uni'>('pdf')` — deterministic
+     default (hydration-safe). A `useEffect` reads `localStorage['fin-view-mode-v1']`
+     on mount and applies it; another effect persists on change. (Codex P2:
+     never read `localStorage` in the `useState` initializer under App Router.)
+   - Matrix `useMemo` passes `viewMode` to `buildMatrix`; `viewMode` joins deps.
+   - **Reset chart selection on mode switch (Codex P2):** uni rows key by
+     `uni_account`, PDF rows by `rowId` — a selected PDF-only key (e.g.
+     `operating_expense_long_tail|Restructuring`) does not exist in uni mode, which
+     would silently null the chart + drop highlight. On `viewMode` change, reset
+     `selectedKeys` to the statement preset (same effect already used on `statement`
+     change). [Decision: reset, not per-mode memory — simplest, predictable.]
+   - **Toggle scope (Codex P2):** render the 2-segment toggle **only when
+     `view ∈ {IS,BS,CF}`**. `SEGMENT` bypasses `StatementMatrix` (renders
+     `SegmentDashboard`); `RATIO` already uses the dictionary path so the toggle is a
+     no-op there. Labels: **「依財報」**(pdf) / **「標準科目」**(uni), placed near the
+     frequency (quarterly/annual) control.
 
-3. **`StatementMatrix.tsx`** — UNCHANGED. It already renders any `Matrix` and
-   applies the shared PDF number formatter + `display_negated` sign logic. Both
-   modes therefore inherit the corrected number format (`5,985`) and sign handling.
+3. **`StatementMatrix.tsx`** — UNCHANGED. Renders any `Matrix`; both modes inherit
+   the corrected PDF number format (`5,985`) + `display_negated` sign logic.
 
 ### Sign / format behavior across modes
 
-- **PDF mode** rows map 1:1 to a fact → `display_negated` drives the sign.
-- **uni mode** core rows also map to a single fact (the core `uni_account` cell) →
-  `display_negated` carries through, signs render correctly.
-- **uni mode long-tail bucket rows** are `SUM(long_tail)` aggregates with no single
-  `display_negated` → cell flag is null → render shell falls back to legacy
-  (no flip), showing the summed value's natural sign. Acceptable: a bucket is a sum,
-  its sign is the sum's sign. (Documented limitation; not a regression vs `main`,
-  which also summed.)
+- **PDF mode**: rows map 1:1 to a fact → `display_negated` drives the sign.
+- **uni mode** core rows map to the single core `uni_account` cell → `display_negated`
+  carries through, signs correct.
+- **uni mode long-tail SUM buckets**: with the P1 fix, `display_negated` is forced
+  `null` on the synthetic cell → render shell shows the summed value's natural sign
+  (a sum's sign is the sum's sign). Correct and matches the pre-display_negated
+  `main` behavior.
 
 ### Persistence & scope
-- One global `viewMode`, persisted in `localStorage` across tickers and sessions,
-  default `'pdf'`. Switching is instant (client-side rebuild, no refetch).
+- One global `viewMode`, persisted in `localStorage` (`fin-view-mode-v1`) across
+  tickers/sessions, default `'pdf'`, hydration-safe (effect-read). Switching is a
+  client-side rebuild (no refetch). Toggle visible only on IS/BS/CF tabs.
 
 ## Alternatives considered
 - **B. One builder with a `mode` param** — rejected: entangles two distinct row
@@ -100,20 +118,27 @@ pure frontend render-strategy switch over the same `cells` payload.
   periods, number format, sign logic) and risks the two drifting.
 
 ## Testing
-- Unit (`useFinancialMatrix.test.ts`): `buildMatrixUni` produces the fixed
-  `IS_ROWS`/`BS_ROWS`/`CF_ROWS` rows, collapses `*_long_tail` members into the
-  bucket SUM, and keys cells by `uni_account`; `buildMatrix` (pdf) unchanged.
-- A mode-selection test: given the same `cells`, `pdf` vs `uni` yield the two
-  expected row sets (data-driven labels vs fixed canonical labels).
+- Unit (`useFinancialMatrix.test.ts`): `buildMatrix(cells, IS|BS|CF, GAAP, freq,
+  'uni')` returns the fixed `ROWS_BY_STATEMENT` rows keyed by `uni_account` with
+  `*_long_tail` members collapsed into the bucket SUM; `'pdf'` mode yields the
+  data-driven label/ordinal rows. Same `cells` → two distinct expected row sets.
+- **SUM-sign regression (Codex P1):** a long-tail bucket whose `children[0]` has
+  `display_negated: true` must render its natural summed sign — assert the synthetic
+  SUM cell has `display_negated: null`, and `displayValue` does NOT negate it.
+- **Mode-switch chart reset:** selecting a PDF-only key then switching to uni resets
+  `selectedKeys` to the statement preset (no stale/all-null chart).
 - `tsc --noEmit` + existing vitest green.
-- Manual: MU BS/IS/CF toggle both ways; confirm uni mode shows core rows +
-  `Other … (long-tail)` buckets and PDF mode shows filing labels; localStorage
-  round-trips.
+- Manual: MU IS/BS/CF toggle both ways; uni shows core rows + `Other … (long-tail)`
+  buckets, PDF shows filing labels; toggle hidden on Ratios/Segment; localStorage
+  round-trips; reload restores last mode.
 
 ## Risks
-- Row-key collision if `buildMatrixUni`'s cells and `buildMatrix`'s cells were ever
-  mixed — mitigated: only ONE builder runs per render; outputs never merged.
-- `main`'s builder referencing a symbol the worktree renamed — caught at `tsc`.
+- Only ONE builder runs per render; the two matrices' cells are never merged, so no
+  cross-mode key collision.
+- `buildDictionaryMatrix` is already battle-tested for RATIO; routing IS/BS/CF
+  through it reuses known-good code rather than reintroducing `main`'s variant.
+- The SUM-sign fix touches a shared synthetic-cell path — covered by the regression
+  test above; `tsc` guards type drift.
 
 ## Out of scope
 - Other 4 tickers' display metadata re-upsert (separate, pending).
