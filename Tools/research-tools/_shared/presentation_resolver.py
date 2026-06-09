@@ -139,9 +139,13 @@ def accepted_face_concepts(edges, statement):
     return out
 
 
-def resolve_label_ordinal_any(concept_local, edges, labels, statement, facts_concepts=None):
+def resolve_label_ordinal_any(concept_local, edges, labels, statement, facts_concepts=None,
+                              prefer_period=None):
     """Resolve (display_label, ordinal, negated) for a bare local concept across
     ALL matching face networks for `statement` (T14 Issue2).
+
+    ``prefer_period`` ('start'|'end'|None) is forwarded to ``resolve_label_ordinal``
+    for CF cash movement-analysis arc selection (see that function).
 
     Tries the primary network (select_network) first, then the remaining
     `matching_face_networks` in order, returning the FIRST non-None ordinal hit
@@ -155,7 +159,7 @@ def resolve_label_ordinal_any(concept_local, edges, labels, statement, facts_con
     for role in matching_face_networks(edges, statement):
         try:
             label, ordinal, negated = resolve_label_ordinal(
-                concept_local, role, edges, labels)
+                concept_local, role, edges, labels, prefer_period=prefer_period)
         except AmbiguityError:
             continue
         if ordinal is not None:
@@ -199,9 +203,17 @@ def _edge_negated(edge) -> bool:
     return _norm(preferred).startswith("negated")
 
 
-def resolve_label_ordinal(concept_local, network_role, edges, labels):
+def resolve_label_ordinal(concept_local, network_role, edges, labels,
+                          prefer_period=None):
     """Resolve PDF-faithful (display_label, ordinal, negated) for a bare local
     concept name within the selected presentation network. Spec §13.2, G3.
+
+    ``prefer_period`` ('start' | 'end' | None): for a concept that appears in BOTH a
+    periodStartLabel and a periodEndLabel arc (CF cash reconciliation / movement
+    analysis, EFM §7.7), select the arc whose preferred_label role matches — the
+    stored ending-balance fact uses 'end' so it renders "…at end of period" instead
+    of matched[0] (= periodStart). Falls back to matched[0] when no arc matches the
+    preference (keeps existing behavior for every non-dual concept).
 
     - Only edges where ``edge['role_uri'] == network_role`` are considered.
     - Match edges whose ``child_qname`` local name equals ``concept_local``.
@@ -230,6 +242,13 @@ def resolve_label_ordinal(concept_local, network_role, edges, labels):
             f"qnames in network {network_role!r}: {sorted(distinct)}")
 
     edge = matched[0]
+    if prefer_period in ("start", "end"):
+        want = "periodstartlabel" if prefer_period == "start" else "periodendlabel"
+        preferred_edge = next(
+            (e for e in matched if _norm(e.get("preferred_label") or "") == want),
+            None)
+        if preferred_edge is not None:
+            edge = preferred_edge
     full_qname = edge["child_qname"]
     ordinal = edge.get("order")
     negated = _edge_negated(edge)

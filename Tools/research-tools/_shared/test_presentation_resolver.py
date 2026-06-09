@@ -333,3 +333,54 @@ def test_global_ordinals_excludes_parenthetical_and_absent():
 def test_global_ordinals_empty_when_no_face_network():
     # BS keyword matches nothing here → empty map (AAOI-style; caller → NLM).
     assert compute_global_ordinals(_GLOBAL_EDGES, "BS") == {}
+
+
+# ---------------------------------------------------------------------------
+# CF cash movement analysis: prefer_period selects periodStart vs periodEnd arc.
+# Same concept appears in TWO arcs (periodStartLabel / periodEndLabel); the
+# stored ending-balance fact must resolve to the periodEnd arc ("…end of period"),
+# not matched[0] (periodStart). EFM §7.7 movement analysis.
+# ---------------------------------------------------------------------------
+_PSTART = "http://www.xbrl.org/2003/role/periodStartLabel"
+_PEND = "http://www.xbrl.org/2003/role/periodEndLabel"
+_CASH_Q = "us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"
+_CASH_EDGES = [
+    {"role_uri": "r/cf", "child_qname": _CASH_Q, "order": 6.0, "preferred_label": _PSTART},
+    {"role_uri": "r/cf", "child_qname": _CASH_Q, "order": 7.0, "preferred_label": _PEND},
+]
+_CASH_LABELS = {_CASH_Q: [
+    {"role": _PSTART, "text": "Cash, cash equivalents, and restricted cash at beginning of period"},
+    {"role": _PEND, "text": "Cash, cash equivalents, and restricted cash at end of period"},
+]}
+
+
+def test_cash_prefer_period_end_selects_period_end_arc():
+    lbl, ordn, neg = resolve_label_ordinal(
+        "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+        "r/cf", _CASH_EDGES, _CASH_LABELS, prefer_period="end")
+    assert ordn == 7.0
+    assert lbl.endswith("at end of period")
+    assert neg is False
+
+
+def test_cash_prefer_period_start_selects_period_start_arc():
+    lbl, ordn, _ = resolve_label_ordinal(
+        "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+        "r/cf", _CASH_EDGES, _CASH_LABELS, prefer_period="start")
+    assert ordn == 6.0
+    assert lbl.endswith("at beginning of period")
+
+
+def test_cash_no_prefer_keeps_matched0_backcompat():
+    # default (no prefer_period) keeps existing matched[0] behavior (order 6)
+    lbl, ordn, _ = resolve_label_ordinal(
+        "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+        "r/cf", _CASH_EDGES, _CASH_LABELS)
+    assert ordn == 6.0
+
+
+def test_prefer_period_falls_back_when_role_absent():
+    # a concept with only a terse arc + prefer_period='end' → falls back to matched[0]
+    lbl, ordn, _ = resolve_label_ordinal("GrossProfit", "r/operations", _EDGES, _LABELS,
+                                         prefer_period="end")
+    assert ordn == 5.0

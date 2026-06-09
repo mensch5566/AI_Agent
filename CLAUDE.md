@@ -152,14 +152,14 @@ Treat the following Working Memory as the current project context. Use `search_m
 
 # [Working] Combined AI Working Memory
 
-Updated: 2026-06-09T13:40:10.089173
+Updated: 2026-06-09T13:55:16.898921
 
 Project scope: `statement-view-pdf-faithful`
 
 ## Global Working Memory
 # [Working] Shared AI Working Memory (global)
 
-Updated: 2026-06-09T13:40:09.798739
+Updated: 2026-06-09T13:55:16.574572
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -185,6 +185,20 @@ Use it for current state. Use `search_memory` for older or more detailed history
 ## Python Wrapper 的作用
 
 ## Recent Shared Memory
+### CF cash begin/end — movement-analysis design CONVERGED (impl pending)
+# CF cash begin/end — movement-analysis design CONVERGED (impl pending)
+# CF cash 期初/期末 — movement-analysis 設計收斂，待實作
+Date: 2026-06-08 / Project: ai_agent (worktree `statement-view-pdf-faithful`) / Tier: T2
+## 背景 bug（已驗證）
+前端 CF「現金期末餘額」被標成「at beginning of period」：季模式 `ending_cash`(Q2_FY2026=13934)、年模式 `cf_long_tail`(FY2025=9646) 都中。根因：resolver 把 cash concept 盲挑 `matched[0]`=periodStart arc。且真正的「期初」行缺失。YTD facts(6M/9M) 前端 statement view 排除、不顯示。
+
+### TradingView Pine PE 腳本驗證：邏輯正確=GAAP，前述「TradingView 矛盾」誤判已更正
+# TradingView Pine PE 腳本驗證：邏輯正確=GAAP，前述「TradingView 矛盾」誤判已更正
+# TradingView Pine PE 腳本驗證結論（更正先前誤判）
+Date: 2026-06-09 / Project: obsidian / 適用：Khouse/Macro_Weekly 雙周報 slide 22（NASDAQ Top 10 History P/E Ratio）的 PE 數據可信度確認。
+## 背景
+雙周報 slide 22 的各標的 current + 1Y/2Y/3Y/5Y 平均 PE，來源是使用者在 TradingView 上跑的 Pine 腳本（`/Users/mensch5566/Downloads/Pine.txt`，手抄進 slide）。使用者要確認這支腳本跑出來的數字「有沒有問題」。**不是要做自動化**（使用者明確說現在沒有要自動化）。
+
 ### 估值 memo 參數百分比格式：寫成 N%（如 4%、35.5%），非小數也非整數裸值
 # 估值 memo 參數百分比格式：寫成 N%（如 4%、35.5%），非小數也非整數裸值
 # 估值 memo 參數百分比格式：`N%`
@@ -227,24 +241,10 @@ Date: 2026-06-02 / Project: ai_agent
 Phase 1 效率比已 Codex 結案。接 Phase 2 YoY（用戶「都做」）。
 ## 做了什麼
 
-### derive-analytics EL2 Phase 1 效率比 — Codex closure gate 三項全修（CCC cell_id + docs + chart days）2026-06-02
-# derive-analytics EL2 Phase 1 效率比 — Codex closure gate 三項全修（CCC cell_id + docs + chart days）2026-06-02
-# EL2 Phase 1 效率比 — Codex closure gate 收斂
-Date: 2026-06-02 / Project: ai_agent
-Codex Phase 1 functional review：無 P1，4 挑戰點全接受，2 P2 + 1 P3 closure gate。逐項質疑後全接受並修完上 production。
-## P2.1 CCC provenance cell_id（CC `45200bc`）
-
-### derive-analytics EL2 expansion Phase 1 效率比（asset_turnover+DSO/DIO/DPO/CCC）上 production，待 Codex review 2026-06-02
-# derive-analytics EL2 expansion Phase 1 效率比（asset_turnover+DSO/DIO/DPO/CCC）上 production，待 Codex review 2026-06-02
-# derive-analytics EL2 Phase 1 效率比 — 上 production，待 Codex review
-Date: 2026-06-02 / Project: ai_agent
-用戶「都做」（效率比+YoY+ROIC+EBITDA），分階段做。設計 spec `docs/superpowers/specs/2026-06-02-derive-analytics-el2-expansion-design.md` 已 Codex review（6 決策同意 + 5 P2/1 P3 折回 §8）。本筆 = Phase 1（效率比）完成上線。
-## 做了什麼
-
 ## Project Working Memory
 # [Working] Shared AI Working Memory (project:statement-view-pdf-faithful)
 
-Updated: 2026-06-09T13:40:09.968996
+Updated: 2026-06-09T13:55:16.764514
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -260,10 +260,10 @@ Use it for current state. Use `search_memory` for older or more detailed history
 ## Recent Project Memory
 ### AI Memory Daily Log: 2026-06-09 (statement-view-pdf-faithful)
 # AI Memory Daily Log: 2026-06-09 (statement-view-pdf-faithful)
-## 13:40:09 [claude] 我沒有急著要看，可以直接修根本的問題
+## 13:55:16 [claude] <task-notification>
 ### Intent (raw)
-我沒有急著要看，可以直接修根本的問題
-### Summary (Haiku)
+<task-notification>
+<task-id>bjd336m4o</task-id>
 
 ### AI Memory Daily Log: 2026-06-08 (statement-view-pdf-faithful)
 # AI Memory Daily Log: 2026-06-08 (statement-view-pdf-faithful)

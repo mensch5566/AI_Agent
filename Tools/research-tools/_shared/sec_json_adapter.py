@@ -507,6 +507,20 @@ def _local_name(source_account: str) -> str:
     return source_account.rsplit(":", 1)[-1]
 
 
+def _is_cash_balance_concept(local: str) -> bool:
+    """CF cash-reconciliation BALANCE concept (the period-start/period-end roll-forward
+    anchor). The stored fact is the period-END balance, so its display must resolve to
+    the periodEnd arc ("…at end of period"), not matched[0] (=periodStart). EFM §7.7
+    movement analysis. Prefix allowlist mirrors face_completeness._is_cash_concept but
+    EXCLUDES net-change FLOW concepts (PeriodIncreaseDecrease / Period(Increase|Decrease))."""
+    l = local.lower()
+    if any(s in l for s in ("increasedecrease", "periodincrease", "perioddecrease")):
+        return False
+    return (l.startswith("cashandcashequivalents")
+            or l.startswith("cashcashequivalents")
+            or l.startswith("restrictedcash"))
+
+
 def _set_xbrl_ordinal_provenance(
     row: "FactRow", ordinal, network_role: str | None,
     match_method: str = "xbrl_presentation",
@@ -632,8 +646,15 @@ def attach_display_metadata(
             # Resolve across ALL matching face networks (full ∪ condensed), not a
             # single selected one (T14 Issue2). resolve_label_ordinal_any already
             # skips AmbiguityError networks internally.
+            # CF cash reconciliation: the stored fact is the period-END balance, so
+            # resolve to the periodEnd arc ("…at end of period") instead of matched[0]
+            # (=periodStart). The "…beginning of period" row is synthesized cross-period
+            # in the frontend (movement analysis). EFM §7.7.
+            _prefer = "end" if (statement == "CF"
+                                and _is_cash_balance_concept(_local_name(row.source_account))) else None
             label, ordinal, negated = resolve_label_ordinal_any(
-                _local_name(row.source_account), edges, labels, statement
+                _local_name(row.source_account), edges, labels, statement,
+                prefer_period=_prefer,
             )
             row.display_negated = negated
             match_method = "xbrl_presentation"
