@@ -44,6 +44,7 @@ from .presentation_resolver import (
     resolve_label_ordinal_any,
     resolve_via_uni,
     resolve_via_uni_any,
+    resolve_via_label_text,
 )
 from .source_account_class import classify_source_account
 from .unit_canonicalize import (
@@ -687,6 +688,22 @@ def attach_display_metadata(
                         match_method = "xbrl_presentation_via_uni"
                         # Borrow positions the row at its canonical concept's slot.
                         resolved_concept = CANONICAL_CONCEPT.get(row.uni_account)
+                    else:
+                        # Last resort before NLM: a legacy AGENT_CLASSIFIED face row
+                        # whose concept link was lost (xbrl_tag=None, long-tail uni
+                        # with no canonical) — e.g. SNDK "Business separation costs"
+                        # / "Gain on business divestiture". Match the PDF text against
+                        # the OFFICIAL label of face concepts; UNIQUE hit borrows that
+                        # concept's ordinal + sign. Fail-closed: ambiguous/no match →
+                        # ordinal stays None → NLM/gate. source_account (display
+                        # label) is NOT mutated. Spec 2026-06-09-sndk-label-text-…
+                        lt_concept, lt_ordinal, lt_negated = resolve_via_label_text(
+                            row.source_account, edges, labels, statement)
+                        if lt_ordinal is not None:
+                            ordinal = lt_ordinal
+                            row.display_negated = lt_negated
+                            match_method = "xbrl_presentation_via_label"
+                            resolved_concept = lt_concept
             else:
                 row.display_label = label
 

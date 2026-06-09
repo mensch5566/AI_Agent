@@ -363,3 +363,75 @@ def _canonical_variants(uni_account):
     if v is None:
         return ()
     return v if isinstance(v, tuple) else (v,)
+
+
+def _norm_label_text(s):
+    """Normalize a label / PDF-text string for fail-closed EQUALITY matching.
+
+    lowercase → strip ONE narrow leading parenthetical group
+    (``(Gain) loss on business divestiture`` → ``loss on business divestiture``)
+    → drop punctuation → collapse whitespace. Deliberately conservative: no token
+    heuristics, stemming, or synonym expansion (spec discipline #3). Empty/None → "".
+    """
+    if not s:
+        return ""
+    t = str(s).strip().lower()
+    t = re.sub(r"^\([^)]*\)\s*", "", t)   # narrow leading-paren strip only
+    t = re.sub(r"[^\w\s]", " ", t)        # punctuation → space
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def resolve_via_label_text(source_text, edges, labels, statement):
+    """LAST-resort PDF-faithful ordinal resolution for a face row that lost its
+    concept link (legacy ``AGENT_CLASSIFIED`` preserved_pdf_label: source_account is
+    the PDF text, ``xbrl_tag`` is None, uni_account is a long-tail bucket with no
+    canonical mapping). Spec: 2026-06-09-sndk-label-text-fallback-design.md.
+
+    Matches the PDF text against the OFFICIAL resolved label text of every concept
+    on this statement's ACCEPTED FACE networks and requires a UNIQUE concept hit.
+
+    Discipline (Codex-converged, T3 fail-closed):
+      1. candidates ONLY from ``matching_face_networks`` (no note/parenthetical/…);
+         no face network → unresolved.
+      2. compare ONLY official label-role texts in ``labels`` (never another row's
+         source_account).
+      3. normalize case/whitespace/punctuation + narrow leading-paren strip
+         (:func:`_norm_label_text`).
+      4. require EXACTLY ONE distinct child_qname concept; 0 or ≥2 → unresolved.
+
+    Returns ``(concept_local, ordinal, negated)`` from that concept's matched face
+    edge (delegated to :func:`resolve_label_ordinal_any`, so label/ordinal/negated
+    stay in lockstep), or ``(None, None, None)`` when not uniquely resolved. NEVER
+    returns a label here — the caller keeps the row's period-exact PDF text as the
+    display label (source_account is not mutated).
+    """
+    key = _norm_label_text(source_text)
+    if not key:
+        return (None, None, None)
+
+    face_roles = set(matching_face_networks(edges, statement))
+    if not face_roles:
+        return (None, None, None)
+
+    hits = set()   # distinct full child_qname whose ANY official label == key
+    for e in edges:
+        if e.get("role_uri") not in face_roles:
+            continue
+        full = e["child_qname"]
+        if full in hits:
+            continue
+        for lab in labels.get(full, []):
+            if _norm_label_text(lab.get("text")) == key:
+                hits.add(full)
+                break
+
+    if len(hits) != 1:
+        return (None, None, None)   # 0 (no match) or ≥2 (ambiguous) → fail-closed
+
+    concept_local = _local(next(iter(hits)))
+    _, ordinal, negated = resolve_label_ordinal_any(
+        concept_local, edges, labels, statement)
+    if ordinal is None:
+        return (None, None, None)
+    return (concept_local, ordinal, negated)
