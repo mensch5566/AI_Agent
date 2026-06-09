@@ -382,56 +382,87 @@ def _norm_label_text(s):
     return t
 
 
+# Label roles that can legitimately be DISPLAYED on a face statement row. The PDF
+# text must match one of THESE (plus the edge's own preferred_label) — never a
+# non-display role like documentation / periodStart/EndLabel / axis labels, which
+# could otherwise bind a concept on text that never appears on the face (Codex
+# round1 #3). negated* are display roles (they flip sign but DO render text).
+_NEG_LABEL = "http://www.xbrl.org/2009/role/negatedLabel"
+_NEG_TERSE_LABEL = "http://www.xbrl.org/2009/role/negatedTerseLabel"
+_NEG_TOTAL_LABEL = "http://www.xbrl.org/2009/role/negatedTotalLabel"
+_VERBOSE_LABEL = "http://www.xbrl.org/2003/role/verboseLabel"
+_FACE_DISPLAY_ROLES = frozenset({
+    _STD_LABEL, _TERSE_LABEL, _TOTAL_LABEL, _VERBOSE_LABEL,
+    _NEG_LABEL, _NEG_TERSE_LABEL, _NEG_TOTAL_LABEL,
+})
+
+
 def resolve_via_label_text(source_text, edges, labels, statement):
     """LAST-resort PDF-faithful ordinal resolution for a face row that lost its
     concept link (legacy ``AGENT_CLASSIFIED`` preserved_pdf_label: source_account is
     the PDF text, ``xbrl_tag`` is None, uni_account is a long-tail bucket with no
     canonical mapping). Spec: 2026-06-09-sndk-label-text-fallback-design.md.
 
-    Matches the PDF text against the OFFICIAL resolved label text of every concept
-    on this statement's ACCEPTED FACE networks and requires a UNIQUE concept hit.
+    Matches the PDF text against the face-DISPLAY label text of every concept on
+    this statement's ACCEPTED FACE networks and requires a UNIQUE concept hit.
 
-    Discipline (Codex-converged, T3 fail-closed):
+    Discipline (Codex round1-converged, T3 fail-closed):
       1. candidates ONLY from ``matching_face_networks`` (no note/parenthetical/…);
          no face network → unresolved.
-      2. compare ONLY official label-role texts in ``labels`` (never another row's
-         source_account).
+      2. compare ONLY face-DISPLAY label roles (``_FACE_DISPLAY_ROLES`` + the edge's
+         own ``preferred_label``) — never documentation/periodStart/End or another
+         row's source_account (round1 #3).
       3. normalize case/whitespace/punctuation + narrow leading-paren strip
          (:func:`_norm_label_text`).
-      4. require EXACTLY ONE distinct child_qname concept; 0 or ≥2 → unresolved.
+      4. require EXACTLY ONE distinct **full child_qname** concept; 0 or ≥2 →
+         unresolved.
+      5. FULL-QNAME IDENTITY is preserved end-to-end: ordinal + sign come from a
+         face edge of THAT EXACT qname (deterministic: first matching face network,
+         that edge). A same-local concept in another namespace can NEVER be
+         substituted, and no AmbiguityError can be swallowed (round1 #1/#4).
 
-    Returns ``(concept_local, ordinal, negated)`` from that concept's matched face
-    edge (delegated to :func:`resolve_label_ordinal_any`, so label/ordinal/negated
-    stay in lockstep), or ``(None, None, None)`` when not uniquely resolved. NEVER
-    returns a label here — the caller keeps the row's period-exact PDF text as the
-    display label (source_account is not mutated).
+    Returns ``(concept_local, ordinal, negated, network_role)`` — network_role is
+    the face network the ordinal actually came from (honest provenance, round1 #6)
+    — or ``(None, None, None, None)`` when not uniquely resolved. NEVER returns a
+    label: the caller keeps the row's period-exact PDF text as the display label
+    (source_account is not mutated).
     """
     key = _norm_label_text(source_text)
     if not key:
-        return (None, None, None)
+        return (None, None, None, None)
 
-    face_roles = set(matching_face_networks(edges, statement))
+    face_roles = list(matching_face_networks(edges, statement))
     if not face_roles:
-        return (None, None, None)
+        return (None, None, None, None)
+    face_set = set(face_roles)
 
-    hits = set()   # distinct full child_qname whose ANY official label == key
+    # Every face edge whose concept DISPLAYS `key` as a face-row label. Track the
+    # exact full qname + the role it was found on (for the deterministic pick).
+    matched = []   # list of (full_qname, role_uri, edge)
     for e in edges:
-        if e.get("role_uri") not in face_roles:
+        role = e.get("role_uri")
+        if role not in face_set:
             continue
         full = e["child_qname"]
-        if full in hits:
-            continue
-        for lab in labels.get(full, []):
-            if _norm_label_text(lab.get("text")) == key:
-                hits.add(full)
-                break
+        texts = {lab["role"]: lab["text"] for lab in labels.get(full, [])}
+        roles_to_check = set(_FACE_DISPLAY_ROLES)
+        pref = e.get("preferred_label")
+        if pref:
+            roles_to_check.add(pref)
+        if any(r in texts and _norm_label_text(texts[r]) == key
+               for r in roles_to_check):
+            matched.append((full, role, e))
 
-    if len(hits) != 1:
-        return (None, None, None)   # 0 (no match) or ≥2 (ambiguous) → fail-closed
+    distinct = {m[0] for m in matched}
+    if len(distinct) != 1:
+        return (None, None, None, None)   # 0 (no match) or ≥2 concepts → fail-closed
+    full_qname = next(iter(distinct))
 
-    concept_local = _local(next(iter(hits)))
-    _, ordinal, negated = resolve_label_ordinal_any(
-        concept_local, edges, labels, statement)
-    if ordinal is None:
-        return (None, None, None)
-    return (concept_local, ordinal, negated)
+    # Deterministic pick that preserves the EXACT qname: first face network (in
+    # matching_face_networks order) carrying this qname, its matched edge.
+    for role in face_roles:
+        edge = next((e for (fq, r, e) in matched if fq == full_qname and r == role),
+                    None)
+        if edge is not None:
+            return (_local(full_qname), edge.get("order"), _edge_negated(edge), role)
+    return (None, None, None, None)

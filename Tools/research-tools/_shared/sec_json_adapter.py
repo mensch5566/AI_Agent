@@ -661,6 +661,10 @@ def attach_display_metadata(
             match_method = "xbrl_presentation"
             # The concept whose GLOBAL position we stamp (the matched tag itself).
             resolved_concept = _local_name(row.source_account)
+            # Face network the ordinal is attributed to. = network_role for the
+            # tag_like / via_uni paths; overridden to the ACTUAL hit network on the
+            # via_label path so provenance does not lie (Codex round1 #6).
+            ordinal_network = network_role
 
             if cls == "preserved_pdf_label":
                 # source_account IS the PDF text → use it as the display label
@@ -689,28 +693,34 @@ def attach_display_metadata(
                         # Borrow positions the row at its canonical concept's slot.
                         resolved_concept = CANONICAL_CONCEPT.get(row.uni_account)
                     else:
-                        # Last resort before NLM: a legacy AGENT_CLASSIFIED face row
-                        # whose concept link was lost (xbrl_tag=None, long-tail uni
-                        # with no canonical) — e.g. SNDK "Business separation costs"
-                        # / "Gain on business divestiture". Match the PDF text against
-                        # the OFFICIAL label of face concepts; UNIQUE hit borrows that
-                        # concept's ordinal + sign. Fail-closed: ambiguous/no match →
-                        # ordinal stays None → NLM/gate. source_account (display
-                        # label) is NOT mutated. Spec 2026-06-09-sndk-label-text-…
-                        lt_concept, lt_ordinal, lt_negated = resolve_via_label_text(
-                            row.source_account, edges, labels, statement)
+                        # Last resort before NLM for ANY preserved_pdf_label row whose
+                        # concept link can't be reached by local-name match NOR by the
+                        # uni→canonical borrow (the SNDK legacy AGENT_CLASSIFIED rows
+                        # "Business separation costs" / "Gain on business divestiture"
+                        # are the motivating case, but the branch is intentionally
+                        # GENERAL — a future filer's new prose-labeled face line gets
+                        # placed automatically). Safety rests entirely on the matcher
+                        # being HARD fail-closed (resolve_via_label_text): face-network
+                        # display labels only, full-qname identity preserved, UNIQUE
+                        # concept hit required, else ordinal stays None → NLM/gate.
+                        # source_account (display label) is NOT mutated. Spec
+                        # 2026-06-09-sndk-label-text-fallback-design.md.
+                        lt_concept, lt_ordinal, lt_negated, lt_role = \
+                            resolve_via_label_text(
+                                row.source_account, edges, labels, statement)
                         if lt_ordinal is not None:
                             ordinal = lt_ordinal
                             row.display_negated = lt_negated
                             match_method = "xbrl_presentation_via_label"
                             resolved_concept = lt_concept
+                            ordinal_network = lt_role   # honest provenance (round1 #6)
             else:
                 row.display_label = label
 
             if ordinal is not None and network_role is not None:
                 _set_xbrl_ordinal_provenance(
                     row, _global_for(resolved_concept, ordinal),
-                    network_role, match_method=match_method,
+                    ordinal_network, match_method=match_method,
                 )
             else:
                 _try_audited_nlm_ordinal(row, audited_for_stmt)

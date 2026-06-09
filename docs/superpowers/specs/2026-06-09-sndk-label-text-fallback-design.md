@@ -59,3 +59,14 @@ Codex 裁決：把 value source 從 companyfacts→raw instance（recover extens
 - ❌ 會在多 concept 間靜默選擇的 fuzzy matcher
 - ❌ 改寫 source_account 成 tag
 - ❌ 把 companyfacts→instance 遷移當成此 blocker 的第一手
+
+## Codex round1 收斂（實作後 functional review）
+
+Codex 對首版實作提出 blockers，逐項處理：
+
+- **#1/#4 full-qname identity（接受，已修）**：首版用 full qname 證唯一性，卻退化成 bare local 呼叫 `resolve_label_ordinal_any` → 同 local 跨 namespace 可能靜默綁錯 concept / swallow AmbiguityError。**修法**：全程保 full qname，ordinal+sign 直接取自「該 EXACT qname 的 face edge」（deterministic：第一個含此 qname 的 face network 的該 edge），不再經 bare-local 路徑。
+- **#3 只比對 face 顯示 role（接受，已修）**：首版比對 `labels[full]` 所有 role（含 documentation 等非顯示 role）。**修法**：只比對 `_FACE_DISPLAY_ROLES`（std/terse/total/verbose/negated*）+ 該 edge 自己的 `preferred_label`；排除 documentation/periodStart/End。
+- **#6 provenance network 誠實（接受，已修）**：stamp 改用 `resolve_via_label_text` 回傳的「實際命中 network role」（`ordinal_network`），不再盲塞 caller 的 `network_role`。
+- **#2 觸發範圍比註解廣（接受論點，保留設計 + 改誠實註解）**：分支對「任何 local-name + via_uni 皆 miss 的 preserved_pdf_label 行」觸發，不限 SNDK/AGENT_CLASSIFIED。**這是刻意的 future-proof**（未來新 prose-labeled face 行自動歸位，/goal 第二部分）。安全性不靠「限縮觸發」，而靠 matcher **hard fail-closed**（face 顯示 label only / full-qname identity / 唯一命中否則 unresolved）。註解已改為誠實描述廣觸發 + 安全依據。
+
+驗證（修正後）：SNDK 仍 100%（IS 91/91、BS 102/102、CF 84/84）；三行 8 facts 值/ordinal/sign 不變、provenance network 變誠實；380 pytest（+3 漏洞測試：跨 namespace 同 local 不替換、雙 namespace 皆命中 fail-closed、documentation 非顯示 role 不命中）、50 vitest、tsc clean；MU/LITE/INTC 維持 100%、AAOI 原狀。
