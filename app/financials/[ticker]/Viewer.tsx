@@ -236,7 +236,7 @@ export default function Viewer({ ticker }: { ticker: string }) {
                 role="group"
                 aria-label="statement view mode"
               >
-                {([["pdf", "依財報"], ["uni", "標準科目"]] as const).map(([m, label]) => (
+                {([["pdf", "As Reported"], ["uni", "Standardized"]] as const).map(([m, label]) => (
                   <Button
                     key={m}
                     size="sm"

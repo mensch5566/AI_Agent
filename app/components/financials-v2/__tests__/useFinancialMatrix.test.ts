@@ -410,6 +410,10 @@ describe("CF cash movement analysis", () => {
       // beginning row sits directly before the ending_cash row
       const keys = m.rows.map((r) => r.key);
       expect(keys.indexOf("cash_beginning_of_period")).toBe(keys.indexOf("ending_cash") - 1);
+      // beginning label mirrors the ending row's style per mode
+      const beginLbl = m.rows.find((r) => r.key === "cash_beginning_of_period")!.label;
+      if (mode === "pdf") expect(beginLbl).toMatch(/beginning of period/i);
+      else expect(beginLbl).toBe("Beginning Cash");
     }
   });
 

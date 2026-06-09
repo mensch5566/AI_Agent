@@ -273,7 +273,13 @@ export function injectCfCashBeginningRow(matrix: Matrix, mv: CfCashMovement): Ma
   if (mv.beginByPeriod.size === 0) return matrix;
   const endIdx = matrix.rows.findIndex((r) => r.key === "ending_cash");
   if (endIdx < 0) return matrix;
-  const beginRow = { key: CASH_BEGINNING_ROW_KEY, label: CASH_BEGIN_LABEL, kind: "subtotal", indent: 0 };
+  // Mirror the ending row's label STYLE: PDF mode → verbose "…at end of period"
+  // (so beginning = verbose "…at beginning of period"); uni mode → canonical
+  // "Ending Cash" (so beginning = "Beginning Cash"). Keeps the two cash rows
+  // stylistically consistent within each view mode.
+  const endLabel = matrix.rows[endIdx].label;
+  const beginLabel = /end of period/i.test(endLabel) ? CASH_BEGIN_LABEL : "Beginning Cash";
+  const beginRow = { key: CASH_BEGINNING_ROW_KEY, label: beginLabel, kind: "subtotal", indent: 0 };
   const rows = [...matrix.rows.slice(0, endIdx), beginRow, ...matrix.rows.slice(endIdx)];
   const cellsForBeginning: Record<string, MatrixCell> = {};
   for (const p of matrix.periods) {

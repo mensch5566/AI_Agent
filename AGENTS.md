@@ -22,14 +22,14 @@ Use the following Working Memory as the current project handoff state. For older
 
 # [Working] Combined AI Working Memory
 
-Updated: 2026-06-09T15:18:46.476046
+Updated: 2026-06-09T16:07:25.881480
 
 Project scope: `statement-view-pdf-faithful`
 
 ## Global Working Memory
 # [Working] Shared AI Working Memory (global)
 
-Updated: 2026-06-09T15:18:46.165805
+Updated: 2026-06-09T16:07:25.638602
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -55,6 +55,13 @@ Use it for current state. Use `search_memory` for older or more detailed history
 ## Python Wrapper 的作用
 
 ## Recent Shared Memory
+### CF cash movement-analysis COMPLETE + verified (prod + browser, both modes)
+# CF cash movement-analysis COMPLETE + verified (prod + browser, both modes)
+# CF cash 期初/期末 movement-analysis — 完成且端到端驗證
+Date: 2026-06-09 / worktree `statement-view-pdf-faithful`（未 merge main / 未 push）
+## ✅ 全部完成 + 驗證
+EFM §7.7 movement analysis：底層一個 instant（period-end balance），顯示層讓同值=本期期末=下期期初；單季期初=上季末，絕不相減。
+
 ### CF cash MA — Task1 (adapter relabel) DONE; Task2/3 frontend + re-upsert pending
 # CF cash MA — Task1 (adapter relabel) DONE; Task2/3 frontend + re-upsert pending
 # CF cash movement-analysis — 實作進度（Task1 完成）
@@ -104,17 +111,10 @@ Date: 2026-06-03 / Project: ai_agent / Skill: parse-10QK-gaap / Tier: T3
 依新版 Software Development SOP（`~/Obsidian/SOPs/Development/Software Development SOP.md`）走 T3 生命週期，目前在 **Design gate**。
 ## 已產出（branch `bs-long-tail-design`，commit 2269709，3 檔）
 
-### 跨 ticker BS footing 稽核工單（parse-10QK-gaap BS_TAG_MAP 擴充，待開工）2026-06-02
-# 跨 ticker BS footing 稽核工單（parse-10QK-gaap BS_TAG_MAP 擴充，待開工）2026-06-02
-# 跨 ticker BS footing 稽核 — 正式工單已建，待決策開工
-Date: 2026-06-02 / Project: ai_agent / Skill: parse-10QK-gaap
-工單檔：`tmp/parse-bs-footing-audit-worklist.md`；重現 script：`tmp/parse-bs-footing-audit.py`（純讀，不寫 production）。
-## 緣起
-
 ## Project Working Memory
 # [Working] Shared AI Working Memory (project:statement-view-pdf-faithful)
 
-Updated: 2026-06-09T15:18:46.345057
+Updated: 2026-06-09T16:07:25.822070
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -130,10 +130,10 @@ Use it for current state. Use `search_memory` for older or more detailed history
 ## Recent Project Memory
 ### AI Memory Daily Log: 2026-06-09 (statement-view-pdf-faithful)
 # AI Memory Daily Log: 2026-06-09 (statement-view-pdf-faithful)
-## 15:18:46 [claude] <task-notification>
+## 16:07:25 [claude] <task-notification>
 ### Intent (raw)
 <task-notification>
-<task-id>bv3wraybg</task-id>
+<task-id>bkf3wjf1x</task-id>
 
 ### AI Memory Daily Log: 2026-06-08 (statement-view-pdf-faithful)
 # AI Memory Daily Log: 2026-06-08 (statement-view-pdf-faithful)
