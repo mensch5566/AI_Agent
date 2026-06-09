@@ -384,3 +384,26 @@ def test_prefer_period_falls_back_when_role_absent():
     lbl, ordn, _ = resolve_label_ordinal("GrossProfit", "r/operations", _EDGES, _LABELS,
                                          prefer_period="end")
     assert ordn == 5.0
+
+
+# ---------------------------------------------------------------------------
+# net_income canonical variants: INTC CF starts with us-gaap:ProfitLoss, not
+# NetIncomeLoss. resolve_via_uni must fall back to the ProfitLoss variant.
+# ---------------------------------------------------------------------------
+from presentation_resolver import resolve_via_uni  # noqa: E402
+
+def test_resolve_via_uni_net_income_falls_back_to_profitloss():
+    edges = [{"role_uri": "r/cf", "child_qname": "us-gaap:ProfitLoss", "order": 1.0,
+              "preferred_label": _TERSE_LABEL}]
+    labels = {"us-gaap:ProfitLoss": [{"role": _TERSE_LABEL, "text": "Net income (loss)"}]}
+    lbl, ordn, _ = resolve_via_uni("net_income", "CF", "r/cf", edges, labels)
+    assert ordn == 1.0
+    assert lbl == "Net income (loss)"
+
+def test_resolve_via_uni_net_income_prefers_netincomeloss():
+    edges = [{"role_uri": "r/cf", "child_qname": "us-gaap:NetIncomeLoss", "order": 1.0, "preferred_label": _TERSE_LABEL},
+             {"role_uri": "r/cf", "child_qname": "us-gaap:ProfitLoss", "order": 2.0, "preferred_label": _TERSE_LABEL}]
+    labels = {"us-gaap:NetIncomeLoss": [{"role": _TERSE_LABEL, "text": "Net income"}],
+              "us-gaap:ProfitLoss": [{"role": _TERSE_LABEL, "text": "Profit"}]}
+    lbl, ordn, _ = resolve_via_uni("net_income", "CF", "r/cf", edges, labels)
+    assert ordn == 1.0 and lbl == "Net income"

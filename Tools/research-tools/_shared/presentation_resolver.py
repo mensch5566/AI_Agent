@@ -275,7 +275,10 @@ class NeedsNlmOrder(Exception):
 # the primary candidate per the parse skill's IS/BS/CF tag maps. Hardcoded here
 # on purpose — do NOT import from the parse skill.
 CANONICAL_CONCEPT = {
-    "net_income": "NetIncomeLoss",
+    # Tuple = accepted variants tried IN ORDER. net_income's CF/IS starting line is
+    # `NetIncomeLoss` for most filers but `ProfitLoss` (consolidated, incl. NCI) for
+    # some (e.g. INTC CF). Try NetIncomeLoss first, then ProfitLoss.
+    "net_income": ("NetIncomeLoss", "ProfitLoss"),
     "shares_basic_millions": "WeightedAverageNumberOfSharesOutstandingBasic",
     "shares_diluted_millions": "WeightedAverageNumberOfDilutedSharesOutstanding",
     "depreciation_and_amortization": "DepreciationAndAmortization",
@@ -308,21 +311,20 @@ def resolve_via_uni(uni_account, statement, network_role, edges, labels):
       missing → raise :class:`NeedsNlmOrder` (never invent a label / render SUM).
     - Otherwise delegate to :func:`resolve_label_ordinal` on the canonical local.
     """
-    canonical = CANONICAL_CONCEPT.get(uni_account)
-    if canonical is None:
+    variants = _canonical_variants(uni_account)
+    if not variants:
         raise NeedsNlmOrder(
             f"no known canonical concept for uni_account {uni_account!r}")
-
-    in_network = any(
-        e.get("role_uri") == network_role
-        and _local(e["child_qname"]) == canonical
-        for e in edges)
-    if not in_network or f"us-gaap:{canonical}" not in labels:
-        raise NeedsNlmOrder(
-            f"canonical concept {canonical!r} for uni_account {uni_account!r} "
-            f"is not disclosed in network {network_role!r} / labels map")
-
-    return resolve_label_ordinal(canonical, network_role, edges, labels)
+    for canonical in variants:
+        in_network = any(
+            e.get("role_uri") == network_role
+            and _local(e["child_qname"]) == canonical
+            for e in edges)
+        if in_network and f"us-gaap:{canonical}" in labels:
+            return resolve_label_ordinal(canonical, network_role, edges, labels)
+    raise NeedsNlmOrder(
+        f"no canonical variant {variants} for uni_account {uni_account!r} "
+        f"is disclosed in network {network_role!r} / labels map")
 
 
 def resolve_via_uni_any(uni_account, edges, labels, statement):
@@ -343,8 +345,21 @@ def resolve_via_uni_any(uni_account, edges, labels, statement):
     Raises :class:`NeedsNlmOrder` when ``uni_account`` has no canonical mapping
     (e.g. a long-tail bucket) → caller routes to NLM, unchanged.
     """
-    canonical = CANONICAL_CONCEPT.get(uni_account)
-    if canonical is None:
+    variants = _canonical_variants(uni_account)
+    if not variants:
         raise NeedsNlmOrder(
             f"no known canonical concept for uni_account {uni_account!r}")
-    return resolve_label_ordinal_any(canonical, edges, labels, statement)
+    for canonical in variants:
+        label, ordinal, negated = resolve_label_ordinal_any(
+            canonical, edges, labels, statement)
+        if ordinal is not None:
+            return (label, ordinal, negated)
+    return (None, None, False)
+
+
+def _canonical_variants(uni_account):
+    """CANONICAL_CONCEPT value as a tuple of accepted variants (str → 1-tuple)."""
+    v = CANONICAL_CONCEPT.get(uni_account)
+    if v is None:
+        return ()
+    return v if isinstance(v, tuple) else (v,)
