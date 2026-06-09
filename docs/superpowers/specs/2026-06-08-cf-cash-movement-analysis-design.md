@@ -2,107 +2,125 @@
 type: design-spec
 topic: cf-cash-movement-analysis
 date: 2026-06-08
-status: draft (for Codex GPT-5.5 design-gate review)
-tier: T2 (frontend render; no parse/DB/storage change, no migration)
+status: design (Codex round-1 folded; pending round-2)
+tier: T2 (frontend render + a contained adapter relabel; no DB schema/migration)
 branch: worktree-statement-view-pdf-faithful
-authority: SEC EDGAR Financial Report Manual (EFM) — via NLM "Topic - Parse_SEC_Filings",
-  source a146d037 (EFM §6.7.4/§6.8.12/§7.7/§9.7). Supersedes the abandoned
-  "Approach X" (store begin/end twins), which violates EFM §6.8.12.
+authority: SEC EDGAR Financial Report Manual (EFM) via NLM "Topic - Parse_SEC_Filings",
+  source a146d037 (EFM §6.7.4/§6.8.12/§7.7/§9.7). Supersedes abandoned "Approach X"
+  (store begin/end twins — violates EFM §6.8.12).
 ---
 
-# CF cash beginning/end — Movement Analysis (display layer)
+# CF cash beginning/end — Movement Analysis
 
-## Authority (why store-two-rows is WRONG)
+## Authority & bug (summary)
 
-SEC EFM §6.8.12: **"Do not define separate concepts to represent the instants at the
-beginning and the end of a period. The same instant represents the end of one period,
-and the beginning of the next."** Vendors (Bloomberg/FactSet/CapIQ) implement this as
-**"movement analysis"** (EFM §7.7): ONE instant fact is stored; the *renderer* shows
-the same value as the **ending** balance of period P's column AND the **beginning**
-balance of period P+1's column. Cash balances are instants → **never** derive by
-subtraction (EFM): single-quarter beginning = prior quarter's ending instant.
+EFM §6.8.12: do NOT store separate begin/end concepts — one instant = ending(P) =
+beginning(P+1). Vendors render this as **movement analysis** (§7.7): the renderer
+shows the stored ending instant as ending(P) and as beginning(P+1); cash is an
+instant → single-quarter beginning = prior quarter's ending instant (never subtract).
 
-So: keep storage as-is (one instant per period), fix purely in the frontend renderer.
+Bug (verified, visible): the cash-reconciliation concept is stored once per period as
+the period-END balance (single-quarter → `uni=ending_cash`; YTD → `cf_long_tail`
+[ytd, view-excluded]; FY → `cf_long_tail`), but its stored `display_label` is wrongly
+"…at beginning of period" (resolver picked `matched[0]`=periodStart arc). And the
+real "beginning" row is absent. Frontend shows: Q2_FY2026 ending_cash 13,934 and
+FY2025 cf_long_tail 9,646 both mislabeled "…beginning of period".
 
-## Bug (verified, visible in the frontend)
+## Design — folds all 9 Codex round-1 findings
 
-The cash-reconciliation concept `CashCashEquivalentsRestrictedCashAndRestricted
-CashEquivalents` is stored once per period as the **period-END** cash balance:
-- single-quarter Qx → `uni_account=ending_cash` (core, `quarter_duration`)
-- YTD/FY → `uni_account=cf_long_tail` (`ytd_duration` excluded from statement view /
-  `fy_annual_duration` shown in annual)
+Two layers, cleanly split (Codex P2 #5):
+- **Adapter (upstream):** relabel the stored ending instant to "…end of period"
+  (fix the objectively-wrong stored label). Re-upsert. Display metadata only — no
+  schema/migration.
+- **Frontend renderer (movement analysis):** synthesize the "…beginning of period"
+  row cross-period; both happen via ONE pre-builder helper feeding both view modes.
 
-But the stored `display_label` (resolved at upsert) is **"Cash … at beginning of
-period"** — wrong — because the resolver maps the single instant to `matched[0]` =
-the `periodStartLabel` arc instead of matching by date. Verified frontend rows:
-- Quarterly Q2_FY2026: `ending_cash` 13,934 labeled "…beginning of period" (it's the
-  Q2 END balance → must read "…end of period").
-- Annual FY2025: `cf_long_tail` 9,646 labeled "…beginning of period" (FY2025 END).
+### A. Adapter relabel (sec_json_adapter — worktree) [Codex P2 #5, P2 #7]
+- Detect cash-reconciliation balance facts by a **source_account concept-family
+  allowlist** (`CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents`,
+  `…IncludingDisposalGroupAndDiscontinuedOperations`,
+  `CashAndCashEquivalentsAtCarryingValue`, `RestrictedCash`).
+- For such a fact (the stored value = period-END balance), force the display_label +
+  ordinal to the **periodEndLabel** arc ("…at end of period", ordinal after
+  net_change), overriding the `matched[0]` pick. **Fail-closed:** require exactly one
+  cash-balance candidate per (period, lane); if >1 survive, log + leave unresolved
+  (coverage gate catches), never guess.
+- Re-upsert affected tickers → stored label is now correct; UI/DB no longer diverge.
 
-And the genuine "…beginning of period" row (prior period's ending balance) is absent.
+### B. Pre-builder cash-movement helper (useFinancialMatrix — worktree) [Codex P1 #1, P1 #2, P2 #4, P2 #7, P2 #8]
+A single helper consumes the **raw filtered `Cell[]`** (BEFORE either builder runs,
+so neither pdf-rowId nor uni-dictionary collapse has happened) and returns, per
+period column, a **cash-movement model**:
+```
+{ period, endingFact, beginningFact, fxFact, netChangeFact }
+```
+- `endingFact` = the one cash-balance fact for that period (by the concept-family
+  allowlist above; exactly-one-per-period or the period is flagged, never summed).
+  MUST be a DIRECT disclosed cash-balance fact — never `derived_q2/q3/q4`, never
+  inferred from flow arithmetic (Codex P2 #8).
+- `beginningFact` (synthetic) = the **exact predecessor period's** `endingFact`
+  (Codex P2 #4): `Q2_FY2026→Q1_FY2026`, `Q1_FY2026→Q4_FY2025`, `FY2025→FY2024`,
+  computed by period-name, requiring an EXACT match in the period set. If the
+  predecessor is absent (first period / gap) → beginning cell **empty** (EFM: blank,
+  never back-solve).
+- Both `buildMatrix` (pdf) and `buildDictionaryMatrix` (uni) project this model into
+  their own row systems (pdf: rowId rows; uni: canonical CF rows). The helper runs
+  pre-builder so the annual `cf_long_tail` cash fact is not dropped before it is seen
+  (Codex P1 #1: `buildDictionaryMatrix` skips non-`ROWS_BY_STATEMENT` keys).
 
-## Design — Movement Analysis in the frontend renderer
+### C. uni-mode canonical rows (constants.ts) [Codex P1 #1, P2 #6, P2 #9]
+`CF_ROWS` currently lacks the cash-balance + fx rows for uni mode. Add explicit
+canonical rows so uni mode renders them in PDF order:
+- `cash_beginning_of_period` (synthetic), `cash_end_of_period`, and `fx_effect`
+  (Codex P2 #9 — fx omitted today). Map the movement-model into these keys.
+- Synthetic beginning row sorts ABOVE `net_change_in_cash`; ending row at the
+  bottom. Use an explicit **`sortOrdinal`** on the matrix row model rather than fake
+  fractional filing ordinals (Codex P2 #6); uni mode places them via CF_ROWS order.
 
-Pure frontend (`useFinancialMatrix` / CF render). No parse, DB, adapter, or migration
-change. The cash-reconciliation rows are rendered by movement-analysis rules, not by
-the (wrong) stored `display_label`.
+### D. Footing validation — concept-aware (Codex P1 #3)
+Do NOT hardcode `beginning + net_change == ending`. The net-change concept family
+differs across filers:
+- `…PeriodIncreaseDecreaseIncludingExchangeRateEffect` → `ending − beginning ==
+  net_change` (fx already inside; MU: 9,646 + 4,288 = 13,934 ✓; separate fx_effect=5
+  is an informational sub-line).
+- `…ExcludingExchangeRateEffect` → `ending − beginning == net_change + fx_effect`.
+Pick the identity by the actual `net_change` source concept present that period; this
+is a dev-time/test assertion + optional UI sanity log, not a hard render gate.
 
-### Detection
-A stored CF fact is a **cash-reconciliation balance** iff its `source_account` (XBRL
-local name) is in a small allowlist of cash/restricted-cash reconciliation concepts
-(`CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents`,
-`CashCashEquivalents…IncludingDisposalGroupAndDiscontinuedOperations`,
-`CashAndCashEquivalentsAtCarryingValue`, `RestrictedCash…`) — the same family the
-parse instant-fallback already recognizes (`_is_cash_concept`). These rows carry an
-instant value = the period-END balance, regardless of the (mislabeled) display_label.
-
-### Rule 1 — relabel the stored row as "end of period"
-For each column (period P), render the stored cash-balance fact with label
-**"Cash, cash equivalents, and restricted cash at end of period"** and the period-END
-ordinal (after `net_change_in_cash`), NOT the stored "beginning" label. (Date logic:
-the stored instant's date == period_end → it is the ending balance per EFM movement
-analysis.)
-
-### Rule 2 — synthesize the "beginning of period" row
-Add a row **"… at beginning of period"** whose value in column P = the **ending
-cash-balance fact of the immediately-prior period** (same frequency lane):
-- quarterly: beginning(Qn) = ending(Q n−1) (Q1 beginning = prior-FY Q4 ending).
-- annual: beginning(FYn) = ending(FY n−1).
-Place it ABOVE net_change / above the ending row, per PDF order (beginning →
-net change → … → end). If the prior period's ending balance is absent (first period
-in range), render the beginning cell empty (never invent / never subtract).
-
-### Validation (EFM §9.7 "instant without matching duration", adapted)
-Sanity check (dev-time / test): for each period, `beginning + net_change_in_cash
-(+ fx_effect already inside net_change) == ending`. If it doesn't foot, log — do not
-silently show mismatched begin/end. (MU 6M_FY2026: 9,646 + 4,288 = 13,934 ✓.)
-
-## Scope / placement
-- `useFinancialMatrix.buildMatrix` (PDF mode) + `buildDictionaryMatrix` (uni mode):
-  both must apply the same movement-analysis transform to the cash rows so the toggle
-  stays consistent. Factor the transform into one helper used by both.
-- Frequency-aware: quarterly lane uses quarter periods; annual lane uses FY periods.
-  (YTD facts remain excluded from the statement view — unchanged.)
+## Layer / placement summary
+- adapter relabel: `Tools/research-tools/_shared/sec_json_adapter.py` (cash-family
+  arc override) → re-upsert.
+- pre-builder helper + projection: `app/components/financials-v2/useFinancialMatrix.ts`
+  (new `cashMovementModel(cells, statement, frequency)` consumed by both builders).
+- canonical rows + sortOrdinal: `app/components/financials-v2/constants.ts`,
+  `types.ts` (row `sortOrdinal?`), `StatementMatrix.tsx` (sort by sortOrdinal when
+  present).
 
 ## Alternatives (rejected)
-- **Store begin+end twins (old Approach X):** violates EFM §6.8.12; invisible on YTD
-  facts; needs a DB migration. Rejected on authority.
-- **Fix stored display_label at the adapter (re-upsert):** a single stored label can't
-  be both "end" (period P) and "beginning" (period P+1) — movement analysis is
-  inherently a per-column render concern → must live in the renderer.
+- Store begin/end twins (Approach X): violates EFM §6.8.12; needs migration; invisible
+  on YTD. Rejected on authority.
+- Frontend-only relabel of the base fact: leaves DB label wrong → UI/DB divergence
+  (Codex P2 #5). Adapter owns the base fact's correct label.
 
-## Testing (TDD, vitest)
-- movement-analysis helper: given cash instants per period, column P shows ending =
-  instant(P) labeled "…end of period", beginning = instant(P−1); first period →
-  beginning empty.
-- relabel: a stored cash fact with display_label "…beginning of period" renders as
-  "…end of period".
-- footing: beginning(P) + net_change(P) == ending(P) for MU quarters/annual.
-- toggle parity: pdf mode and uni mode both show corrected begin/end.
-- tsc + existing vitest green.
-- e2e (manual / DB-reproduction): MU quarterly Q2_FY2026 → end 13,934 + beginning
-  9,732 (Q1 end); annual FY2025 → end 9,646 + beginning 7,052 (FY2024 end).
+## Testing (TDD, vitest + pytest)
+- adapter (pytest): a cash-balance fact resolves to the periodEnd arc ("…end of
+  period"); >1 candidate per period → fail-closed (unresolved, logged); non-cash rows
+  unchanged.
+- helper (vitest): `cashMovementModel` returns ending=instant(P), beginning=instant
+  (exact predecessor); first-period/gap → beginning empty; never uses derived_q2/q3/q4.
+- predecessor mapping: Q2→Q1, Q1→prior-FY-Q4, FY→FY-1 exact; nearest-visible NOT used.
+- footing (concept-aware): MU 6M-equivalent quarters/annual — Including→`end−begin==
+  net_change`; a synthetic Excluding fixture → `end−begin==net_change+fx`.
+- toggle parity: pdf + uni both show beginning/end/fx in PDF order; sortOrdinal places
+  synthetic rows; chart selectedKeys unaffected by synthetic rowIds.
+- tsc + full vitest green.
+- e2e (DB-reproduction): MU quarterly Q2_FY2026 → beginning 9,732 (Q1 end) + end
+  13,934; annual FY2025 → beginning 7,052 (FY2024 end) + end 9,646; footing holds.
+
+## Rollout (after Codex converge + tests green; production = user-auth)
+dev TDD → Codex functional review (converge) → adapter relabel merged + re-upsert MU
+(user-auth) → frontend movement-analysis → manual verify CF vs PDF (both modes) →
+other tickers inherit on re-upsert.
 
 ## Out of scope
-- Issue A (gov-incentives mu: extension tag absent from companyfacts).
-- Any parse / DB / adapter / migration change.
+Issue A (gov-incentives mu: extension tag absent from companyfacts).
