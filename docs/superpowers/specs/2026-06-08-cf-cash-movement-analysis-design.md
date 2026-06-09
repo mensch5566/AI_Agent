@@ -68,14 +68,19 @@ period column, a **cash-movement model**:
   pre-builder so the annual `cf_long_tail` cash fact is not dropped before it is seen
   (Codex P1 #1: `buildDictionaryMatrix` skips non-`ROWS_BY_STATEMENT` keys).
 
-### C. uni-mode canonical rows (constants.ts) [Codex P1 #1, P2 #6, P2 #9]
-`CF_ROWS` currently lacks the cash-balance + fx rows for uni mode. Add explicit
-canonical rows so uni mode renders them in PDF order:
-- `cash_beginning_of_period` (synthetic), `cash_end_of_period`, and `fx_effect`
-  (Codex P2 #9 — fx omitted today). Map the movement-model into these keys.
-- Synthetic beginning row sorts ABOVE `net_change_in_cash`; ending row at the
-  bottom. Use an explicit **`sortOrdinal`** on the matrix row model rather than fake
-  fractional filing ordinals (Codex P2 #6); uni mode places them via CF_ROWS order.
+### C. uni-mode canonical rows (constants.ts) [Codex r1 P1#1/P2#6/P2#9, r2 P2#1]
+**Reuse approved keys — do NOT invent new `uni_account`s** (schema governance,
+`financials-view-schema.md`; a new `cash_end_of_period` would duplicate the approved
+`ending_cash` contract — Codex r2 #1):
+- **End row** = the existing approved `ending_cash` uni (uni mode already maps an
+  `ending_cash` fact to its CF_ROWS row; the movement model just supplies that fact).
+- **FX row** = the existing approved FX cash key family (`fx_effect` / the checklist's
+  registered fx-on-cash key) — add it to `CF_ROWS` (it is omitted today, Codex P2#9),
+  keyed to the APPROVED uni, not a new one.
+- **Beginning row** = a **frontend-only matrix row id** `cash_beginning_of_period`
+  (NOT a `uni_account`, never stored / never upserted — it is a synthesized display
+  row). Add it to `CF_ROWS` as a presentation-only row the movement model fills.
+- Sort: beginning ABOVE `net_change_in_cash`; ending at the bottom (PDF order).
 
 ### D. Footing validation — concept-aware (Codex P1 #3)
 Do NOT hardcode `beginning + net_change == ending`. The net-change concept family
@@ -91,10 +96,16 @@ is a dev-time/test assertion + optional UI sanity log, not a hard render gate.
 - adapter relabel: `Tools/research-tools/_shared/sec_json_adapter.py` (cash-family
   arc override) → re-upsert.
 - pre-builder helper + projection: `app/components/financials-v2/useFinancialMatrix.ts`
-  (new `cashMovementModel(cells, statement, frequency)` consumed by both builders).
-- canonical rows + sortOrdinal: `app/components/financials-v2/constants.ts`,
-  `types.ts` (row `sortOrdinal?`), `StatementMatrix.tsx` (sort by sortOrdinal when
-  present).
+  — `cashMovementModel(filtered, statement, frequency)` runs AFTER `filtered`/`periods`
+  are computed and BEFORE the `viewMode` split (the shared call site); both builders
+  project it.
+- **sortOrdinal lives entirely in `useFinancialMatrix.ts` (Codex r2 #2):** add the
+  optional field to the LOCAL `Matrix.rows` row shape defined in that file; the
+  BUILDERS apply it when ordering (pdf sort + uni CF_ROWS placement). `types.ts` and
+  `StatementMatrix.tsx` are NOT touched — `StatementMatrix` renders builder output in
+  order and does not sort.
+- canonical rows: `app/components/financials-v2/constants.ts` `CF_ROWS` (+ approved fx
+  key row + frontend-only `cash_beginning_of_period` presentation row).
 
 ## Alternatives (rejected)
 - Store begin/end twins (Approach X): violates EFM §6.8.12; needs migration; invisible
