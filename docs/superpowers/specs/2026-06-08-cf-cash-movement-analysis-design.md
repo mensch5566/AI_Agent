@@ -74,12 +74,16 @@ period column, a **cash-movement model**:
 `ending_cash` contract — Codex r2 #1):
 - **End row** = the existing approved `ending_cash` uni (uni mode already maps an
   `ending_cash` fact to its CF_ROWS row; the movement model just supplies that fact).
-- **FX row** = the existing approved FX cash key family (`fx_effect` / the checklist's
-  registered fx-on-cash key) — add it to `CF_ROWS` (it is omitted today, Codex P2#9),
-  keyed to the APPROVED uni, not a new one.
 - **Beginning row** = a **frontend-only matrix row id** `cash_beginning_of_period`
-  (NOT a `uni_account`, never stored / never upserted — it is a synthesized display
-  row). Add it to `CF_ROWS` as a presentation-only row the movement model fills.
+  (NOT a `uni_account`, never stored / never upserted — a synthesized display row).
+  Add it to `CF_ROWS` as a presentation-only row the movement model fills. Verified
+  safe: `buildDictionaryMatrix` leaves a CF_ROWS row `PENDING` unless a cell's
+  `uni_account` matches its key, and never blanks a synthetic key (Codex r3).
+- **FX row is OUT OF SCOPE** (Codex r3 P2): `fx_effect` is a real stored uni but is
+  NOT registered in the SEC v2 dictionary (`sec-financials-v2-schema.md` lists only
+  `net_change_in_cash` + `ending_cash`) and is omitted from `CF_ROWS` — a *pre-existing*
+  uni-mode parity gap unrelated to the cash begin/end bug. Do NOT add an FX display row
+  here; tracked separately (register `fx_effect` in the v2 dict + CF_ROWS later).
 - Sort: beginning ABOVE `net_change_in_cash`; ending at the bottom (PDF order).
 
 ### D. Footing validation — concept-aware (Codex P1 #3)
@@ -122,8 +126,9 @@ is a dev-time/test assertion + optional UI sanity log, not a hard render gate.
 - predecessor mapping: Q2→Q1, Q1→prior-FY-Q4, FY→FY-1 exact; nearest-visible NOT used.
 - footing (concept-aware): MU 6M-equivalent quarters/annual — Including→`end−begin==
   net_change`; a synthetic Excluding fixture → `end−begin==net_change+fx`.
-- toggle parity: pdf + uni both show beginning/end/fx in PDF order; sortOrdinal places
-  synthetic rows; chart selectedKeys unaffected by synthetic rowIds.
+- toggle parity: pdf + uni both show beginning + end cash rows in PDF order;
+  sortOrdinal places the synthetic beginning row; chart selectedKeys unaffected by the
+  synthetic rowId. (FX display row is out of scope — separate parity gap.)
 - tsc + full vitest green.
 - e2e (DB-reproduction): MU quarterly Q2_FY2026 → beginning 9,732 (Q1 end) + end
   13,934; annual FY2025 → beginning 7,052 (FY2024 end) + end 9,646; footing holds.
@@ -134,4 +139,6 @@ dev TDD → Codex functional review (converge) → adapter relabel merged + re-u
 other tickers inherit on re-upsert.
 
 ## Out of scope
-Issue A (gov-incentives mu: extension tag absent from companyfacts).
+- Issue A (gov-incentives mu: extension tag absent from companyfacts).
+- `fx_effect` uni-mode display (register in SEC v2 dict + add to CF_ROWS) — a
+  pre-existing parity gap, not part of the cash begin/end fix.
