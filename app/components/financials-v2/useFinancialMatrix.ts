@@ -167,6 +167,95 @@ function q4ToFy(p: string): string {
   return m ? `FY${m[1]}` : p;
 }
 
+// ---- CF cash movement analysis (SEC EFM §7.7) ----------------------------- //
+// The cash-reconciliation BALANCE concept is stored once per period as the
+// period-END balance (quarter → uni=ending_cash; annual/YTD → cf_long_tail).
+// Movement analysis: render it as "…at end of period" for period P AND synthesize
+// a "…at beginning of period" row = the EXACT predecessor period's ending balance
+// (never subtract; blank when the predecessor is absent).
+const CASH_BEGINNING_ROW_KEY = "cash_beginning_of_period";
+const CASH_BEGIN_LABEL =
+  "Cash, cash equivalents, and restricted cash at beginning of period";
+
+function isCashBalanceSource(sourceAccount: string | null | undefined): boolean {
+  const l = (sourceAccount ?? "").toLowerCase();
+  if (l.includes("increasedecrease") || l.includes("periodincrease") || l.includes("perioddecrease"))
+    return false; // exclude net-change FLOW concepts
+  return (
+    l.includes("cashandcashequivalents") ||
+    l.includes("cashcashequivalents") ||
+    l.includes("restrictedcash")
+  );
+}
+
+// Predecessor fiscal period (exact, by label): Q2→Q1, Q1→prior-FY Q4, FY→FY-1.
+export function cfPeriodPredecessor(period: string): string | null {
+  let m = /^Q([1-4])_FY(\d{4})$/.exec(period);
+  if (m) {
+    const q = Number(m[1]);
+    const fy = Number(m[2]);
+    return q > 1 ? `Q${q - 1}_FY${fy}` : `Q4_FY${fy - 1}`;
+  }
+  m = /^FY(\d{4})$/.exec(period);
+  if (m) return `FY${Number(m[1]) - 1}`;
+  return null;
+}
+
+type CfCashMovement = {
+  cells: Cell[]; // cash-balance facts remapped uni_account -> ending_cash
+  beginByPeriod: Map<string, MatrixCell>;
+};
+
+// Pre-builder: normalize cash-balance facts onto the approved `ending_cash` uni
+// (so annual `cf_long_tail` cash is NOT summed into the bucket and both modes show
+// a clean end row), and synthesize the beginning row's cells from the predecessor
+// period's ending balance. Returns null when there are no cash-balance facts.
+function cfCashMovement(filtered: Cell[], periods: string[]): CfCashMovement | null {
+  const endingByPeriod = new Map<string, Cell>();
+  let sawCash = false;
+  const cells = filtered.map((c) => {
+    if (!isCashBalanceSource(c.source_account)) return c;
+    sawCash = true;
+    const norm: Cell = { ...c, uni_account: "ending_cash" };
+    endingByPeriod.set(c.period, norm); // one ending balance per period
+    return norm;
+  });
+  if (!sawCash) return null;
+  const beginByPeriod = new Map<string, MatrixCell>();
+  for (const p of periods) {
+    const pred = cfPeriodPredecessor(p);
+    const predEnd = pred ? endingByPeriod.get(pred) : undefined;
+    if (predEnd) {
+      beginByPeriod.set(p, {
+        cell: {
+          ...predEnd,
+          period: p,
+          uni_account: CASH_BEGINNING_ROW_KEY,
+          display_label: CASH_BEGIN_LABEL,
+          display_negated: null,
+        },
+        status: "SOURCE_OF_TRUTH",
+      });
+    }
+  }
+  return { cells, beginByPeriod };
+}
+
+// Post-builder (shared by pdf + uni): insert the synthesized beginning row
+// directly BEFORE the `ending_cash` row (PDF order: net change → beginning → end).
+export function injectCfCashBeginningRow(matrix: Matrix, mv: CfCashMovement): Matrix {
+  if (mv.beginByPeriod.size === 0) return matrix;
+  const endIdx = matrix.rows.findIndex((r) => r.key === "ending_cash");
+  if (endIdx < 0) return matrix;
+  const beginRow = { key: CASH_BEGINNING_ROW_KEY, label: CASH_BEGIN_LABEL, kind: "subtotal", indent: 0 };
+  const rows = [...matrix.rows.slice(0, endIdx), beginRow, ...matrix.rows.slice(endIdx)];
+  const cellsForBeginning: Record<string, MatrixCell> = {};
+  for (const p of matrix.periods) {
+    cellsForBeginning[p] = mv.beginByPeriod.get(p) ?? { status: "PENDING" };
+  }
+  return { ...matrix, rows, cells: { ...matrix.cells, [CASH_BEGINNING_ROW_KEY]: cellsForBeginning } };
+}
+
 export function buildMatrix(
   cells: Cell[],
   statement: Statement,
@@ -231,6 +320,12 @@ export function buildMatrix(
   const periodSet = new Set<string>(filtered.map((c) => c.period));
   const periods = Array.from(periodSet).sort(comparePeriods);
 
+  // CF cash movement analysis (EFM §7.7): normalize cash-balance facts onto
+  // `ending_cash` (so annual cf_long_tail cash is not bucketed) + synthesize the
+  // beginning row. Runs pre-split so BOTH builders see the normalized cells.
+  const cfMv = statement === "CF" ? cfCashMovement(filtered, periods) : null;
+  const work = cfMv ? cfMv.cells : filtered;
+
   // -------------------------------------------------------------------------
   // RATIO statement: unchanged — fixed RATIO_ROWS dictionary, summed long-tail
   // (RATIO has no long-tail buckets today, but keep the dictionary path intact;
@@ -244,7 +339,8 @@ export function buildMatrix(
   // builder (canonical core rows + long-tail SUM buckets). PDF mode falls through
   // to the data-driven path below. (spec: view-mode toggle.)
   if (viewMode === "uni") {
-    return buildDictionaryMatrix(filtered, statement, periods);
+    const uniM = buildDictionaryMatrix(work, statement, periods);
+    return cfMv ? injectCfCashBeginningRow(uniM, cfMv) : uniM;
   }
 
   // -------------------------------------------------------------------------
@@ -258,6 +354,7 @@ export function buildMatrix(
   // -------------------------------------------------------------------------
 
   // Pass 1: build row prototypes from display-eligible direct facts.
+  // (work = filtered, with CF cash-balance facts normalized onto `ending_cash`.)
   // Map rowId -> prototype state. `seq` records first-seen order so the sort is
   // stable for equal/null ordinals. `protoPeriod`/`protoOrdinal`/`protoLabel`
   // are chosen deterministically (latest period wins) so a row's label/ordinal
@@ -273,7 +370,7 @@ export function buildMatrix(
   };
   const protos = new Map<string, Proto>();
   let seqCounter = 0;
-  for (const c of filtered) {
+  for (const c of work) {
     if (!isDisplayEligiblePrototype(c)) continue;
     const rowId = rowIdOf(c.uni_account, c.source_account);
     const label = c.display_label ?? c.source_account ?? c.uni_account;
@@ -328,7 +425,7 @@ export function buildMatrix(
   }
 
   // Pass 2: fill cells.
-  for (const c of filtered) {
+  for (const c of work) {
     // Metric-only absolute-value rows (ebitda / fcf) never render inline.
     if (METRIC_ONLY_UNI.has(c.uni_account)) continue;
 
@@ -350,7 +447,7 @@ export function buildMatrix(
     cellMap[rowId][c.period] = { cell: c, status: c.status };
   }
 
-  return {
+  const pdfMatrix: Matrix = {
     periods,
     rows: orderedProtos.map((p) => ({
       key: p.rowId,
@@ -360,6 +457,7 @@ export function buildMatrix(
     })),
     cells: cellMap,
   };
+  return cfMv ? injectCfCashBeginningRow(pdfMatrix, cfMv) : pdfMatrix;
 }
 
 // Legacy fixed-dictionary matrix builder, retained for RATIO (and as a label

@@ -22,14 +22,14 @@ Use the following Working Memory as the current project handoff state. For older
 
 # [Working] Combined AI Working Memory
 
-Updated: 2026-06-09T13:55:16.823890
+Updated: 2026-06-09T14:11:31.335888
 
 Project scope: `statement-view-pdf-faithful`
 
 ## Global Working Memory
 # [Working] Shared AI Working Memory (global)
 
-Updated: 2026-06-09T13:55:16.574572
+Updated: 2026-06-09T14:11:31.103297
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -55,6 +55,13 @@ Use it for current state. Use `search_memory` for older or more detailed history
 ## Python Wrapper 的作用
 
 ## Recent Shared Memory
+### CF cash MA — Task1 (adapter relabel) DONE; Task2/3 frontend + re-upsert pending
+# CF cash MA — Task1 (adapter relabel) DONE; Task2/3 frontend + re-upsert pending
+# CF cash movement-analysis — 實作進度（Task1 完成）
+Date: 2026-06-08 / worktree `statement-view-pdf-faithful` (未 merge main/未 push)
+Spec（design-converged, Codex×4）: docs/superpowers/specs/2026-06-08-cf-cash-movement-analysis-design.md
+## ✅ Task 1 DONE + verified (commit 6cbb1e5)
+
 ### CF cash begin/end — movement-analysis design CONVERGED (impl pending)
 # CF cash begin/end — movement-analysis design CONVERGED (impl pending)
 # CF cash 期初/期末 — movement-analysis 設計收斂，待實作
@@ -104,17 +111,10 @@ Date: 2026-06-02 / Project: ai_agent / Skill: parse-10QK-gaap
 工單檔：`tmp/parse-bs-footing-audit-worklist.md`；重現 script：`tmp/parse-bs-footing-audit.py`（純讀，不寫 production）。
 ## 緣起
 
-### derive-analytics EL2 Phase 2 YoY 成長率（revenue/net_income/eps_diluted）上 production，待 Codex review 2026-06-02
-# derive-analytics EL2 Phase 2 YoY 成長率（revenue/net_income/eps_diluted）上 production，待 Codex review 2026-06-02
-# EL2 Phase 2 YoY 成長率 — 上 production，待 Codex review
-Date: 2026-06-02 / Project: ai_agent
-Phase 1 效率比已 Codex 結案。接 Phase 2 YoY（用戶「都做」）。
-## 做了什麼
-
 ## Project Working Memory
 # [Working] Shared AI Working Memory (project:statement-view-pdf-faithful)
 
-Updated: 2026-06-09T13:55:16.764514
+Updated: 2026-06-09T14:11:31.282527
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -130,10 +130,10 @@ Use it for current state. Use `search_memory` for older or more detailed history
 ## Recent Project Memory
 ### AI Memory Daily Log: 2026-06-09 (statement-view-pdf-faithful)
 # AI Memory Daily Log: 2026-06-09 (statement-view-pdf-faithful)
-## 13:55:16 [claude] <task-notification>
+## 14:11:31 [claude] a
 ### Intent (raw)
-<task-notification>
-<task-id>bjd336m4o</task-id>
+a
+### Summary (Haiku)
 
 ### AI Memory Daily Log: 2026-06-08 (statement-view-pdf-faithful)
 # AI Memory Daily Log: 2026-06-08 (statement-view-pdf-faithful)

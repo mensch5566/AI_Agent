@@ -360,3 +360,41 @@ describe("view-mode: buildMatrix viewMode routing", () => {
     expect(def.rows.some((r) => r.label === "Net sales")).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// CF cash movement analysis (EFM §7.7): ending balance + synthesized beginning.
+// ---------------------------------------------------------------------------
+import { cfPeriodPredecessor } from "../useFinancialMatrix";
+
+describe("CF cash movement analysis", () => {
+  it("cfPeriodPredecessor: Q2→Q1, Q1→prior-FY Q4, FY→FY-1", () => {
+    expect(cfPeriodPredecessor("Q2_FY2026")).toBe("Q1_FY2026");
+    expect(cfPeriodPredecessor("Q1_FY2026")).toBe("Q4_FY2025");
+    expect(cfPeriodPredecessor("FY2025")).toBe("FY2024");
+    expect(cfPeriodPredecessor("Q4_FY2024")).toBe("Q3_FY2024");
+  });
+
+  const cashFact = (period: string, value: number) => fact({
+    uni_account: "cf_long_tail", statement: "CF", period, value,
+    period_kind: "fy_annual_duration",
+    source_account: "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+    display_label: "Cash, cash equivalents, and restricted cash at end of period",
+    ordinal: 46,
+  });
+
+  it("annual: end row + synthesized beginning row (= prior FY ending), both modes", () => {
+    const cells = [cashFact("FY2024", 7052), cashFact("FY2025", 9646)];
+    for (const mode of ["pdf", "uni"] as const) {
+      const m = buildMatrix(cells, "CF", "GAAP", "annual", mode);
+      // ending row keyed ending_cash carries the period-end balance
+      expect(m.cells["ending_cash"]?.["FY2025"]?.cell?.value).toBe(9646);
+      // synthesized beginning row = prior FY's ending
+      expect(m.cells["cash_beginning_of_period"]?.["FY2025"]?.cell?.value).toBe(7052);
+      // first period (FY2024) has no predecessor in set → beginning empty
+      expect(m.cells["cash_beginning_of_period"]?.["FY2024"]?.cell).toBeUndefined();
+      // beginning row sits directly before the ending_cash row
+      const keys = m.rows.map((r) => r.key);
+      expect(keys.indexOf("cash_beginning_of_period")).toBe(keys.indexOf("ending_cash") - 1);
+    }
+  });
+});
