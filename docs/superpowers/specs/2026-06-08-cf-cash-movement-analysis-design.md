@@ -2,7 +2,7 @@
 type: design-spec
 topic: cf-cash-movement-analysis
 date: 2026-06-08
-status: design (Codex round-1 folded; pending round-2)
+status: design-converged (Codex GPT-5.5 ×4 rounds)
 tier: T2 (frontend render + a contained adapter relabel; no DB schema/migration)
 branch: worktree-statement-view-pdf-faithful
 authority: SEC EDGAR Financial Report Manual (EFM) via NLM "Topic - Parse_SEC_Filings",
@@ -108,8 +108,9 @@ is a dev-time/test assertion + optional UI sanity log, not a hard render gate.
   BUILDERS apply it when ordering (pdf sort + uni CF_ROWS placement). `types.ts` and
   `StatementMatrix.tsx` are NOT touched — `StatementMatrix` renders builder output in
   order and does not sort.
-- canonical rows: `app/components/financials-v2/constants.ts` `CF_ROWS` (+ approved fx
-  key row + frontend-only `cash_beginning_of_period` presentation row).
+- canonical rows: `app/components/financials-v2/constants.ts` `CF_ROWS` — add ONLY the
+  frontend-only `cash_beginning_of_period` presentation row (end row reuses the existing
+  `ending_cash`; FX display row is OUT OF SCOPE per Section C).
 
 ## Alternatives (rejected)
 - Store begin/end twins (Approach X): violates EFM §6.8.12; needs migration; invisible
