@@ -152,14 +152,14 @@ Treat the following Working Memory as the current project context. Use `search_m
 
 # [Working] Combined AI Working Memory
 
-Updated: 2026-06-08T17:06:37.917694
+Updated: 2026-06-08T17:27:43.451948
 
 Project scope: `statement-view-pdf-faithful`
 
 ## Global Working Memory
 # [Working] Shared AI Working Memory (global)
 
-Updated: 2026-06-08T17:06:37.627065
+Updated: 2026-06-08T17:27:43.164604
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -244,7 +244,7 @@ Date: 2026-06-02 / Project: ai_agent
 ## Project Working Memory
 # [Working] Shared AI Working Memory (project:statement-view-pdf-faithful)
 
-Updated: 2026-06-08T17:06:37.785604
+Updated: 2026-06-08T17:27:43.322490
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -260,10 +260,10 @@ Use it for current state. Use `search_memory` for older or more detailed history
 ## Recent Project Memory
 ### AI Memory Daily Log: 2026-06-08 (statement-view-pdf-faithful)
 # AI Memory Daily Log: 2026-06-08 (statement-view-pdf-faithful)
-## 17:06:37 [claude] 好，照你說的做。
+## 17:27:43 [claude] 我記得EBITDA和FCF都是派生值，PDF上面是不會在三表裡的，如果我沒說錯的話，
 ### Intent (raw)
-好，照你說的做。
-### Summary (Haiku)
+我記得EBITDA和FCF都是派生值，PDF上面是不會在三表裡的，如果我沒說錯的話，
+那就 suppress（兩模式一致，EBITDA/FCF 只在 Ratios 分頁）
 
 ### AI Memory Daily Log: 2026-06-06 (statement-view-pdf-faithful)
 # AI Memory Daily Log: 2026-06-06 (statement-view-pdf-faithful)
