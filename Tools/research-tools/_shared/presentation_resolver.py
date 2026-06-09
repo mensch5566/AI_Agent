@@ -80,9 +80,13 @@ def compute_global_ordinals(edges, statement):
     slot relative to the others (e.g. LITE income_before_taxes, present only in the
     full network, slots between non-operating income and income tax).
 
-    Returns ``{bare_local_name: 1-based int}``. A concept on no face tree is absent
-    (caller falls back to NLM/manual). First DFS visit wins on a duplicate local
-    name; the empty dict is returned when no face network matches (AAOI BS/CF).
+    Returns a dict keyed by BOTH the bare local name AND the full ``prefix:Local``
+    qname → 1-based int. The full-qname key is exact (a qname is unique, so it is
+    never shadowed by a same-local homonym); callers that resolved an exact concept
+    (e.g. the label-text fallback) look up by full qname to keep identity end-to-end.
+    The bare-local key keeps `first DFS visit wins` semantics for legacy callers. A
+    concept on no face tree is absent (caller falls back to NLM/manual). The empty
+    dict is returned when no face network matches (AAOI BS/CF).
     """
     arcs = set()
     for e in edges:
@@ -116,6 +120,9 @@ def compute_global_ordinals(edges, statement):
             visited.add(child)
             counter[0] += 1
             out.setdefault(_local(child), counter[0])
+            # Exact full-qname key (a qname is unique → never shadowed by a same-
+            # local homonym). Exact-identity callers look up by this.
+            out.setdefault(child, counter[0])
             visit(child)
 
     for r in roots:
@@ -395,6 +402,24 @@ _FACE_DISPLAY_ROLES = frozenset({
     _STD_LABEL, _TERSE_LABEL, _TOTAL_LABEL, _VERBOSE_LABEL,
     _NEG_LABEL, _NEG_TERSE_LABEL, _NEG_TOTAL_LABEL,
 })
+# Normalized markers of roles that NEVER render as a face-row label, even when a
+# filer sets them as an arc's preferred_label (CF cash uses periodStart/EndLabel).
+# A preferred_label carrying any of these is rejected from label-text matching.
+_NONDISPLAY_ROLE_MARKERS = ("periodstart", "periodend", "documentation",
+                            "axis", "deprecated", "negatedperiod")
+
+
+def _is_display_label_role(role) -> bool:
+    """True iff `role` is a face-DISPLAY label role: ends in 'label' (normalized)
+    and carries no non-display marker (periodStart/End/documentation/axis/…). Used
+    to admit an arc's own preferred_label into label-text matching only when it is
+    actually a displayed label, not a period/structural role."""
+    if not role:
+        return False
+    n = _norm(role)
+    if any(m in n for m in _NONDISPLAY_ROLE_MARKERS):
+        return False
+    return n.endswith("label")
 
 
 def resolve_via_label_text(source_text, edges, labels, statement):
@@ -421,11 +446,13 @@ def resolve_via_label_text(source_text, edges, labels, statement):
          that edge). A same-local concept in another namespace can NEVER be
          substituted, and no AmbiguityError can be swallowed (round1 #1/#4).
 
-    Returns ``(concept_local, ordinal, negated, network_role)`` — network_role is
-    the face network the ordinal actually came from (honest provenance, round1 #6)
-    — or ``(None, None, None, None)`` when not uniquely resolved. NEVER returns a
-    label: the caller keeps the row's period-exact PDF text as the display label
-    (source_account is not mutated).
+    Returns ``(concept_full_qname, ordinal, negated, network_role)`` — the FULL
+    ``prefix:Local`` qname (so the caller stamps the global ordinal by exact qname,
+    keeping identity end-to-end past compute_global_ordinals' bare-local key) and
+    network_role = the face network the ordinal actually came from (honest
+    provenance, round1 #6) — or ``(None, None, None, None)`` when not uniquely
+    resolved. NEVER returns a label: the caller keeps the row's period-exact PDF
+    text as the display label (source_account is not mutated).
     """
     key = _norm_label_text(source_text)
     if not key:
@@ -447,7 +474,7 @@ def resolve_via_label_text(source_text, edges, labels, statement):
         texts = {lab["role"]: lab["text"] for lab in labels.get(full, [])}
         roles_to_check = set(_FACE_DISPLAY_ROLES)
         pref = e.get("preferred_label")
-        if pref:
+        if _is_display_label_role(pref):   # admit only a DISPLAYED preferred_label
             roles_to_check.add(pref)
         if any(r in texts and _norm_label_text(texts[r]) == key
                for r in roles_to_check):
@@ -464,5 +491,5 @@ def resolve_via_label_text(source_text, edges, labels, statement):
         edge = next((e for (fq, r, e) in matched if fq == full_qname and r == role),
                     None)
         if edge is not None:
-            return (_local(full_qname), edge.get("order"), _edge_negated(edge), role)
+            return (full_qname, edge.get("order"), _edge_negated(edge), role)
     return (None, None, None, None)

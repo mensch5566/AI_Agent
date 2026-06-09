@@ -5,7 +5,7 @@ Returns a 4-tuple (concept_local, ordinal, negated, network_role).
 """
 import os, sys
 sys.path.insert(0, os.path.dirname(__file__))
-from presentation_resolver import resolve_via_label_text
+from presentation_resolver import resolve_via_label_text, compute_global_ordinals
 
 _IS_ROLE = "http://sandisk.com/role/statement-consolidated-statements-of-operations"
 _TERSE = "http://www.xbrl.org/2003/role/terseLabel"
@@ -38,7 +38,7 @@ _LABELS = {
 def test_unique_terse_hit_extension_concept():
     concept, ordn, neg, role = resolve_via_label_text(
         "Business separation costs", _EDGES, _LABELS, "IS")
-    assert concept == "BusinessSeparationCosts"
+    assert concept == "sndk:BusinessSeparationCosts"   # FULL qname (identity)
     assert ordn == 4.0
     assert neg is False
     assert role == _IS_ROLE
@@ -47,7 +47,7 @@ def test_unique_terse_hit_extension_concept():
 def test_gain_variant_hits_gainloss_concept():
     concept, ordn, neg, role = resolve_via_label_text(
         "Gain on business divestiture", _EDGES, _LABELS, "IS")
-    assert concept == "GainLossOnSaleOfBusiness"
+    assert concept == "us-gaap:GainLossOnSaleOfBusiness"
     assert ordn == 6.0
     assert neg is True   # face edge preferred_label = negatedTerseLabel
     assert role == _IS_ROLE
@@ -57,7 +57,7 @@ def test_loss_variant_paren_strip_same_concept():
     # "(Gain) loss on business divestiture" via the narrow leading-paren strip.
     concept, ordn, neg, _ = resolve_via_label_text(
         "Loss on business divestiture", _EDGES, _LABELS, "IS")
-    assert concept == "GainLossOnSaleOfBusiness"
+    assert concept == "us-gaap:GainLossOnSaleOfBusiness"
     assert ordn == 6.0
     assert neg is True
 
@@ -102,7 +102,23 @@ def test_no_face_network_returns_none():
 def test_punctuation_and_case_normalized():
     concept, ordn, _, _ = resolve_via_label_text(
         "  BUSINESS SEPARATION COSTS.  ", _EDGES, _LABELS, "IS")
-    assert concept == "BusinessSeparationCosts" and ordn == 4.0
+    assert concept == "sndk:BusinessSeparationCosts" and ordn == 4.0
+
+
+def test_periodend_preferred_label_not_matched():
+    # round2 #3: a periodEndLabel preferred_label must NOT be admitted into
+    # label-text matching even though it is the edge's preferred_label.
+    _PERIOD_END = "http://www.xbrl.org/2003/role/periodEndLabel"
+    edges = [
+        {"role_uri": _IS_ROLE, "child_qname": "sndk:OddCashLine",
+         "order": 2.0, "preferred_label": _PERIOD_END, "period": "FY2025"},
+    ]
+    labels = {
+        "sndk:OddCashLine": [
+            {"role": _PERIOD_END, "text": "Mystery line at end of period"}],
+    }
+    assert resolve_via_label_text(
+        "Mystery line at end of period", edges, labels, "IS") == (None, None, None, None)
 
 
 # --------------------------------------------------------------------------- #
@@ -133,7 +149,7 @@ def test_full_qname_identity_no_cross_namespace_substitution():
     }
     concept, ordn, neg, role = resolve_via_label_text(
         "Business separation costs", edges, labels, "IS")
-    assert concept == "BusinessSeparationCosts"
+    assert concept == "sndk:BusinessSeparationCosts"   # exact qname, not us-gaap homonym
     assert ordn == 4.0          # sndk: edge, NOT the us-gaap homonym's 9.0
     assert role == _IS_ROLE
 
@@ -175,4 +191,25 @@ def test_non_display_role_documentation_not_matched():
         "Special charge", edges, labels, "IS") == (None, None, None, None)
     # Sanity: the actual face label DOES resolve.
     c, o, _, _ = resolve_via_label_text("Restructuring, net", edges, labels, "IS")
-    assert c == "SpecialCharge" and o == 3.0
+    assert c == "sndk:SpecialCharge" and o == 3.0
+
+
+# --------------------------------------------------------------------------- #
+# Codex round2 #1: full-qname identity must survive global-ordinal stamping.
+# compute_global_ordinals now keys by BOTH bare local and full qname so an
+# exact-qname caller (the label-text fallback) is never handed a homonym's slot.
+# --------------------------------------------------------------------------- #
+
+def test_global_ordinals_full_qname_key_distinguishes_homonyms():
+    edges = [
+        {"role_uri": _IS_ROLE, "child_qname": "sndk:Foo", "order": 1.0,
+         "parent_qname": None},
+        {"role_uri": _IS_ROLE, "child_qname": "us-gaap:Foo", "order": 2.0,
+         "parent_qname": None},
+    ]
+    g = compute_global_ordinals(edges, "IS")
+    # exact full-qname keys are distinct (the round2 fix)
+    assert g["sndk:Foo"] == 1
+    assert g["us-gaap:Foo"] == 2
+    # bare-local key keeps first-DFS-wins (back-compat for legacy callers)
+    assert g["Foo"] == 1

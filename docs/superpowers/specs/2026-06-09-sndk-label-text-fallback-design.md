@@ -69,4 +69,13 @@ Codex 對首版實作提出 blockers，逐項處理：
 - **#6 provenance network 誠實（接受，已修）**：stamp 改用 `resolve_via_label_text` 回傳的「實際命中 network role」（`ordinal_network`），不再盲塞 caller 的 `network_role`。
 - **#2 觸發範圍比註解廣（接受論點，保留設計 + 改誠實註解）**：分支對「任何 local-name + via_uni 皆 miss 的 preserved_pdf_label 行」觸發，不限 SNDK/AGENT_CLASSIFIED。**這是刻意的 future-proof**（未來新 prose-labeled face 行自動歸位，/goal 第二部分）。安全性不靠「限縮觸發」，而靠 matcher **hard fail-closed**（face 顯示 label only / full-qname identity / 唯一命中否則 unresolved）。註解已改為誠實描述廣觸發 + 安全依據。
 
-驗證（修正後）：SNDK 仍 100%（IS 91/91、BS 102/102、CF 84/84）；三行 8 facts 值/ordinal/sign 不變、provenance network 變誠實；380 pytest（+3 漏洞測試：跨 namespace 同 local 不替換、雙 namespace 皆命中 fail-closed、documentation 非顯示 role 不命中）、50 vitest、tsc clean；MU/LITE/INTC 維持 100%、AAOI 原狀。
+驗證（round1 修正後）：SNDK 仍 100%（IS 91/91、BS 102/102、CF 84/84）；三行 8 facts 值/ordinal/sign 不變、provenance network 變誠實；380 pytest（+3 漏洞測試）、50 vitest、tsc clean；MU/LITE/INTC 維持 100%、AAOI 原狀。
+
+## Codex round2 收斂（identity 端到端 + 顯示 role 嚴格）
+
+round1 修正後 Codex 指出兩個洞**仍未端到端關閉**，逐項接受並根治：
+
+- **#1 端到端 identity（接受，已修）**：resolver 內部保 full qname，但 adapter `resolved_concept=lt_concept`(bare local) → `_global_for` → `compute_global_ordinals` 用 **bare local key + first-DFS-wins**，同 local 跨 namespace 的 homonym 仍可能 donate 最終 global ordinal。**修法**：`compute_global_ordinals` 額外用 **full qname** 當 key（full qname 唯一、永不被 homonym 覆蓋）；`resolve_via_label_text` 回傳 **full qname**；adapter 用它查 global ordinal → identity 端到端存活。bare-local key 保留（既有 caller 向後相容）。
+- **#3 顯示 role 守衛（接受，已修）**：matcher 無條件加 edge 的 `preferred_label`，若它是 `periodStart/EndLabel`（CF cash 用）仍被納入比對。**修法**：新增 `_is_display_label_role` 守衛（normalized endswith "label" 且不含 periodStart/End/documentation/axis/deprecated/negatedPeriod），`preferred_label` 過守衛才納入。
+
+驗證（round2 修正後）：SNDK 仍 100%（8 facts 值/ordinal 7&11/sign 不變、via_label、provenance 誠實）；**382 pytest**（再 +2：periodEnd preferred_label 不命中、compute_global_ordinals full-qname key 區分 homonym）、50 vitest、tsc clean；MU/LITE/INTC 維持 100%、AAOI 原狀。
