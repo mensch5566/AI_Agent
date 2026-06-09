@@ -382,6 +382,21 @@ describe("CF cash movement analysis", () => {
     ordinal: 46,
   });
 
+  it("fx_effect + net_change concepts are NOT counted as cash candidates (no false fail-closed)", () => {
+    const otherCf = (p: string, uni: string, src: string, v: number) =>
+      fact({ uni_account: uni, statement: "CF", period: p, value: v, period_kind: "fy_annual_duration", source_account: src, ordinal: 45 });
+    const cells = [
+      cashFact("FY2024", 7052), cashFact("FY2025", 9646),
+      // FX (contains "cashcashequivalents" substring) + net change (PeriodIncreaseDecrease):
+      otherCf("FY2025", "fx_effect", "EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", 6),
+      otherCf("FY2025", "net_change_in_cash", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect", 2594),
+    ];
+    const m = buildMatrix(cells, "CF", "GAAP", "annual", "pdf");
+    // FY2025 still has exactly ONE cash balance → beginning synthesized, not blanked
+    expect(m.cells["ending_cash"]?.["FY2025"]?.cell?.value).toBe(9646);
+    expect(m.cells["cash_beginning_of_period"]?.["FY2025"]?.cell?.value).toBe(7052);
+  });
+
   it("annual: end row + synthesized beginning row (= prior FY ending), both modes", () => {
     const cells = [cashFact("FY2024", 7052), cashFact("FY2025", 9646)];
     for (const mode of ["pdf", "uni"] as const) {

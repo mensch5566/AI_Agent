@@ -179,12 +179,18 @@ const CASH_BEGIN_LABEL =
 
 function isCashBalanceSource(sourceAccount: string | null | undefined): boolean {
   const l = (sourceAccount ?? "").toLowerCase();
+  // startsWith (NOT includes): the cash BALANCE concept name starts with the cash
+  // prefix. `includes` would wrongly match the FX flow concept
+  // `EffectOfExchangeRateOnCashCashEquivalents…` (contains "cashcashequivalents")
+  // and the net-change `…PeriodIncreaseDecreaseIncludingExchangeRateEffect`,
+  // double-counting candidates → fail-closed blanks everything. Mirrors the
+  // adapter's `_is_cash_balance_concept` prefix allowlist.
   if (l.includes("increasedecrease") || l.includes("periodincrease") || l.includes("perioddecrease"))
     return false; // exclude net-change FLOW concepts
   return (
-    l.includes("cashandcashequivalents") ||
-    l.includes("cashcashequivalents") ||
-    l.includes("restrictedcash")
+    l.startsWith("cashandcashequivalents") ||
+    l.startsWith("cashcashequivalents") ||
+    l.startsWith("restrictedcash")
   );
 }
 
