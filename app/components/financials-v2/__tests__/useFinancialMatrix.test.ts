@@ -397,4 +397,19 @@ describe("CF cash movement analysis", () => {
       expect(keys.indexOf("cash_beginning_of_period")).toBe(keys.indexOf("ending_cash") - 1);
     }
   });
+
+  it("fail-closed: >1 cash candidate → that period's ending blank; ambiguity propagates to next beginning", () => {
+    const dup = (p:string,v:number,src:string)=>fact({uni_account:"cf_long_tail",statement:"CF",period:p,value:v,period_kind:"fy_annual_duration",source_account:src,ordinal:46});
+    const cells=[
+      cashFact("FY2024",7052),
+      dup("FY2025",9646,"CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"),
+      dup("FY2025",100,"RestrictedCashCurrent"), // 2nd cash-like candidate → FY2025 ambiguous
+      cashFact("FY2026",10000),                  // clean single candidate
+    ];
+    const m=buildMatrix(cells,"CF","GAAP","annual","pdf");
+    expect(m.cells["ending_cash"]?.["FY2025"]?.cell?.value).toBeUndefined();      // FY2025 ending blank
+    expect(m.cells["cash_beginning_of_period"]?.["FY2025"]?.cell?.value).toBe(7052); // FY2024 clean predecessor
+    expect(m.cells["ending_cash"]?.["FY2026"]?.cell?.value).toBe(10000);          // FY2026 ending clean
+    expect(m.cells["cash_beginning_of_period"]?.["FY2026"]?.cell).toBeUndefined(); // predecessor FY2025 ambiguous → blank
+  });
 });

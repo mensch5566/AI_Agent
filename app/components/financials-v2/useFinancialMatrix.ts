@@ -211,16 +211,36 @@ type CfCashMovement = {
 // a clean end row), and synthesize the beginning row's cells from the predecessor
 // period's ending balance. Returns null when there are no cash-balance facts.
 function cfCashMovement(filtered: Cell[], periods: string[]): CfCashMovement | null {
+  // Fail-closed exact-one-per-period (spec §A): the matcher also admits
+  // RestrictedCash etc., so a period could carry >1 cash-like fact. Accept a
+  // period's ending balance ONLY when exactly one candidate exists; otherwise
+  // skip normalization for that period (leave the facts as-is) + warn, so we
+  // never silently pick the wrong ending/beginning cash.
+  const candidatesByPeriod = new Map<string, Cell[]>();
+  for (const c of filtered) {
+    if (!isCashBalanceSource(c.source_account)) continue;
+    const arr = candidatesByPeriod.get(c.period);
+    if (arr) arr.push(c);
+    else candidatesByPeriod.set(c.period, [c]);
+  }
+  if (candidatesByPeriod.size === 0) return null;
+  const acceptedPeriods = new Set<string>();
   const endingByPeriod = new Map<string, Cell>();
-  let sawCash = false;
+  for (const [period, cands] of candidatesByPeriod) {
+    if (cands.length === 1) {
+      acceptedPeriods.add(period);
+    } else if (typeof console !== "undefined") {
+      console.warn(
+        `[cfCashMovement] ${cands.length} cash-balance candidates for ${period}; ` +
+        `skipping movement analysis for this period (fail-closed).`);
+    }
+  }
   const cells = filtered.map((c) => {
-    if (!isCashBalanceSource(c.source_account)) return c;
-    sawCash = true;
+    if (!isCashBalanceSource(c.source_account) || !acceptedPeriods.has(c.period)) return c;
     const norm: Cell = { ...c, uni_account: "ending_cash" };
-    endingByPeriod.set(c.period, norm); // one ending balance per period
+    endingByPeriod.set(c.period, norm);
     return norm;
   });
-  if (!sawCash) return null;
   const beginByPeriod = new Map<string, MatrixCell>();
   for (const p of periods) {
     const pred = cfPeriodPredecessor(p);
