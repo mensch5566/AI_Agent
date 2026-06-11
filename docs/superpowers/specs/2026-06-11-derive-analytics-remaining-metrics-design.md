@@ -109,3 +109,9 @@ derive_dimensional_analytics.py（讀 v3 + compute + 寫 JSON）→ adapt_dimens
 
 ### §7.2 待辦（上游）：SNDK supplement Q2_FY2026 segment 資料疑誤
 SNDK Q2_FY2026 segment revenue $5.95B（平常 ~$2.3B）+ op_income $4.111B 兩值都不合理（疑 parse-SEC-supplement 抽到錯 XBRL concept 或 cumulative）。已由 single-member suppress 擋住不進 production，但**上游資料本身要修**（re-parse SNDK supplement v3 Q2_FY2026，比對 10-Q 原文）。
+
+### §7.3 SNDK 資料疑慮 — 查證結案（2026-06-11，已修上 production）
+**結論：op_income 4111M / rev 5950M（69% 營業利益率）是 filer 真實揭露，不是抽錯。** IS 完整對帳：Revenue 5950 − COGS 1288 = GrossProfit 4662（78%）− OpEx 551 = OperatingIncome 4111（69%）→ NetIncome 3615（61%）。SanDisk 記憶體超級循環 + FY2025 提列存貨在缺貨高價賣出（writedown reversal）→ 極端毛利。parse 忠實抽出。
+**唯一真 bug = 期別標籤錯位**：`parse_instance_xbrl` 用月份算術 + fy_end（SNDK 缺 ticker_config → 預設 12）撐不住 52/53 週財曆，整批季別 shift（2026-04-03 被標 Q2_FY2026 應為 Q3_FY2026）。
+**修法（已上）**：(1) `dei_period_label()` 改用 filer 的 DocumentFiscalYearFocus + DocumentFiscalPeriodFocus（權威、52/53 週安全），commit parse-SEC-supplement；(2) upsert dimensional 改 per-ticker 快照替換（清孤兒），commit `13e9667`。SNDK re-parse + re-upsert（user 授權）：60→60 無孤兒，business_segment 季別 FY2025/Q1-Q3_FY2026 全對。
+**啟示（呼應「太嚴 vs 太鬆」）**：period label 應優先用 filer 權威來源（dei focus）而非推算；dimensional 應跟 flat 一樣對「可靠來源」snapshot，避免靜默孤兒。
