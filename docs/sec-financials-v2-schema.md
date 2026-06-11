@@ -262,7 +262,7 @@ unit 一律 `Pure`，分三種 display category：pct-style（margins / ETR，�
 | `net_margin_pct` | GAAP / NON_GAAP | `net_income / revenue` | ⬜ |
 | `fcf_margin_pct` | GAAP | `(net_cash_from_operating - capital_expenditures) / revenue`。**`provenance.basis = GAAP_INPUTS_DERIVED_NON_GAAP_MEASURE`**（繼承 FCF 的非-GAAP 性質；前端標記） | ✅ |
 | `ebitda_margin_pct` | GAAP | `((net_income + net_income_nci[optional]) + interest_expense + income_tax_expense + D&A) / revenue`（= EBITDA/revenue，SEC C&DI 103.01 bottom-up，base 用合併淨利 net_income+NCI；D&A 取 CF；除 NCI 外 required，缺 D&A → skip）。**derived non-GAAP**：`provenance.basis='GAAP_INPUTS_DERIVED_NON_GAAP_MEASURE'` | ✅ |
-| `adjusted_ebitda_margin_pct` | NON_GAAP | `adjusted_ebitda / revenue` | ⬜ |
+| `adjusted_ebitda_margin_pct` | NON_GAAP | `adjusted_ebitda / revenue`（**cross-version** rule：分子 `adjusted_ebitda`@NON_GAAP 是 management 8-K direct 揭露值，分母 `revenue`@GAAP pin 死防 NON_GAAP revenue 污染；`output_version=NON_GAAP` 只 emit 一次）。**`provenance.basis = MGMT_NONGAAP_INPUT_DERIVED_RATIO`**（分子是 management 揭露非 GAAP-derived，故 basis ≠ `GAAP_INPUTS_DERIVED_NON_GAAP_MEASURE`）。coverage：僅有 `adjusted_ebitda` 揭露的 ticker（目前 AAOI），Q4 因 GAAP revenue 為 `derived_q4`、與 adjusted_ebitda 的 `quarter_duration` period_kind 不齊而 skip | ✅ |
 | `effective_tax_rate` | GAAP | `income_tax_expense / income_before_taxes` | ⬜ |
 | `roe` | GAAP | `net_income_TTM / avg_total_equity` | ⬜ |
 | `roa` | GAAP | `net_income_TTM / avg_total_assets` | ⬜ |
