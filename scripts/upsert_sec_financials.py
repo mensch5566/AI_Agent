@@ -103,6 +103,8 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     # EBITDA (SEC C&DI 103.01 bottom-up) — absolute value + margin.
     "EBITDA_NI_INT_TAX_DA",
     "RATIO_EBITDA_MARGIN_PCT",
+    # Adjusted EBITDA Margin (cross-version: adjusted_ebitda@NON_GAAP / revenue@GAAP).
+    "RATIO_ADJUSTED_EBITDA_MARGIN_PCT",
     # Phase D EL2 cross-period (TTM) ratios.
     "RATIO_ROE",
     "RATIO_ROA",
