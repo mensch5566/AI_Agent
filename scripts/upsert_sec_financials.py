@@ -43,6 +43,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "Tools" / "research-tools"))
 
 from _shared import sec_json_adapter as A  # noqa: E402
+from _shared.presentation_resolver import (  # noqa: E402
+    accepted_face_concepts,
+    select_network,
+)
 
 OBSIDIAN_BASE = Path(os.environ.get(
     "OBSIDIAN_VAULT",
@@ -269,20 +273,174 @@ def load_json(path: Path) -> dict | None:
 
 
 def load_sources(ticker: str) -> dict:
-    """Load all 7 source JSONs (some may be absent)."""
+    """Load all source JSONs (some may be absent).
+
+    Adds (Task 8) the PDF-faithful display inputs: `gaap_labels` (labels.json)
+    and per-statement audited NLM ordering artifacts. Both are optional —
+    absence just means fewer display ordinals resolve (the next task's coverage
+    gate decides whether that's acceptable).
+    """
     base = skill_output_dir(ticker)
+    nlm_dir = base / "nlm-statement-order"
     return {
         "gaap_facts": load_json(base / "parse-10QK-gaap" / f"{ticker}_gaap_facts.json"),
         "gaap_edges_cal": load_json(base / "parse-10QK-gaap" / f"{ticker}_gaap_edges_cal.json"),
         "gaap_edges_pre": load_json(base / "parse-10QK-gaap" / f"{ticker}_gaap_edges_pre.json"),
+        "gaap_labels": load_json(base / "parse-10QK-gaap" / f"{ticker}_gaap_labels.json"),
         "sign_flip": load_json(base / "parse-10QK-gaap" / f"{ticker}_sign_flip_concepts.json"),
         "nongaap": load_json(base / "parse-8k-nongaap" / f"{ticker}_nongaap.json"),
         "supplement_facts": load_json(base / "parse-SEC-supplement" / f"{ticker}_supplement_facts_v3.json"),
         "supplement_edges": load_json(base / "parse-SEC-supplement" / f"{ticker}_supplement_edges_v3.json"),
+        "nlm_order": {
+            stmt: load_json(nlm_dir / f"{ticker}_{stmt}_nlm_order.json")
+            for stmt in ("IS", "BS", "CF")
+        },
     }
 
 
 # ---- Pipeline ----------------------------------------------------------------
+
+
+def _extract_labels_map(gaap_labels) -> dict:
+    """Tolerant extraction of labels.json → ``{concept_qname: [{role,lang,text}]}``.
+
+    parse-10QK-gaap's build_separated emits a top-level mapping; defensively
+    unwrap a ``{"labels": {...}}`` envelope if present.
+    """
+    if not gaap_labels:
+        return {}
+    if isinstance(gaap_labels, dict) and "labels" in gaap_labels and isinstance(gaap_labels["labels"], dict):
+        return gaap_labels["labels"]
+    return gaap_labels if isinstance(gaap_labels, dict) else {}
+
+
+def _read_audited_order(artifact: dict) -> dict:
+    """Read ``{cell_id: ordinal}`` from an AUDITED artifact via
+    nlm_statement_order.read_audited_order.
+
+    Imported lazily by file path (the module lives alongside this one in
+    ``scripts/``) so the upsert module never mutates global ``sys.path`` at
+    import time — that pollutes module resolution for the rest of a pytest run.
+    """
+    import importlib.util
+    mod_path = Path(__file__).resolve().parent / "nlm_statement_order.py"
+    spec = importlib.util.spec_from_file_location("_nlm_statement_order", str(mod_path))
+    nlm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(nlm)
+    return nlm.read_audited_order(artifact)
+
+
+def _build_audited_orders(nlm_order: dict | None) -> dict:
+    """Build the per-statement audited-order map the adapter consumes.
+
+    For each statement whose NLM artifact is present AND status=="audited",
+    produce::
+
+        {statement: {"cell_id_to_ordinal": {cell_id: ordinal},
+                     "source_doc": str, "period": str, "artifact_hash": str}}
+
+    A ``pending_audit`` (or absent) artifact contributes nothing — G1/G7:
+    unaudited order MUST never feed production. ``read_audited_order`` already
+    enforces the status gate (returns {} otherwise), so an unaudited artifact
+    yields an empty cell_id map and is skipped.
+    """
+    import hashlib
+    out: dict = {}
+    for stmt, artifact in (nlm_order or {}).items():
+        if not artifact:
+            continue
+        cell_map = _read_audited_order(artifact)
+        if not cell_map:
+            continue  # not audited, or no matched lines
+        artifact_hash = hashlib.sha256(
+            json.dumps(artifact, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
+        out[stmt] = {
+            "cell_id_to_ordinal": cell_map,
+            "source_doc": artifact.get("source_doc"),
+            "period": artifact.get("period"),
+            "artifact_hash": artifact_hash,
+        }
+    return out
+
+
+def attach_display_to_batch(batch: A.NormalizedBatch, sources: dict) -> None:
+    """Resolve PDF-faithful display_label + ordinal + provenance on GAAP facts.
+
+    Per statement (IS/BS/CF): select the presentation network from edges_pre,
+    then call the adapter's ``attach_display_metadata`` over that statement's
+    facts. Non-GAAP facts are not statement-display rows here (they have their
+    own version/path); only GAAP facts get display metadata. Spec Task 8.
+    """
+    edges = (sources.get("gaap_edges_pre") or {}).get("edges", []) \
+        if isinstance(sources.get("gaap_edges_pre"), dict) else []
+    labels = _extract_labels_map(sources.get("gaap_labels"))
+    audited_orders = _build_audited_orders(sources.get("nlm_order"))
+
+    gaap_facts = [f for f in batch.facts if f.version == "GAAP"]
+    for statement in ("IS", "BS", "CF"):
+        stmt_facts = [f for f in gaap_facts if f.statement == statement]
+        if not stmt_facts:
+            continue
+        facts_concepts = {
+            (f.source_account or "").rsplit(":", 1)[-1]
+            for f in stmt_facts if f.source_account
+        }
+        network_role = select_network(edges, statement, facts_concepts or None)
+        # T14 Issue2: accepted face concepts = UNION across ALL matching face
+        # networks (10-K full ∪ 10-Q condensed), basis for narrow note-level
+        # exclusion of tag_like facts not present on any face statement.
+        accepted = accepted_face_concepts(edges, statement)
+        A.attach_display_metadata(
+            stmt_facts,
+            statement=statement,
+            edges=edges,
+            labels=labels,
+            network_role=network_role,
+            accepted_concepts=accepted,
+            audited_orders=audited_orders,
+        )
+        # Whole-row redundancy suppression (dedup spec v2): null a prose/tag row
+        # that duplicates another row's economic line. Runs AFTER attach (needs
+        # display_negated for the value-agreement veto) and per statement.
+        A.dedup_redundant_rows(
+            stmt_facts, statement=statement, edges=edges, labels=labels,
+        )
+
+    _print_note_level_exclusions(batch.ticker, gaap_facts)
+
+
+def _print_note_level_exclusions(ticker: str, gaap_facts: list) -> None:
+    """Audit print: every GAAP fact auto-excluded as note-level (T14 Issue2).
+
+    Lists ticker / statement / uni_account / source_account / xbrl_tag / period
+    for each fact now display_eligible=False with provenance reason
+    `note_level_not_in_face_network`, grouped + counted per statement. No silent
+    truncation — a human must be able to audit every concept classified
+    note-level. Printed dry-run & real-run alike."""
+    excluded = [
+        f for f in gaap_facts
+        if f.display_eligible is False
+        and (f.provenance or {}).get("display_exclusion_reason")
+            == "note_level_not_in_face_network"
+    ]
+    print("\n  === Note-level exclusions (T14 Issue2: tag_like not in face network) ===")
+    if not excluded:
+        print("    (none)")
+        return
+    by_stmt: dict[str, list] = {}
+    for f in excluded:
+        by_stmt.setdefault(f.statement, []).append(f)
+    for statement in ("IS", "BS", "CF"):
+        rows = by_stmt.get(statement)
+        if not rows:
+            continue
+        print(f"    {statement}: {len(rows)} excluded")
+        for f in rows:
+            print(
+                f"        - {ticker} / {statement} / {f.uni_account} / "
+                f"{f.source_account} / {f.xbrl_tag} / {f.period}"
+            )
 
 
 def normalize(ticker: str, sources: dict) -> A.NormalizedBatch:
@@ -326,7 +484,137 @@ def normalize(ticker: str, sources: dict) -> A.NormalizedBatch:
         if sources[key]:
             batch.edges.extend(A.adapt_edges(sources[key], ticker, edge_type))
 
+    # Task 8: resolve PDF-faithful display_label + ordinal + provenance on GAAP
+    # facts (parse skills untouched — all resolution lives here at the upsert
+    # boundary). Reads labels.json + edges_pre + audited NLM ordering artifacts.
+    attach_display_to_batch(batch, sources)
+
     return batch
+
+
+# ---- Coverage hard gate (spec G4) -------------------------------------------
+#
+# 100% of display-eligible FACT rows (per ticker × statement IS/BS/CF) must carry
+# an ordinal, else we MUST NOT ship a half-ordered Statement view — fail loud and
+# block --apply (a human adds an NLM artifact line / audits before retry).
+#
+# Denominator = display-eligible FACT rows only. EXCLUDED:
+#   - YTD-duration rows (period_kind == "ytd_duration") — never a Statement row.
+#   - metric-only rows: derived single quarters (derived_q2/q3/q4) + absolute-value
+#     metrics (ebitda / free_cash_flow). These live in sec_financial_metrics and
+#     attach by uni_account on the frontend; the adapter never assigns them a
+#     statement ordinal (spec §16). They are not in batch.facts today, but the
+#     denominator excludes them explicitly so coverage_report is correct even if a
+#     caller passes a mixed row set.
+#   - display-INELIGIBLE synthetic SUM-of-multiple-PDF-lines rows
+#     (display_eligible is False) — they build no Statement-view row.
+
+_COVERAGE_STATEMENTS = ("IS", "BS", "CF")
+_YTD_PERIOD_KIND = "ytd_duration"
+# Mirrors sec_json_adapter._DERIVED_SINGLE_QUARTER_PKINDS (kept local so the gate
+# has no import-time dependency on a private adapter name).
+_DERIVED_SINGLE_QUARTER_PKINDS = frozenset({"derived_q2", "derived_q3", "derived_q4"})
+# Absolute-value metric-only uni_accounts (derive-analytics) that are never
+# Statement facts. Excluded from the coverage denominator by uni_account.
+_METRIC_ONLY_UNI = frozenset({"ebitda", "adjusted_ebitda", "free_cash_flow"})
+
+
+def _row_attr(row, name, default=None):
+    """Read `name` from a FactRow dataclass OR a plain dict (coverage_report is
+    spec'd to accept generic adapted rows)."""
+    if isinstance(row, dict):
+        return row.get(name, default)
+    return getattr(row, name, default)
+
+
+def _is_coverage_eligible(row) -> bool:
+    """True iff `row` belongs in the coverage denominator (display-eligible FACT)."""
+    if _row_attr(row, "statement") not in _COVERAGE_STATEMENTS:
+        return False
+    # Non-GAAP (8-K reconciliation) facts are an OVERLAY keyed by uni_account onto
+    # the GAAP face rows — they are NOT independent face-statement rows and have no
+    # XBRL presentation network, so attach_display_to_batch only resolves GAAP
+    # facts (it skips version!=GAAP). Counting Non-GAAP facts in the GAAP-statement
+    # coverage denominator would falsely fail the gate (they can never carry an
+    # XBRL ordinal). Exclude them.
+    if _row_attr(row, "version") != "GAAP":
+        return False
+    if _row_attr(row, "period_kind") == _YTD_PERIOD_KIND:
+        return False
+    if _row_attr(row, "period_kind") in _DERIVED_SINGLE_QUARTER_PKINDS:
+        return False
+    if _row_attr(row, "uni_account") in _METRIC_ONLY_UNI:
+        return False
+    if _row_attr(row, "display_eligible") is False:
+        return False
+    return True
+
+
+def coverage_report(rows) -> dict:
+    """Per-statement coverage of display-eligible FACT rows.
+
+    Returns ``{statement: {"eligible": int, "with_ordinal": int,
+    "missing": [{statement, uni_account, source_account, period}, ...]}}`` for
+    each statement (IS/BS/CF) that has at least one eligible row.
+    """
+    report: dict = {}
+    for row in rows:
+        if not _is_coverage_eligible(row):
+            continue
+        stmt = _row_attr(row, "statement")
+        bucket = report.setdefault(stmt, {"eligible": 0, "with_ordinal": 0, "missing": []})
+        bucket["eligible"] += 1
+        if _row_attr(row, "ordinal") is not None:
+            bucket["with_ordinal"] += 1
+        else:
+            bucket["missing"].append({
+                "statement": stmt,
+                "uni_account": _row_attr(row, "uni_account"),
+                "source_account": _row_attr(row, "source_account"),
+                "period": _row_attr(row, "period"),
+            })
+    return report
+
+
+def coverage_pct(bucket: dict) -> float:
+    """Coverage % for one statement bucket (100.0 when no eligible rows)."""
+    eligible = bucket.get("eligible", 0)
+    if eligible == 0:
+        return 100.0
+    return round(100.0 * bucket.get("with_ordinal", 0) / eligible, 1)
+
+
+def coverage_gate_blocks_apply(report: dict) -> bool:
+    """Apply-blocking predicate: True iff ANY statement is < 100% covered."""
+    return any(bucket.get("with_ordinal", 0) < bucket.get("eligible", 0)
+               for bucket in report.values())
+
+
+def print_coverage_report(report: dict) -> bool:
+    """Print the per-statement coverage section. Return True if gate passes
+    (all statements 100%)."""
+    blocks = coverage_gate_blocks_apply(report)
+    print(f"\n  === Coverage Gate (spec G4: display-eligible rows need ordinal) ===")
+    if not report:
+        print(f"    (no display-eligible fact rows)")
+        return True
+    for stmt in _COVERAGE_STATEMENTS:
+        bucket = report.get(stmt)
+        if bucket is None:
+            continue
+        pct = coverage_pct(bucket)
+        ok = bucket["with_ordinal"] >= bucket["eligible"]
+        mark = "✓" if ok else "✗"
+        line = (f"    [{mark}] {stmt} {pct}% "
+                f"({bucket['with_ordinal']}/{bucket['eligible']})")
+        if not ok:
+            line += f" — {len(bucket['missing'])} row(s) missing ordinal"
+        print(line)
+        if not ok:
+            for m in bucket["missing"]:
+                label = m.get("uni_account") or m.get("source_account") or "?"
+                print(f"        - {stmt} {label} ({m.get('period')})")
+    return not blocks
 
 
 def print_report(batch: A.NormalizedBatch) -> bool:
@@ -396,6 +684,14 @@ def print_report(batch: A.NormalizedBatch) -> bool:
             for v in c['values']:
                 print(f"      value={v['value']} dec={v.get('decimals')} src={v.get('source_doc')}")
 
+    # Coverage hard gate (spec G4): 100% of display-eligible fact rows per
+    # statement must carry an ordinal, else block --apply. Reported here (dry-run
+    # & real-run alike); folds into the overall gate result.
+    report = coverage_report(batch.facts)
+    coverage_pass = print_coverage_report(report)
+    if not coverage_pass:
+        gate_pass = False
+
     return gate_pass
 
 
@@ -433,9 +729,44 @@ def upsert_batch(client, table: str, rows: list[dict]) -> int:
 
 
 def row_to_dict(row) -> dict:
-    """asdict + JSON-friendly fixups (drop None unit/value where col is NOT NULL etc.)."""
+    """asdict + JSON-friendly fixups (drop None unit/value where col is NOT NULL etc.).
+
+    `display_eligible` is an adapter-internal flag (a display-ineligible synthetic
+    SUM core builds no Statement-view row prototype) — there is NO such DB column,
+    so it is stripped here. `display_label` IS a column (migration
+    2026060500_add_display_label.sql) and is kept. `display_negated` IS also a
+    column (migration 2026060700_add_display_negated.sql) — the PDF-faithful sign
+    flag — and flows through asdict unchanged (nullable boolean).
+
+    `ordinal` is a smallint column, but XBRL presentation `order` (and thus the
+    resolved ordinal) arrives as a float (e.g. 3.0). Coerce integer-valued floats
+    to int so PostgREST accepts them. Fail loud on a genuinely fractional order
+    (e.g. 1.5): truncating it to 1 would silently collide with another line's
+    position — a real filer using fractional orders needs a schema decision
+    (smallint → numeric), not a silent truncation.
+    """
     d = asdict(row)
+    d.pop("display_eligible", None)
+    # Only FactRow carries `ordinal`. DimensionalRow has no such field/column —
+    # never ADD the key (sec_financial_dimensional_facts would reject it).
+    if "ordinal" in d:
+        d["ordinal"] = _coerce_ordinal(d["ordinal"])
     return d
+
+
+def _coerce_ordinal(ordinal):
+    """smallint-safe ordinal: None passes through; an integer-valued float/int is
+    cast to int; a fractional value raises ValueError (no silent truncation)."""
+    if ordinal is None:
+        return None
+    f = float(ordinal)
+    if f != int(f):
+        raise ValueError(
+            f"non-integer ordinal {ordinal!r} cannot be stored in smallint column "
+            f"without truncation/collision. The `ordinal` column needs a schema "
+            f"decision (smallint → numeric) before fractional XBRL orders ship."
+        )
+    return int(f)
 
 
 def apply(batch: A.NormalizedBatch) -> None:

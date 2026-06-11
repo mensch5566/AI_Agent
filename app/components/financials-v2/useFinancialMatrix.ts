@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import type { ApiResponse, Cell, MatrixCell, PeriodKind, Statement, Version } from "./types";
-import { LONG_TAIL_ROLLUP_HINTS, ROWS_BY_STATEMENT, comparePeriods } from "./constants";
+import {
+  DERIVED_NONGAAP_ABSOLUTE_ROWS,
+  IS_ROWS,
+  CF_ROWS,
+  LONG_TAIL_ROLLUP_HINTS,
+  ROWS_BY_STATEMENT,
+  comparePeriods,
+} from "./constants";
 
 /**
  * useFinancialMatrix(ticker)
@@ -103,6 +110,49 @@ const TTM_RATIO_ROWS = new Set<string>([
   "net_debt_to_ebitda",
 ]);
 
+// Absolute-value metric-only uni_accounts (derive-analytics) that are NOT
+// disclosed statement lines — they live in the Ratios/Derived subsection, never
+// inline in IS/BS/CF (spec §P2.3). Mirrors scripts/upsert_sec_financials.py
+// `_METRIC_ONLY_UNI`. A metric cell for one of these must never create a row.
+const METRIC_ONLY_UNI = new Set<string>(["ebitda", "adjusted_ebitda", "free_cash_flow"]);
+
+// Derived single-quarter reconstructions (derive-base): they carry no
+// source_account/ordinal and ATTACH to a display-eligible prototype row by
+// uni_account — they never create a prototype themselves (spec §P1.2/G5).
+const DERIVED_SINGLE_QUARTER_PKINDS = new Set<PeriodKind>([
+  "derived_q2",
+  "derived_q3",
+  "derived_q4",
+]);
+
+// A long-tail bucket uni_account holds many source_accounts under one key, so a
+// bucket member's rowId must include source_account to stay distinct.
+function isLongTailUni(uni: string): boolean {
+  return uni.endsWith("_long_tail");
+}
+
+// rowId contract: core rows key on uni_account so a derived single-quarter
+// metric (bucket-less, keyed only by uni_account) can attach to its PDF row;
+// long-tail bucket members key on uni_account|source_account to disambiguate the
+// many source_accounts that share one bucket uni_account (spec §P1.2/P2.6).
+function rowIdOf(uni: string, sourceAccount: string | null): string {
+  return isLongTailUni(uni) && sourceAccount != null ? `${uni}|${sourceAccount}` : uni;
+}
+
+// A direct fact is a display-eligible row prototype iff it carries resolved
+// display metadata (display_label and/or ordinal). A display-INELIGIBLE
+// synthetic SUM core (e.g. selling_general_administrative = SUM(S&M+G&A)) has
+// BOTH display_label and ordinal null — it builds no row prototype, and a
+// derived single-quarter cell must not pull it back via the shared uni_account
+// (spec §G7, plan note). Metric cells are never prototypes (handled separately).
+function isDisplayEligiblePrototype(c: Cell): boolean {
+  if (c.source_table !== "facts") return false;
+  if (METRIC_ONLY_UNI.has(c.uni_account)) return false;
+  // Long-tail member needs a source_account to form a distinct rowId/label.
+  if (isLongTailUni(c.uni_account) && c.source_account == null) return false;
+  return c.display_label != null || c.ordinal != null;
+}
+
 function isFyPeriod(p: string): boolean {
   return /^FY\d{4}$/.test(p);
 }
@@ -117,14 +167,134 @@ function q4ToFy(p: string): string {
   return m ? `FY${m[1]}` : p;
 }
 
+// ---- CF cash movement analysis (SEC EFM §7.7) ----------------------------- //
+// The cash-reconciliation BALANCE concept is stored once per period as the
+// period-END balance (quarter → uni=ending_cash; annual/YTD → cf_long_tail).
+// Movement analysis: render it as "…at end of period" for period P AND synthesize
+// a "…at beginning of period" row = the EXACT predecessor period's ending balance
+// (never subtract; blank when the predecessor is absent).
+const CASH_BEGINNING_ROW_KEY = "cash_beginning_of_period";
+const CASH_BEGIN_LABEL =
+  "Cash, cash equivalents, and restricted cash at beginning of period";
+
+function isCashBalanceSource(sourceAccount: string | null | undefined): boolean {
+  const l = (sourceAccount ?? "").toLowerCase();
+  // startsWith (NOT includes): the cash BALANCE concept name starts with the cash
+  // prefix. `includes` would wrongly match the FX flow concept
+  // `EffectOfExchangeRateOnCashCashEquivalents…` (contains "cashcashequivalents")
+  // and the net-change `…PeriodIncreaseDecreaseIncludingExchangeRateEffect`,
+  // double-counting candidates → fail-closed blanks everything. Mirrors the
+  // adapter's `_is_cash_balance_concept` prefix allowlist.
+  if (l.includes("increasedecrease") || l.includes("periodincrease") || l.includes("perioddecrease"))
+    return false; // exclude net-change FLOW concepts
+  return (
+    l.startsWith("cashandcashequivalents") ||
+    l.startsWith("cashcashequivalents") ||
+    l.startsWith("restrictedcash")
+  );
+}
+
+// Predecessor fiscal period (exact, by label): Q2→Q1, Q1→prior-FY Q4, FY→FY-1.
+export function cfPeriodPredecessor(period: string): string | null {
+  let m = /^Q([1-4])_FY(\d{4})$/.exec(period);
+  if (m) {
+    const q = Number(m[1]);
+    const fy = Number(m[2]);
+    return q > 1 ? `Q${q - 1}_FY${fy}` : `Q4_FY${fy - 1}`;
+  }
+  m = /^FY(\d{4})$/.exec(period);
+  if (m) return `FY${Number(m[1]) - 1}`;
+  return null;
+}
+
+type CfCashMovement = {
+  cells: Cell[]; // cash-balance facts remapped uni_account -> ending_cash
+  beginByPeriod: Map<string, MatrixCell>;
+};
+
+// Pre-builder: normalize cash-balance facts onto the approved `ending_cash` uni
+// (so annual `cf_long_tail` cash is NOT summed into the bucket and both modes show
+// a clean end row), and synthesize the beginning row's cells from the predecessor
+// period's ending balance. Returns null when there are no cash-balance facts.
+function cfCashMovement(filtered: Cell[], periods: string[]): CfCashMovement | null {
+  // Fail-closed exact-one-per-period (spec §A): the matcher also admits
+  // RestrictedCash etc., so a period could carry >1 cash-like fact. Accept a
+  // period's ending balance ONLY when exactly one candidate exists; otherwise
+  // skip normalization for that period (leave the facts as-is) + warn, so we
+  // never silently pick the wrong ending/beginning cash.
+  const candidatesByPeriod = new Map<string, Cell[]>();
+  for (const c of filtered) {
+    if (!isCashBalanceSource(c.source_account)) continue;
+    const arr = candidatesByPeriod.get(c.period);
+    if (arr) arr.push(c);
+    else candidatesByPeriod.set(c.period, [c]);
+  }
+  if (candidatesByPeriod.size === 0) return null;
+  const acceptedPeriods = new Set<string>();
+  const endingByPeriod = new Map<string, Cell>();
+  for (const [period, cands] of candidatesByPeriod) {
+    if (cands.length === 1) {
+      acceptedPeriods.add(period);
+    } else if (typeof console !== "undefined") {
+      console.warn(
+        `[cfCashMovement] ${cands.length} cash-balance candidates for ${period}; ` +
+        `skipping movement analysis for this period (fail-closed).`);
+    }
+  }
+  const cells = filtered.map((c) => {
+    if (!isCashBalanceSource(c.source_account) || !acceptedPeriods.has(c.period)) return c;
+    const norm: Cell = { ...c, uni_account: "ending_cash" };
+    endingByPeriod.set(c.period, norm);
+    return norm;
+  });
+  const beginByPeriod = new Map<string, MatrixCell>();
+  for (const p of periods) {
+    const pred = cfPeriodPredecessor(p);
+    const predEnd = pred ? endingByPeriod.get(pred) : undefined;
+    if (predEnd) {
+      beginByPeriod.set(p, {
+        cell: {
+          ...predEnd,
+          period: p,
+          uni_account: CASH_BEGINNING_ROW_KEY,
+          display_label: CASH_BEGIN_LABEL,
+          display_negated: null,
+        },
+        status: "SOURCE_OF_TRUTH",
+      });
+    }
+  }
+  return { cells, beginByPeriod };
+}
+
+// Post-builder (shared by pdf + uni): insert the synthesized beginning row
+// directly BEFORE the `ending_cash` row (PDF order: net change → beginning → end).
+export function injectCfCashBeginningRow(matrix: Matrix, mv: CfCashMovement): Matrix {
+  if (mv.beginByPeriod.size === 0) return matrix;
+  const endIdx = matrix.rows.findIndex((r) => r.key === "ending_cash");
+  if (endIdx < 0) return matrix;
+  // Mirror the ending row's label STYLE: PDF mode → verbose "…at end of period"
+  // (so beginning = verbose "…at beginning of period"); uni mode → canonical
+  // "Ending Cash" (so beginning = "Beginning Cash"). Keeps the two cash rows
+  // stylistically consistent within each view mode.
+  const endLabel = matrix.rows[endIdx].label;
+  const beginLabel = /end of period/i.test(endLabel) ? CASH_BEGIN_LABEL : "Beginning Cash";
+  const beginRow = { key: CASH_BEGINNING_ROW_KEY, label: beginLabel, kind: "subtotal", indent: 0 };
+  const rows = [...matrix.rows.slice(0, endIdx), beginRow, ...matrix.rows.slice(endIdx)];
+  const cellsForBeginning: Record<string, MatrixCell> = {};
+  for (const p of matrix.periods) {
+    cellsForBeginning[p] = mv.beginByPeriod.get(p) ?? { status: "PENDING" };
+  }
+  return { ...matrix, rows, cells: { ...matrix.cells, [CASH_BEGINNING_ROW_KEY]: cellsForBeginning } };
+}
+
 export function buildMatrix(
   cells: Cell[],
   statement: Statement,
   version: Version,
   frequency: Frequency,
+  viewMode: "pdf" | "uni" = "pdf",
 ): Matrix {
-  const rows = ROWS_BY_STATEMENT[statement];
-
   // Year-end balance-sheet snapshots are stored as `Q4_FYyyyy` / instant_period_end
   // (a balance sheet is point-in-time; the fiscal-year-end snapshot IS the
   // Q4-end snapshot — there is no separate `FYyyyy` instant row). In annual
@@ -182,13 +352,163 @@ export function buildMatrix(
   const periodSet = new Set<string>(filtered.map((c) => c.period));
   const periods = Array.from(periodSet).sort(comparePeriods);
 
-  // Long-tail bucket rows by design hold many source_accounts under the same
-  // uni_account (e.g. operating_expense_long_tail = G&A + S&M when SG&A
-  // sub-accounts are split by the issuer). Detect those so we sum across
-  // children rather than last-write-wins.
+  // CF cash movement analysis (EFM §7.7): normalize cash-balance facts onto
+  // `ending_cash` (so annual cf_long_tail cash is not bucketed) + synthesize the
+  // beginning row. Runs pre-split so BOTH builders see the normalized cells.
+  const cfMv = statement === "CF" ? cfCashMovement(filtered, periods) : null;
+  const work = cfMv ? cfMv.cells : filtered;
+
+  // -------------------------------------------------------------------------
+  // RATIO statement: unchanged — fixed RATIO_ROWS dictionary, summed long-tail
+  // (RATIO has no long-tail buckets today, but keep the dictionary path intact;
+  // this task only restructures IS/BS/CF row building — spec §8 "RATIO as-is").
+  // -------------------------------------------------------------------------
+  if (statement === "RATIO") {
+    return buildDictionaryMatrix(filtered, statement, periods);
+  }
+
+  // uni_account mode: route the three statements through the fixed-dictionary
+  // builder (canonical core rows + long-tail SUM buckets). PDF mode falls through
+  // to the data-driven path below. (spec: view-mode toggle.)
+  if (viewMode === "uni") {
+    const uniM = buildDictionaryMatrix(work, statement, periods);
+    return cfMv ? injectCfCashBeginningRow(uniM, cfMv) : uniM;
+  }
+
+  // -------------------------------------------------------------------------
+  // IS / BS / CF: data-driven PDF-faithful rows. Each row prototype comes from
+  // a DIRECT, display-eligible fact (carries source_account + display metadata);
+  // rows are ordered by `ordinal` (nulls last, stable) with label = display_label
+  // (fallback source_account). Derived single-quarter metrics (derived_q2/q3/q4)
+  // attach by uni_account to the matching prototype row — they never create a
+  // ghost row, and they never resurrect a display-ineligible synthetic core.
+  // (spec §P1.2/P2.6/G5/G2.)
+  // -------------------------------------------------------------------------
+
+  // Pass 1: build row prototypes from display-eligible direct facts.
+  // (work = filtered, with CF cash-balance facts normalized onto `ending_cash`.)
+  // Map rowId -> prototype state. `seq` records first-seen order so the sort is
+  // stable for equal/null ordinals. `protoPeriod`/`protoOrdinal`/`protoLabel`
+  // are chosen deterministically (latest period wins) so a row's label/ordinal
+  // don't depend on cell iteration order (spec §G5).
+  type Proto = {
+    rowId: string;
+    uni: string;
+    seq: number;
+    ordinal: number | null;
+    label: string;
+    protoPeriod: string; // period that currently owns label/ordinal
+    isLongTail: boolean;
+  };
+  const protos = new Map<string, Proto>();
+  let seqCounter = 0;
+  for (const c of work) {
+    if (!isDisplayEligiblePrototype(c)) continue;
+    const rowId = rowIdOf(c.uni_account, c.source_account);
+    const label = c.display_label ?? c.source_account ?? c.uni_account;
+    const existing = protos.get(rowId);
+    if (!existing) {
+      protos.set(rowId, {
+        rowId,
+        uni: c.uni_account,
+        seq: seqCounter++,
+        ordinal: c.ordinal,
+        label,
+        protoPeriod: c.period,
+        isLongTail: isLongTailUni(c.uni_account),
+      });
+      continue;
+    }
+    // Deterministic prototype: the latest period's fact owns label + ordinal.
+    if (comparePeriods(c.period, existing.protoPeriod) > 0) {
+      existing.protoPeriod = c.period;
+      existing.ordinal = c.ordinal;
+      existing.label = label;
+    }
+  }
+
+  // Order rows by ordinal asc (nulls last), tie-broken by first-seen seq (stable).
+  const orderedProtos = Array.from(protos.values()).sort((a, b) => {
+    const ao = a.ordinal;
+    const bo = b.ordinal;
+    if (ao == null && bo == null) return a.seq - b.seq;
+    if (ao == null) return 1; // nulls last
+    if (bo == null) return -1;
+    if (ao !== bo) return ao - bo;
+    return a.seq - b.seq;
+  });
+
+  // For derived single-quarter attach we resolve a uni_account back to the
+  // display-eligible prototype rowId. A display-INELIGIBLE synthetic core never
+  // entered `protos`, so its uni_account has no entry here and a derived cell for
+  // it is correctly dropped (not pulled back into the statement). Core rowId ===
+  // uni_account; long-tail buckets are not the attach target for bucket-less
+  // derived metrics (those are keyed by uni_account only), so map only core unis.
+  const uniToCoreRowId = new Map<string, string>();
+  for (const p of orderedProtos) {
+    if (!p.isLongTail) uniToCoreRowId.set(p.uni, p.rowId);
+  }
+
+  // Initialize the pivot grid.
+  const cellMap: Record<string, Record<string, MatrixCell>> = {};
+  for (const p of orderedProtos) {
+    cellMap[p.rowId] = {};
+    for (const per of periods) cellMap[p.rowId][per] = { status: "PENDING" };
+  }
+
+  // Pass 2: fill cells.
+  for (const c of work) {
+    // Metric-only absolute-value rows (ebitda / fcf) never render inline.
+    if (METRIC_ONLY_UNI.has(c.uni_account)) continue;
+
+    if (DERIVED_SINGLE_QUARTER_PKINDS.has(c.period_kind)) {
+      // Attach by uni_account to its display-eligible core prototype. If no such
+      // prototype exists (display-ineligible synthetic core), drop it — never
+      // create a ghost row, never pull the synthetic back.
+      const rowId = uniToCoreRowId.get(c.uni_account);
+      if (rowId == null) continue;
+      if (cellMap[rowId]?.[c.period] === undefined) continue;
+      cellMap[rowId][c.period] = { cell: c, status: c.status };
+      continue;
+    }
+
+    // Direct facts (and any other allowed cell): write to their own prototype
+    // row. Only display-eligible facts have a row; everything else is dropped.
+    const rowId = rowIdOf(c.uni_account, c.source_account);
+    if (cellMap[rowId]?.[c.period] === undefined) continue;
+    cellMap[rowId][c.period] = { cell: c, status: c.status };
+  }
+
+  const pdfMatrix: Matrix = {
+    periods,
+    rows: orderedProtos.map((p) => ({
+      key: p.rowId,
+      label: p.label,
+      kind: p.isLongTail ? "long_tail_bucket" : "core",
+      indent: 0,
+    })),
+    cells: cellMap,
+  };
+  return cfMv ? injectCfCashBeginningRow(pdfMatrix, cfMv) : pdfMatrix;
+}
+
+// Legacy fixed-dictionary matrix builder, retained for RATIO (and as a label
+// fallback path). Rows come from ROWS_BY_STATEMENT; long-tail buckets sum their
+// children with rollup suppression. IS/BS/CF no longer use this — they are
+// data-driven off the ticker's actual disclosed facts (Task 11).
+export function buildDictionaryMatrix(
+  filtered: Cell[],
+  statement: Statement,
+  periods: string[],
+): Matrix {
+  // ebitda / free_cash_flow are DERIVED (never on a filing's face three statements);
+  // they render only in the Ratios-tab DerivedNonGaap subsection, so they must never
+  // appear inline here. Matches the PDF path's METRIC_ONLY_UNI suppression. No-op for
+  // RATIO (its RATIO_ROWS contains no raw ebitda/free_cash_flow key).
+  const rows = ROWS_BY_STATEMENT[statement].filter((r) => !METRIC_ONLY_UNI.has(r.key));
+
   const longTailKeys = new Set(rows.filter((r) => r.kind === "long_tail_bucket").map((r) => r.key));
 
-  // Pivot
   const cellMap: Record<string, Record<string, MatrixCell>> = {};
   for (const row of rows) {
     cellMap[row.key] = {};
@@ -196,13 +516,9 @@ export function buildMatrix(
       cellMap[row.key][p] = { status: "PENDING" };
     }
   }
-  // Buffer for long-tail aggregation: [uni_account][period] -> list of children
   const longTailBuf: Record<string, Record<string, Cell[]>> = {};
   for (const c of filtered) {
-    if (!cellMap[c.uni_account]) {
-      // Not in dictionary — skip (parser produced an unknown uni_account)
-      continue;
-    }
+    if (!cellMap[c.uni_account]) continue;
     if (!cellMap[c.uni_account][c.period]) continue;
     if (longTailKeys.has(c.uni_account)) {
       (longTailBuf[c.uni_account] ??= {})[c.period] ??= [];
@@ -211,10 +527,6 @@ export function buildMatrix(
       cellMap[c.uni_account][c.period] = { cell: c, status: c.status };
     }
   }
-  // Aggregate long-tail buckets: sum value * weight; keep child list in provenance.
-  // Suppress children whose xbrl_tag rolls up into a core row that already has a
-  // populated cell for the same period (double-display avoidance — see
-  // `LONG_TAIL_ROLLUP_HINTS` in constants.ts and the SG&A long-tail design note).
   for (const k of longTailKeys) {
     const byPeriod = longTailBuf[k];
     if (!byPeriod) continue;
@@ -235,19 +547,18 @@ export function buildMatrix(
         }
         return true;
       });
-      if (children.length === 0) {
-        // All children rolled up into populated core rows; leave the bucket
-        // cell as PENDING ("—") to avoid visually duplicating the core row.
-        continue;
-      }
+      if (children.length === 0) continue;
       const summed = children.reduce((s, c) => s + c.value * (c.weight ?? 1), 0);
-      // Use first child as template for shape; override value + tag + provenance.
       const base = children[0];
       const synthetic: Cell = {
         ...base,
         uni_account: k,
         source_account: children.length === 1 ? base.source_account : "SUM(long_tail)",
         xbrl_tag: null,
+        // bucket sign = the summed value's own sign; never inherit a child's
+        // display_negated (the `...base` spread copies children[0]'s flag, which
+        // would make displayValue negate the WHOLE bucket — latent sign bug).
+        display_negated: null,
         value: summed,
         weight: 1,
         provenance: {
@@ -282,6 +593,71 @@ export function buildMatrix(
   return {
     periods,
     rows: rows.map((r) => ({ key: r.key, label: r.label, kind: r.kind, indent: r.indent ?? 0 })),
+    cells: cellMap,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Derived / Non-GAAP ABSOLUTE-VALUE subsection (Task 13, spec §P2.3).
+//
+// `ebitda` (statement=IS) and `free_cash_flow` (statement=CF) are derived $
+// measures that are METRIC_ONLY_UNI — buildMatrix deliberately drops them from
+// the inline IS/CF statements, and they are NOT in RATIO_ROWS, so neither
+// matrix surfaces them. This selector scans the raw cells array and gathers ONLY
+// those metric cells into a Matrix-shaped result so the Viewer can render a
+// dedicated "Derived / Non-GAAP" subsection (formatted as $, not ratios).
+//
+// Rows always render in the canonical DERIVED_NONGAAP_ABSOLUTE_ROWS order (even
+// when a ticker has no data for one of them), for visual continuity. Period and
+// version filtering mirror the IS/CF duration rules: quarter_duration ∪
+// derived_q2/q3/q4 in quarterly mode, fy_annual_duration in annual mode.
+// ---------------------------------------------------------------------------
+
+// Canonical $-row labels, sourced from the statement dictionaries so the
+// subsection reads identically to the (now-removed) inline EBITDA / FCF lines.
+const DERIVED_NONGAAP_LABELS: Record<string, string> = {
+  ebitda: IS_ROWS.find((r) => r.key === "ebitda")?.label ?? "EBITDA",
+  free_cash_flow: CF_ROWS.find((r) => r.key === "free_cash_flow")?.label ?? "Free Cash Flow",
+};
+
+export function buildDerivedNonGaapRows(
+  cells: Cell[],
+  version: Version,
+  frequency: Frequency,
+): Matrix {
+  const wanted = new Set<string>(DERIVED_NONGAAP_ABSOLUTE_ROWS);
+  const allowedPkinds =
+    frequency === "quarterly" ? QUARTERLY_PKINDS_IS_CF : ANNUAL_PKINDS_IS_CF;
+
+  const filtered = cells.filter((c) => {
+    if (!wanted.has(c.uni_account)) return false;
+    if (c.source_table !== "metrics") return false;
+    if (c.version !== version) return false;
+    return allowedPkinds.includes(c.period_kind);
+  });
+
+  const periods = Array.from(new Set(filtered.map((c) => c.period))).sort(comparePeriods);
+
+  // Fixed row order from the canonical list; always present for continuity.
+  const rowKeys = DERIVED_NONGAAP_ABSOLUTE_ROWS;
+  const cellMap: Record<string, Record<string, MatrixCell>> = {};
+  for (const key of rowKeys) {
+    cellMap[key] = {};
+    for (const p of periods) cellMap[key][p] = { status: "PENDING" };
+  }
+  for (const c of filtered) {
+    if (cellMap[c.uni_account]?.[c.period] === undefined) continue;
+    cellMap[c.uni_account][c.period] = { cell: c, status: c.status };
+  }
+
+  return {
+    periods,
+    rows: rowKeys.map((key) => ({
+      key,
+      label: DERIVED_NONGAAP_LABELS[key] ?? key,
+      kind: "derived_nongaap_absolute",
+      indent: 0,
+    })),
     cells: cellMap,
   };
 }

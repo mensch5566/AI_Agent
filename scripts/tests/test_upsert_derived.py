@@ -895,3 +895,57 @@ def test_main_apply_fails_closed_when_analytics_points_to_older_derive_base(tmp_
     with pytest.raises(SystemExit):
         upsert.main()
     assert apply_called["n"] == 0, "apply MUST NOT run when analytics points to an older derive-base run"
+
+
+# --------------------------------------------------------------------------- #
+# row_to_dict: ordinal is smallint in DB — coerce float XBRL order → int,
+# fail-loud on a genuinely fractional order (would truncate-collide silently).
+# --------------------------------------------------------------------------- #
+
+def _fact_row(upsert, ordinal):
+    A = upsert.A
+    return A.FactRow(
+        cell_id="cid::x", ticker="T", period="FY2025", period_end="2025-12-31",
+        period_kind="annual", statement="IS", version="GAAP",
+        uni_account="gross_profit", source_account="GrossProfit", xbrl_tag="GrossProfit",
+        value=1.0, weight=1, unit="USD_millions", status="SOURCE_OF_TRUTH",
+        ordinal=ordinal, long_tail_metadata=None,
+        provenance={"source_filing": "10-K"},
+    )
+
+
+def test_row_to_dict_coerces_integer_valued_float_ordinal_to_int():
+    upsert = _import_upsert()
+    d = upsert.row_to_dict(_fact_row(upsert, 3.0))
+    assert d["ordinal"] == 3
+    assert isinstance(d["ordinal"], int)
+    assert "display_eligible" not in d
+
+
+def test_row_to_dict_keeps_none_ordinal():
+    upsert = _import_upsert()
+    d = upsert.row_to_dict(_fact_row(upsert, None))
+    assert d["ordinal"] is None
+
+
+def test_row_to_dict_fails_loud_on_fractional_ordinal():
+    upsert = _import_upsert()
+    with pytest.raises(ValueError):
+        upsert.row_to_dict(_fact_row(upsert, 1.5))
+
+
+def test_row_to_dict_does_not_add_ordinal_to_dimensional_row():
+    # row_to_dict is shared; DimensionalRow has no `ordinal` field/column. The
+    # coercion must NOT add the key (sec_financial_dimensional_facts rejects it).
+    upsert = _import_upsert()
+    A = upsert.A
+    dim = A.DimensionalRow(
+        cell_id="d::1", ticker="T", period="FY2025", period_end="2025-12-31",
+        period_kind="fy_annual", axis="business_segment", axis_qname=None,
+        axis_key="business_segment", member="CCG", member_qname=None,
+        member_key="CCG", source_account="CCG", source_account_qname=None,
+        source_doc=None, uni_account="revenue", value=1.0, unit="USD_millions",
+        decimals=-6, other_dimensions=None, provenance={},
+    )
+    d = upsert.row_to_dict(dim)
+    assert "ordinal" not in d

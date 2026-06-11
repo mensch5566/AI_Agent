@@ -27,6 +27,8 @@ export type Cell = {
   version: Version;
   uni_account: string;
   source_account: string | null;
+  display_label: string | null;
+  display_negated?: boolean | null;
   xbrl_tag: string | null;
   value: number;
   weight: number | null;

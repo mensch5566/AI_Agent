@@ -34,6 +34,20 @@ from .audit_metadata import (
 )
 from .dimensional_aliases import build_axis_key, build_member_key
 from .period_kind import infer_period_kind, normalize_supplement_period_kind
+from .presentation_resolver import (
+    AmbiguityError,
+    CANONICAL_CONCEPT,
+    NeedsNlmOrder,
+    _local,
+    compute_global_ordinals,
+    matching_face_networks,
+    resolve_label_ordinal,
+    resolve_label_ordinal_any,
+    resolve_via_uni,
+    resolve_via_uni_any,
+    resolve_via_label_text,
+)
+from .source_account_class import classify_source_account
 from .unit_canonicalize import (
     PCT_UNITS,
     UnitNormalizationError,
@@ -130,6 +144,21 @@ class FactRow:
     ordinal: int | None
     long_tail_metadata: dict | None
     provenance: dict
+    # PDF-faithful display metadata (Task 8 / spec G4 prep). Resolved by
+    # attach_display_metadata() AFTER the per-source adapt functions run.
+    #   display_label    — PDF line label (null → frontend falls back to source_account)
+    #   display_eligible — False for a synthetic SUM-of-multiple-PDF-lines core:
+    #                       it builds NO Statement-view row (its component
+    #                       long-tail rows are the PDF lines). NOT a DB column —
+    #                       stripped before upsert (see row_to_dict).
+    #   display_negated  — PDF-faithful sign flag from the SAME matched presentation
+    #                       arc that yielded (display_label, ordinal). True => the
+    #                       frontend renders -value (TRUE negation, not -abs). None
+    #                       until resolved (legacy tickers not yet re-upserted).
+    #                       IS a DB column (migration 2026060700).
+    display_label: str | None = None
+    display_eligible: bool = True
+    display_negated: bool | None = None
 
 
 @dataclass
@@ -448,6 +477,355 @@ def _adapt_one_gaap_fact(
         long_tail_metadata=f.get("long_tail_metadata"),
         provenance=provenance,
     )
+
+
+# ---- Task 8: PDF-faithful display metadata resolution -----------------------
+#
+# After the per-source adapt functions build the FactRow list, this layer
+# resolves a `display_label` + `ordinal` + `provenance` ordinal lineage per
+# DISPLAY-ELIGIBLE fact (spec §13-§16, G2/G3/G4/G6/G7). Parse skills stay
+# untouched — all resolution lives here at the upsert boundary.
+#
+# Routing (spec G6, classifier order null → synthetic → preserved_pdf_label →
+# tag_like):
+#   tag_like / preserved_pdf_label → resolve_label_ordinal(local, ...)
+#     (for preserved_pdf_label the source_account IS the PDF text → fall back to
+#      it as the display_label when the resolver yields no label)
+#   synthetic / null              → resolve_via_uni(uni_account, ...)
+#   on NeedsNlmOrder / AmbiguityError → look up the cell's ordinal in the
+#     AUDITED NLM artifact (keyed by cell_id); set ordinal + ordinal_source="nlm"
+#     when present, else leave ordinal=None (next task's coverage gate catches it).
+#
+# Display-ineligibility (spec G7): a synthetic source_account that SUMS MULTIPLE
+# PDF lines (SUM(D&A components), SUM(S&M+G&A)) is display_eligible=False → it
+# builds NO statement row (its component long-tail rows are the PDF lines). The
+# core SUM stays in storage for EBITDA/analytics; it just never becomes a
+# Statement-view prototype, and a derived single-quarter cell must not pull it
+# back via shared uni_account.
+
+
+def _local_name(source_account: str) -> str:
+    """Bare local name from a tag-like source_account (strip any prefix:)."""
+    return source_account.rsplit(":", 1)[-1]
+
+
+def _is_cash_balance_concept(local: str) -> bool:
+    """CF cash-reconciliation BALANCE concept (the period-start/period-end roll-forward
+    anchor). The stored fact is the period-END balance, so its display must resolve to
+    the periodEnd arc ("…at end of period"), not matched[0] (=periodStart). EFM §7.7
+    movement analysis. Prefix allowlist mirrors face_completeness._is_cash_concept but
+    EXCLUDES net-change FLOW concepts (PeriodIncreaseDecrease / Period(Increase|Decrease))."""
+    l = local.lower()
+    if any(s in l for s in ("increasedecrease", "periodincrease", "perioddecrease")):
+        return False
+    return (l.startswith("cashandcashequivalents")
+            or l.startswith("cashcashequivalents")
+            or l.startswith("restrictedcash"))
+
+
+def _set_xbrl_ordinal_provenance(
+    row: "FactRow", ordinal, network_role: str | None,
+    match_method: str = "xbrl_presentation",
+) -> None:
+    """Stamp ordinal + XBRL-sourced ordinal provenance on a FactRow.
+
+    XBRL ordinals carry source_doc/period = the fact's own filing (the network
+    role is the deterministic prototype), per spec §14.
+
+    `match_method` distinguishes a direct concept match ("xbrl_presentation")
+    from a preserved_pdf_label ordinal BORROWED via the uni→canonical concept
+    ("xbrl_presentation_via_uni", T14 item1) so a human can audit the borrow.
+    """
+    row.ordinal = ordinal
+    row.provenance["ordinal_source"] = "xbrl"
+    row.provenance["ordinal_source_doc"] = row.provenance.get("source_filing")
+    row.provenance["ordinal_source_period"] = row.period
+    row.provenance["ordinal_match_method"] = match_method
+    if network_role is not None:
+        row.provenance["ordinal_source_network"] = network_role
+
+
+def _try_audited_nlm_ordinal(row: "FactRow", audited_for_stmt: dict | None) -> None:
+    """Fall back to the AUDITED NLM ordering artifact for this statement.
+
+    `audited_for_stmt` shape (built by the upsert script from
+    nlm_statement_order.read_audited_order + artifact metadata):
+        {
+          "cell_id_to_ordinal": {cell_id: ordinal, ...},   # audited only
+          "source_doc": str, "period": str, "artifact_hash": str,
+        }
+    If the row's cell_id has an audited ordinal → set ordinal +
+    ordinal_source="nlm" provenance. Else leave ordinal=None (coverage gate next
+    task). NEVER feeds a pending_audit artifact (the reader already gated that).
+    """
+    if not audited_for_stmt:
+        return
+    mapping = audited_for_stmt.get("cell_id_to_ordinal") or {}
+    ordinal = mapping.get(row.cell_id)
+    if ordinal is None:
+        return
+    row.ordinal = ordinal
+    row.provenance["ordinal_source"] = "nlm"
+    row.provenance["ordinal_source_doc"] = audited_for_stmt.get("source_doc")
+    row.provenance["ordinal_source_period"] = audited_for_stmt.get("period")
+    row.provenance["ordinal_match_method"] = "nlm_audited_order"
+    if audited_for_stmt.get("artifact_hash") is not None:
+        row.provenance["ordinal_artifact_hash"] = audited_for_stmt["artifact_hash"]
+
+
+def attach_display_metadata(
+    facts: list["FactRow"],
+    *,
+    statement: str,
+    edges: list[dict],
+    labels: dict,
+    network_role: str | None,
+    accepted_concepts: set | None = None,
+    audited_orders: dict | None = None,
+) -> None:
+    """Resolve display_label + ordinal + provenance for one statement's facts.
+
+    Mutates each FactRow in place. Call once per statement (IS/BS/CF) with that
+    statement's selected presentation network role, its edges_pre, and labels.json.
+    Facts whose `.statement` != `statement` are skipped (caller groups by
+    statement, but the guard keeps this safe if mixed).
+
+    `accepted_concepts` = the UNION of bare concept local names across ALL face
+    networks matching `statement` (presentation_resolver.accepted_face_concepts).
+    Used for the narrow note-level exclusion below.
+
+    `audited_orders` maps statement → audited-order dict (see
+    _try_audited_nlm_ordinal). Used as the fallback when the XBRL resolver can't
+    resolve an ordinal (NeedsNlmOrder / AmbiguityError) or the network is absent.
+
+    Resolution (spec G2/G3/G6/G7 + T14 Issue2):
+      - classify source_account → 4 classes.
+      - synthetic SUM-of-multiple-PDF-lines → display_eligible=False, no row (G7).
+      - tag_like / preserved_pdf_label → resolve_label_ordinal_any across ALL
+        matching face networks (10-K full ∪ 10-Q condensed). preserved_pdf_label
+        falls back to source_account as the display_label.
+      - synthetic (non-multi) / null → resolve_via_uni(uni_account, ...).
+      - NeedsNlmOrder / AmbiguityError → audited NLM ordinal (else ordinal=None).
+      - NARROW note-level exclusion (T14 Issue2): a STILL-unresolved `tag_like`
+        GAAP fact whose concept is NOT in the (non-empty) accepted face set is a
+        note-level sub-component → display_eligible=False with a durable
+        provenance reason. NEVER applied to preserved_pdf_label / null /
+        synthetic, nor when there is no face network (accepted empty) — those
+        keep failing the coverage gate (fail-loud; need NLM / manual).
+    """
+    audited_for_stmt = (audited_orders or {}).get(statement)
+
+    # T15 fix: the stamped ordinal is a GLOBAL pre-order-DFS position over the
+    # merged presentation tree of all face networks — NOT the raw sibling-relative
+    # XBRL `order` (which collides across abstract groups and scrambles row order).
+    # The per-network resolvers still decide label + resolved-or-not; we only swap
+    # the NUMBER for the resolved concept's global position here.
+    global_ord = compute_global_ordinals(edges, statement)
+
+    def _global_for(concept_local, fallback):
+        """Global ordinal for a resolved concept, falling back to the per-network
+        ordinal if (defensively) the concept isn't in the merged tree."""
+        if not concept_local:
+            return fallback
+        return global_ord.get(concept_local, fallback)
+
+    for row in facts:
+        if row.statement != statement:
+            continue
+
+        cls = classify_source_account(row.source_account or None)
+
+        # --- Display-ineligibility: synthetic SUM of multiple PDF lines ----- #
+        # These never build a Statement-view row (G7); component long-tail rows
+        # are the PDF lines. Keep in storage for EBITDA/analytics; no label/ordinal.
+        if cls == "synthetic" and _is_sum_of_multiple(row.source_account):
+            row.display_eligible = False
+            row.display_label = None
+            row.ordinal = None
+            continue
+
+        if cls in ("tag_like", "preserved_pdf_label"):
+            # Resolve across ALL matching face networks (full ∪ condensed), not a
+            # single selected one (T14 Issue2). resolve_label_ordinal_any already
+            # skips AmbiguityError networks internally.
+            # CF cash reconciliation: the stored fact is the period-END balance, so
+            # resolve to the periodEnd arc ("…at end of period") instead of matched[0]
+            # (=periodStart). The "…beginning of period" row is synthesized cross-period
+            # in the frontend (movement analysis). EFM §7.7.
+            _prefer = "end" if (statement == "CF"
+                                and _is_cash_balance_concept(_local_name(row.source_account))) else None
+            label, ordinal, negated = resolve_label_ordinal_any(
+                _local_name(row.source_account), edges, labels, statement,
+                prefer_period=_prefer,
+            )
+            row.display_negated = negated
+            match_method = "xbrl_presentation"
+            # The concept whose GLOBAL position we stamp (the matched tag itself).
+            resolved_concept = _local_name(row.source_account)
+            # Face network the ordinal is attributed to. = network_role for the
+            # tag_like / via_uni paths; overridden to the ACTUAL hit network on the
+            # via_label path so provenance does not lie (Codex round1 #6).
+            ordinal_network = network_role
+
+            if cls == "preserved_pdf_label":
+                # source_account IS the PDF text → use it as the display label
+                # when the resolver produced none. Keep this period's EXACT
+                # wording ("Income" vs "Loss before income taxes").
+                row.display_label = label or row.source_account
+                # T14 item1: a preserved_pdf_label fact stores PDF text as its
+                # source_account, so the local-name match above never resolves.
+                # If its uni_account is a CORE key whose canonical XBRL concept
+                # IS on the face network (e.g. LITE income_before_taxes), borrow
+                # THAT ordinal — no NLM needed, label stays the PDF text.
+                # Long-tail buckets (no canonical mapping) → NeedsNlmOrder →
+                # unchanged NLM routing (SNDK nonoperating_long_tail).
+                if ordinal is None:
+                    try:
+                        _, uni_ordinal, uni_negated = resolve_via_uni_any(
+                            row.uni_account, edges, labels, statement
+                        )
+                    except NeedsNlmOrder:
+                        uni_ordinal, uni_negated = None, False
+                    if uni_ordinal is not None:
+                        ordinal = uni_ordinal
+                        # Sign comes from the SAME borrowed canonical edge.
+                        row.display_negated = uni_negated
+                        match_method = "xbrl_presentation_via_uni"
+                        # Borrow positions the row at its canonical concept's slot.
+                        resolved_concept = CANONICAL_CONCEPT.get(row.uni_account)
+                    else:
+                        # Last resort before NLM for ANY preserved_pdf_label row whose
+                        # concept link can't be reached by local-name match NOR by the
+                        # uni→canonical borrow (the SNDK legacy AGENT_CLASSIFIED rows
+                        # "Business separation costs" / "Gain on business divestiture"
+                        # are the motivating case, but the branch is intentionally
+                        # GENERAL — a future filer's new prose-labeled face line gets
+                        # placed automatically). Safety rests entirely on the matcher
+                        # being HARD fail-closed (resolve_via_label_text): face-network
+                        # display labels only, full-qname identity preserved, UNIQUE
+                        # concept hit required, else ordinal stays None → NLM/gate.
+                        # source_account (display label) is NOT mutated. Spec
+                        # 2026-06-09-sndk-label-text-fallback-design.md.
+                        lt_concept, lt_ordinal, lt_negated, lt_role = \
+                            resolve_via_label_text(
+                                row.source_account, edges, labels, statement)
+                        if lt_ordinal is not None:
+                            ordinal = lt_ordinal
+                            row.display_negated = lt_negated
+                            match_method = "xbrl_presentation_via_label"
+                            resolved_concept = lt_concept
+                            ordinal_network = lt_role   # honest provenance (round1 #6)
+            else:
+                row.display_label = label
+
+            if ordinal is not None and network_role is not None:
+                _set_xbrl_ordinal_provenance(
+                    row, _global_for(resolved_concept, ordinal),
+                    ordinal_network, match_method=match_method,
+                )
+            else:
+                _try_audited_nlm_ordinal(row, audited_for_stmt)
+                # NARROW note-level exclusion (T14 Issue2): only tag_like, only
+                # when a face network exists and this concrete concept is NOT on
+                # it. preserved_pdf_label is excluded by the cls guard below.
+                _maybe_exclude_note_level(row, cls, accepted_concepts)
+            continue
+
+        # cls in ("synthetic" (single-line), "null") → resolve via uni→canonical
+        try:
+            label, ordinal, negated = resolve_via_uni(
+                row.uni_account, statement, network_role, edges, labels
+            )
+            row.display_label = label
+            row.display_negated = negated
+            if ordinal is not None and network_role is not None:
+                _set_xbrl_ordinal_provenance(
+                    row,
+                    _global_for(CANONICAL_CONCEPT.get(row.uni_account), ordinal),
+                    network_role,
+                )
+            else:
+                _try_audited_nlm_ordinal(row, audited_for_stmt)
+        except (NeedsNlmOrder, AmbiguityError):
+            # Canonical concept absent from this filing's network/labels → fall
+            # to the audited NLM order. Never render SUM(...) / invent a label.
+            _try_audited_nlm_ordinal(row, audited_for_stmt)
+
+
+def _maybe_exclude_note_level(
+    row: "FactRow", cls: str, accepted_concepts: set | None
+) -> None:
+    """Narrow note-level auto-exclusion (T14 Issue2, Codex-mandated).
+
+    Applies ONLY when ALL of:
+      - the fact is still unresolved (``row.ordinal is None``),
+      - its class is ``tag_like`` (a concrete XBRL concept — NEVER
+        preserved_pdf_label / null / synthetic, which legitimately need
+        NLM/manual and must keep failing the coverage gate, fail-loud),
+      - a face network IS present for this statement
+        (``accepted_concepts`` non-empty), AND
+      - the concept (``_local(source_account)``) is NOT in ``accepted_concepts``
+        (the UNION of ALL matching face networks — 10-K full ∪ 10-Q condensed).
+
+    Then the fact is a note-level sub-component that rolls up into a face
+    aggregate: mark it display-INELIGIBLE (no face row, dropped from coverage)
+    and write a durable provenance reason so a human can audit the call. Existing
+    provenance keys are preserved.
+    """
+    if row.ordinal is not None:
+        return
+    if cls != "tag_like":
+        return
+    if not accepted_concepts:  # None or empty → no face network → fail-loud
+        return
+    if _local(row.source_account or "") in accepted_concepts:
+        return
+    row.display_eligible = False
+    row.display_label = None
+    row.ordinal = None
+    if row.provenance is None:
+        row.provenance = {}
+    row.provenance["display_exclusion_reason"] = "note_level_not_in_face_network"
+
+
+def _is_sum_of_multiple(source_account: str | None) -> bool:
+    """True for a synthetic SUM that aggregates MULTIPLE PDF lines.
+
+    These are the display-ineligible cores per spec G7: SUM(D&A components),
+    SUM(S&M+G&A). Detection mirrors the synthetic markers in
+    source_account_class.classify_source_account — any synthetic SUM(...) /
+    components) / +G&A) marker means multiple components were summed.
+    """
+    if not source_account:
+        return False
+    return (
+        source_account.startswith("SUM(")
+        or "components)" in source_account
+        or "+G&A)" in source_account
+    )
+
+
+# ---- Metric-only rows (sec_financial_metrics) — no statement ordinal --------
+#
+# Derived single-quarter cells (derived_q2 / derived_q3 / derived_q4) and
+# absolute-value metrics (ebitda, free_cash_flow) live in sec_financial_metrics,
+# NOT in sec_financial_facts. They attach to fact-prototype rows on the FRONTEND
+# by uni_account; the adapter MUST NOT assign them a Statement-view display
+# ordinal (spec §16). All three derived quarters behave identically.
+
+_DERIVED_SINGLE_QUARTER_PKINDS = frozenset({"derived_q2", "derived_q3", "derived_q4"})
+
+
+def metric_row_carries_statement_ordinal(metric_row: dict) -> bool:
+    """Whether a sec_financial_metrics row should carry a Statement display ordinal.
+
+    Always False: metric rows (derived_q2/q3/q4 single-quarter values, ebitda,
+    free_cash_flow) are not facts. They attach by uni_account on the frontend, so
+    the adapter never assigns them a statement display ordinal (spec §16). Kept as
+    an explicit predicate so the contract is testable and the derived_q2/q3/q4
+    set is provably handled identically.
+    """
+    return False
 
 
 _NONGAAP_ARRAY_TO_STMT = {
@@ -904,3 +1282,190 @@ def adapt_edges(edges_json: dict, ticker: str, edge_type: str) -> list[EdgeRow]:
             preferred_label=preferred_label,
         ))
     return rows
+
+
+# =========================================================================== #
+# Dedup pass — whole-row redundancy suppression (spec
+# docs/superpowers/specs/2026-06-10-dedup-display-suppression-design.md v2).
+#
+# As Reported shows a duplicate row when a legacy prose fact and a
+# capture-everything tag fact denote the SAME economic line. The frontend
+# renders per-rowId across ALL periods (a surviving prototype in any period
+# resurrects same-rowId cells in others), so per-cell suppression is unsafe;
+# only WHOLE-ROW suppression works (3-way review Blocker 2). And the only
+# persisted display-hide mechanism is nulling display_label AND ordinal
+# (display_eligible is adapter-only, stripped before upsert — Blocker 1).
+# =========================================================================== #
+
+# Dedup ONLY. Concepts (XBRL local names) that denote the SAME economic line as
+# a core uni_account, for whole-row redundancy suppression. NEVER consulted by
+# resolve_via_uni* (kept separate from presentation_resolver.CANONICAL_CONCEPT
+# so dedup membership cannot perturb the ordinal-borrow path — Blocker 3).
+DEDUP_EQUIVALENT_CONCEPTS: dict[str, set[str]] = {
+    "income_before_taxes": {
+        "IncomeLossAttributableToParent",
+        "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+    },
+}
+
+# period_kind values that are NOT displayed in the frontend statement view
+# (YTD/cumulative durations). Excluded from the whole-row redundancy
+# precondition, but still nulled when a row is suppressed (no display effect).
+_NON_DISPLAYED_PERIOD_KINDS = {"cumulative_ytd", "ytd_duration"}
+
+_DEDUP_VALUE_TOL = 0.5  # |Δ| in reporting units; below this two cells "agree"
+
+
+def _strip_ns(name: str) -> str:
+    """Bare local name from a possibly-namespaced concept ('us-gaap:Foo' → 'Foo')."""
+    return (name or "").rsplit(":", 1)[-1]
+
+
+def _is_long_tail_uni(uni: str | None) -> bool:
+    return bool(uni) and uni.endswith("_long_tail")
+
+
+def _face_fullqname(bare_local: str, edges: list[dict], statement: str) -> str | None:
+    """Recover the FULL qname (`prefix:Local`) of a tag long-tail row's concept
+    from the face presentation edges it was emitted against. A tag long-tail
+    row stores only the bare local in source_account; Key A must compare on full
+    qname (spec §3.3) so a same-local concept in a DIFFERENT namespace can never
+    be mistaken for the prose's resolved concept. Returns the unique full qname
+    whose local == bare_local across this statement's face edges, or None when 0
+    or >1 namespaces carry that local (fail-closed — Codex merge-review blocker)."""
+    faces = set(matching_face_networks(edges, statement))
+    fqs = {
+        e["child_qname"]
+        for e in edges
+        if e.get("role_uri") in faces and _strip_ns(e.get("child_qname") or "") == bare_local
+    }
+    return next(iter(fqs)) if len(fqs) == 1 else None
+
+
+def _magnitude(f: "FactRow") -> float:
+    """|value| — the value-disagreement veto compares MAGNITUDE, not signed
+    value. Two rows for the same economic line can store opposite signs (tag
+    GainLossOnSaleOfBusiness raw +34 vs prose 'Gain on business divestiture'
+    raw -34 — prose is pre-negated legacy data; both also carry
+    display_negated=True). They are the same event (|34|); only the sign
+    convention differs. A genuinely different line (consolidated vs
+    attributable-to-parent differing by the NCI share; a mis-classified prose
+    row) differs in MAGNITUDE and is still vetoed. Sign is never load-bearing
+    for identity — concept equality (Key A label-text / Key B registry) already
+    established that; value is a magnitude sanity VETO only (Blocker 3)."""
+    return abs(f.value)
+
+
+def _suppress_row(cells: list["FactRow"], *, key: str, winner: str) -> None:
+    """Whole-row suppress: null the persisted display fields on EVERY cell of a
+    loser row (all periods, incl. YTD). display_eligible=False is adapter-only
+    (gate); display_label/ordinal=None is what actually hides the row."""
+    for c in cells:
+        c.display_label = None
+        c.ordinal = None
+        c.display_eligible = False
+        prov = dict(c.provenance or {})
+        prov["display_exclusion_reason"] = "dedup_redundant_row"
+        prov["dedup_key"] = key
+        prov["dedup_winner"] = winner
+        c.provenance = prov
+
+
+def dedup_redundant_rows(
+    facts: list["FactRow"],
+    *,
+    statement: str,
+    edges: list[dict],
+    labels: dict,
+    value_tol: float = _DEDUP_VALUE_TOL,
+) -> None:
+    """Suppress whole rows that redundantly duplicate another row's economic
+    line, in place. Call once per statement AFTER attach_display_metadata.
+
+    Preference order: core uni > tag_like long-tail > prose long-tail.
+      Key A — a prose `*_long_tail` row (preserved_pdf_label) whose label text
+        resolves (resolve_via_label_text) to a face concept C, where a tag-like
+        `*_long_tail` row with concept C covers every displayed period → prose
+        loses to tag. multi-occurrence veto: ≠1 tag row for C → skip.
+      Key B — a tag-like `*_long_tail` row whose concept is a
+        DEDUP_EQUIVALENT_CONCEPTS member of some core uni_account U, where a
+        core row with uni==U covers every displayed period → tag loses to core.
+
+    Whole-row precondition (Blocker 2): a row is suppressed ONLY if EVERY
+    displayed (non-YTD) period has a value-agreeing winner competitor; else
+    fail-safe (NOT suppressed) — better a temporary duplicate than a vanished
+    value. Value agreement compares DISPLAYED values (display_negated applied),
+    used as a VETO not a match key (Blocker 3)."""
+    stmt_facts = [
+        f for f in facts if f.statement == statement and f.version == "GAAP"
+    ]
+    rows: dict[tuple, list["FactRow"]] = defaultdict(list)
+    for f in stmt_facts:
+        rows[(f.uni_account, f.source_account)].append(f)
+
+    def _index(cells: list["FactRow"]) -> dict[tuple, "FactRow"]:
+        return {(c.period, c.period_kind): c for c in cells}
+
+    def _row_redundant_against(
+        loser_cells: list["FactRow"], winner_idx: dict[tuple, "FactRow"]
+    ) -> bool:
+        displayed = [c for c in loser_cells
+                     if c.period_kind not in _NON_DISPLAYED_PERIOD_KINDS]
+        if not displayed:
+            return False
+        for c in displayed:
+            w = winner_idx.get((c.period, c.period_kind))
+            if w is None or abs(_magnitude(c) - _magnitude(w)) > value_tol:
+                return False  # fail-safe: missing / magnitude-disagreeing competitor
+        return True
+
+    suppressed: list[tuple] = []  # (key, uni, source_account, winner, n_cells)
+
+    # Key A — prose long-tail loses to a same-FULL-QNAME tag long-tail row.
+    # Tag rows store only the bare local; recover the full qname from the face
+    # edges so identity is namespace-exact (a same-local, different-namespace tag
+    # cannot be the winner). Ambiguous bare local → excluded (fail-closed).
+    tag_ll_by_fq: dict[str, list[list["FactRow"]]] = defaultdict(list)
+    for (uni, sa), cells in rows.items():
+        if _is_long_tail_uni(uni) and classify_source_account(sa or None) == "tag_like":
+            fq = _face_fullqname(_strip_ns(sa), edges, statement)
+            if fq is not None:
+                tag_ll_by_fq[fq].append(cells)
+    for (uni, sa), cells in rows.items():
+        if not _is_long_tail_uni(uni):
+            continue
+        if classify_source_account(sa or None) != "preserved_pdf_label":
+            continue
+        full_q, _o, _n, _r = resolve_via_label_text(sa, edges, labels, statement)
+        if not full_q:
+            continue
+        winners = tag_ll_by_fq.get(full_q, [])  # exact full-qname identity
+        if len(winners) != 1:
+            continue  # 0 → no tag competitor; >1 → multi-occurrence veto
+        if _row_redundant_against(cells, _index(winners[0])):
+            _suppress_row(cells, key="A", winner=full_q)
+            suppressed.append(("A", uni, sa, full_q, len(cells)))
+
+    # Key B — tag long-tail loses to a same-line core uni row.
+    for (uni, _sa), cells in rows.items():
+        if not _is_long_tail_uni(uni):
+            continue
+        concept = _strip_ns(cells[0].source_account)
+        winner_uni = next(
+            (u for u, variants in DEDUP_EQUIVALENT_CONCEPTS.items()
+             if concept in variants),
+            None,
+        )
+        if winner_uni is None:
+            continue
+        core_cells = [f for f in stmt_facts if f.uni_account == winner_uni]
+        if _row_redundant_against(cells, _index(core_cells)):
+            _suppress_row(cells, key="B", winner=winner_uni)
+            suppressed.append(("B", uni, cells[0].source_account, winner_uni, len(cells)))
+
+    # Loud audit (T3: suppression is never silent — a human can see every row).
+    if suppressed:
+        print(f"  [dedup] {statement}: suppressed {len(suppressed)} redundant "
+              f"row(s) (whole-row, display_label+ordinal nulled):")
+        for key, u, s, w, n in suppressed:
+            print(f"    [Key {key}] {u} / {s!r} → winner {w}  ({n} cells nulled)")

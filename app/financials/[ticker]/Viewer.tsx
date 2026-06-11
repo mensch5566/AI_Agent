@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useFinancialData, buildMatrix, type Frequency } from "@/app/components/financials-v2/useFinancialMatrix";
+import { useFinancialData, buildMatrix, buildDerivedNonGaapRows, type Frequency } from "@/app/components/financials-v2/useFinancialMatrix";
 import { StatementMatrix } from "@/app/components/financials-v2/StatementMatrix";
+import { DerivedNonGaapMatrix } from "@/app/components/financials-v2/DerivedNonGaapMatrix";
 import { MatrixChart } from "@/app/components/financials-v2/MatrixChart";
 import { SegmentDashboard } from "@/app/components/financials-v2/SegmentDashboard";
 import { TickerPicker } from "@/app/components/financials-v2/TickerPicker";
@@ -30,6 +31,10 @@ export default function Viewer({ ticker }: { ticker: string }) {
   const [view, setView] = useState<View>("IS");
   const [frequency, setFrequency] = useState<Frequency>("quarterly");
   const [showNonGaap, setShowNonGaap] = useState(false);
+  // Statement render mode: 'pdf' = filing-faithful (data-driven), 'uni' = canonical
+  // uni_account rows + long-tail buckets. Persisted in localStorage (hydration-safe).
+  const [viewMode, setViewMode] = useState<"pdf" | "uni">("pdf");
+  const [modeHydrated, setModeHydrated] = useState(false);
 
   const cells = data?.cells ?? [];
   const dimensional = data?.dimensional ?? [];
@@ -38,12 +43,19 @@ export default function Viewer({ ticker }: { ticker: string }) {
   const statement: Statement = view === "SEGMENT" ? "IS" : view;
 
   const gaapMatrix = useMemo(
-    () => buildMatrix(cells, statement, "GAAP", frequency),
-    [cells, statement, frequency],
+    () => buildMatrix(cells, statement, "GAAP", frequency, viewMode),
+    [cells, statement, frequency, viewMode],
   );
   const nongaapMatrix = useMemo(
     () => buildMatrix(cells, statement, "NON_GAAP", frequency),
     [cells, statement, frequency],
+  );
+
+  // Derived / Non-GAAP absolute-value $ rows (EBITDA, FCF) — surfaced only in
+  // the Ratios/analytics area, never inline in the statements (spec §P2.3).
+  const derivedNonGaapMatrix = useMemo(
+    () => buildDerivedNonGaapRows(cells, "GAAP", frequency),
+    [cells, frequency],
   );
 
   const showNongaapCol = showNonGaap && view === "IS";
@@ -92,9 +104,28 @@ export default function Viewer({ ticker }: { ticker: string }) {
   // statement's preset. We don't filter by rowsWithData here — keys that
   // lack data render as empty lines but stay selectable; the issuer-
   // specific gaps are usually obvious to the analyst.
+  // Also reset on viewMode change: uni rows key by uni_account, pdf rows by rowId,
+  // so a stale PDF-only selection would silently null the chart after switching.
   useEffect(() => {
     setSelectedKeys((CHART_DEFAULT_KEYS[statement] ?? []).slice(0, CHART_MAX_SELECTION));
-  }, [statement]);
+  }, [statement, viewMode]);
+
+  // Read persisted view mode once on mount (App Router: never read localStorage in
+  // a useState initializer — SSR has no window).
+  useEffect(() => {
+    const saved = typeof window !== "undefined"
+      ? window.localStorage.getItem("fin-view-mode-v1")
+      : null;
+    if (saved === "pdf" || saved === "uni") setViewMode(saved);
+    setModeHydrated(true);
+  }, []);
+
+  // Persist — guarded so the initial 'pdf' render never overwrites a stored 'uni'
+  // before the read effect commits.
+  useEffect(() => {
+    if (!modeHydrated) return;
+    window.localStorage.setItem("fin-view-mode-v1", viewMode);
+  }, [viewMode, modeHydrated]);
 
   // Look up a row's unit by peeking the first populated cell in the GAAP
   // matrix (falls back to Non-GAAP if GAAP has no value yet — e.g. Q4 from
@@ -199,6 +230,27 @@ export default function Viewer({ ticker }: { ticker: string }) {
               </div>
             )}
 
+            {(view === "IS" || view === "BS" || view === "CF") && (
+              <div
+                className="inline-flex rounded-md border border-border overflow-hidden ml-2"
+                role="group"
+                aria-label="statement view mode"
+              >
+                {([["pdf", "As Reported"], ["uni", "Standardized"]] as const).map(([m, label]) => (
+                  <Button
+                    key={m}
+                    size="sm"
+                    variant={viewMode === m ? "default" : "ghost"}
+                    aria-pressed={viewMode === m}
+                    onClick={() => setViewMode(m)}
+                    className="rounded-none border-r last:border-r-0 border-border"
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            )}
+
             {view === "IS" && (
               <button
                 type="button"
@@ -237,6 +289,7 @@ export default function Viewer({ ticker }: { ticker: string }) {
                 showNongaapColumn={showNongaapCol}
               />
               <StatementMatrix
+                statement={statement}
                 gaap={gaapMatrix}
                 nongaap={nongaapMatrix}
                 showNongaapColumn={showNongaapCol}
@@ -245,6 +298,9 @@ export default function Viewer({ ticker }: { ticker: string }) {
                 onToggleRow={handleToggleRow}
                 rowsWithData={rowsWithData}
               />
+              {view === "RATIO" && (
+                <DerivedNonGaapMatrix matrix={derivedNonGaapMatrix} />
+              )}
             </>
           )}
 
