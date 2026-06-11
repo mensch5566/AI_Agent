@@ -27,6 +27,7 @@ for _m in [m for m in list(sys.modules) if m == "_shared" or m.startswith("_shar
 from _shared.sec_json_adapter import FactRow, dedup_redundant_rows  # noqa: E402
 
 _TERSE = "http://www.xbrl.org/2003/role/terseLabel"
+_STD = "http://www.xbrl.org/2003/role/label"
 _NEG = "http://www.xbrl.org/2009/role/negatedLabel"
 # IS face network (role contains "operations" → matched by matching_face_networks).
 _IS_NET = "http://x/role/statement-consolidated-statements-of-operations"
@@ -249,6 +250,42 @@ def test_keyA_failsafe_prose_kept_when_tag_misses_a_period():
                          edges=_DIVEST_EDGES, labels=_DIVEST_LABELS)
 
     for f in prose:  # untouched — Q2 has no tag competitor
+        assert f.display_label == "Gain on business divestiture"
+        assert f.display_eligible is True
+
+
+# Two concepts share a bare local name across namespaces on the same face. The
+# prose label uniquely matches the us-gaap one; the tag long-tail row stores only
+# the bare local. Matching on bare local would wrongly pair us-gaap prose with a
+# possibly-ext tag → must fail-closed (Codex GPT-5.5 merge-review blocker).
+_HOMONYM_EDGES = [
+    {"role_uri": _IS_NET, "child_qname": "us-gaap:GainLossOnSaleOfBusiness",
+     "order": 11.0, "preferred_label": _TERSE, "period": "FY2025"},
+    {"role_uri": _IS_NET, "child_qname": "ext:GainLossOnSaleOfBusiness",
+     "order": 12.0, "preferred_label": _STD, "period": "FY2025"},
+]
+_HOMONYM_LABELS = {
+    "us-gaap:GainLossOnSaleOfBusiness": [{"role": _TERSE, "text": "Gain on business divestiture"}],
+    "ext:GainLossOnSaleOfBusiness": [{"role": _STD, "text": "Extension unrelated line"}],
+}
+
+
+def test_keyA_namespace_homonym_fails_closed():
+    # tag source_account is the bare local 'GainLossOnSaleOfBusiness', which is
+    # ambiguous across us-gaap: and ext: on this face → cannot prove identity →
+    # must NOT suppress (full-qname requirement, spec §3.3).
+    tag = [_fact("is_long_tail", "GainLossOnSaleOfBusiness", period="FY2025",
+                 value=34.0, display_label="x", ordinal=12, display_negated=True)]
+    prose = [_fact("nonoperating_long_tail", "Gain on business divestiture",
+                   period="FY2025", value=-34.0,
+                   display_label="Gain on business divestiture", ordinal=11,
+                   display_negated=True)]
+    facts = tag + prose
+
+    dedup_redundant_rows(facts, statement="IS",
+                         edges=_HOMONYM_EDGES, labels=_HOMONYM_LABELS)
+
+    for f in prose:  # untouched — bare-local ambiguity is fail-closed
         assert f.display_label == "Gain on business divestiture"
         assert f.display_eligible is True
 

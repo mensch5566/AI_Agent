@@ -40,6 +40,7 @@ from .presentation_resolver import (
     NeedsNlmOrder,
     _local,
     compute_global_ordinals,
+    matching_face_networks,
     resolve_label_ordinal,
     resolve_label_ordinal_any,
     resolve_via_uni,
@@ -1324,6 +1325,23 @@ def _is_long_tail_uni(uni: str | None) -> bool:
     return bool(uni) and uni.endswith("_long_tail")
 
 
+def _face_fullqname(bare_local: str, edges: list[dict], statement: str) -> str | None:
+    """Recover the FULL qname (`prefix:Local`) of a tag long-tail row's concept
+    from the face presentation edges it was emitted against. A tag long-tail
+    row stores only the bare local in source_account; Key A must compare on full
+    qname (spec §3.3) so a same-local concept in a DIFFERENT namespace can never
+    be mistaken for the prose's resolved concept. Returns the unique full qname
+    whose local == bare_local across this statement's face edges, or None when 0
+    or >1 namespaces carry that local (fail-closed — Codex merge-review blocker)."""
+    faces = set(matching_face_networks(edges, statement))
+    fqs = {
+        e["child_qname"]
+        for e in edges
+        if e.get("role_uri") in faces and _strip_ns(e.get("child_qname") or "") == bare_local
+    }
+    return next(iter(fqs)) if len(fqs) == 1 else None
+
+
 def _magnitude(f: "FactRow") -> float:
     """|value| — the value-disagreement veto compares MAGNITUDE, not signed
     value. Two rows for the same economic line can store opposite signs (tag
@@ -1403,11 +1421,16 @@ def dedup_redundant_rows(
 
     suppressed: list[tuple] = []  # (key, uni, source_account, winner, n_cells)
 
-    # Key A — prose long-tail loses to a same-concept tag long-tail row.
-    tag_ll_by_concept: dict[str, list[list["FactRow"]]] = defaultdict(list)
+    # Key A — prose long-tail loses to a same-FULL-QNAME tag long-tail row.
+    # Tag rows store only the bare local; recover the full qname from the face
+    # edges so identity is namespace-exact (a same-local, different-namespace tag
+    # cannot be the winner). Ambiguous bare local → excluded (fail-closed).
+    tag_ll_by_fq: dict[str, list[list["FactRow"]]] = defaultdict(list)
     for (uni, sa), cells in rows.items():
         if _is_long_tail_uni(uni) and classify_source_account(sa or None) == "tag_like":
-            tag_ll_by_concept[_strip_ns(sa)].append(cells)
+            fq = _face_fullqname(_strip_ns(sa), edges, statement)
+            if fq is not None:
+                tag_ll_by_fq[fq].append(cells)
     for (uni, sa), cells in rows.items():
         if not _is_long_tail_uni(uni):
             continue
@@ -1416,13 +1439,12 @@ def dedup_redundant_rows(
         full_q, _o, _n, _r = resolve_via_label_text(sa, edges, labels, statement)
         if not full_q:
             continue
-        concept = _strip_ns(full_q)
-        winners = tag_ll_by_concept.get(concept, [])
+        winners = tag_ll_by_fq.get(full_q, [])  # exact full-qname identity
         if len(winners) != 1:
             continue  # 0 → no tag competitor; >1 → multi-occurrence veto
         if _row_redundant_against(cells, _index(winners[0])):
-            _suppress_row(cells, key="A", winner=concept)
-            suppressed.append(("A", uni, sa, concept, len(cells)))
+            _suppress_row(cells, key="A", winner=full_q)
+            suppressed.append(("A", uni, sa, full_q, len(cells)))
 
     # Key B — tag long-tail loses to a same-line core uni row.
     for (uni, _sa), cells in rows.items():
