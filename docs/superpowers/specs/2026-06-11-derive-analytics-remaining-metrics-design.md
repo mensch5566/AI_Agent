@@ -98,3 +98,14 @@ Date: 2026-06-11 / Tier: T3 / Status: **design — 待 Opus 4.8 + GPT 5.5 收斂
 
 ### 剩餘步驟
 derive_dimensional_analytics.py（讀 v3 + compute + 寫 JSON）→ adapt_dimensional_analytics_facts（TDD，含 >100% no-corruption case）→ wire upsert discovery + batch.dimensional → schema allow key → 前端 SegmentTable → 雙模型 review → production 授權 → 前後端驗證。
+
+### §7.1 雙模型 review round-1 BLOCKERS + 修復（2026-06-11，commit `3fd2fea`）
+兩個模型（Opus 4.8 + GPT 5.5）都抓到 2 個 T3-fatal blocker：
+1. **null-qname member collapse**：`_pair_key` 只用 `source_account_qname`，但 MU 的 225 個 segment facts qname **全 null** → 同期所有 member collapse 成一個 bucket key（None）→ last-write-wins 掉 88/110 MU margin，且可能拿 member A 的 op_income ÷ member B 的 revenue 捏造數字。INTC/SNDK/LITE qname 非 null 故沒事（盲點）。
+   **修**：新 `_member_id(f) = source_account_qname or source_account`（label fallback）；`_pair_key` 改用它。value-conflict guard：同 (member,period,kind,uni) 兩個不同值 → 該 pair_key 標 conflicted 跳過（不 last-write-wins、不捏造）。
+2. **SNDK 單一 reportable segment 假 margin**：Q2_FY2026 op_income $4.111B/rev $5.95B=69.1%，但 SNDK 合併 op margin ~8% → 上游 supplement op_income 誤標。
+   **修**：ticker 的 business_segment 只有 ≤1 distinct member → suppress 全部（非真實 disaggregation、與 flat consolidated 重複）。
+**驗證**：MU 22→110 margins（FY2021 全 5 member）、SNDK 1→0、INTC 15 不變、LITE 0。12 dimensional test。
+
+### §7.2 待辦（上游）：SNDK supplement Q2_FY2026 segment 資料疑誤
+SNDK Q2_FY2026 segment revenue $5.95B（平常 ~$2.3B）+ op_income $4.111B 兩值都不合理（疑 parse-SEC-supplement 抽到錯 XBRL concept 或 cumulative）。已由 single-member suppress 擋住不進 production，但**上游資料本身要修**（re-parse SNDK supplement v3 Q2_FY2026，比對 10-Q 原文）。
