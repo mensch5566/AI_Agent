@@ -817,7 +817,20 @@ def apply(batch: A.NormalizedBatch) -> None:
     n = upsert_batch(client, "sec_financial_facts", [row_to_dict(r) for r in batch.facts])
     print(f"  upserted: sec_financial_facts ({n} rows)")
 
-    # 3. dimensional_facts
+    # 3. dimensional_facts — snapshot-replace per ticker. Dimensional cell_id
+    # encodes the period, so a re-labeled period (e.g. an upstream 52/53-week
+    # fiscal-period fix) writes new cell_ids and would leave the old-labeled rows
+    # orphaned (this table has no per-row managed delete scope). The supplement
+    # batch IS the full current dimensional snapshot for the ticker, so clear the
+    # ticker's rows then re-insert. GUARD: only clear when there is a batch to
+    # replace them with — a run without supplement data must never wipe the ticker.
+    if batch.dimensional:
+        tkr = batch.company.ticker
+        before = (client.table("sec_financial_dimensional_facts")
+                  .select("cell_id", count="exact").eq("ticker", tkr).execute()).count
+        client.table("sec_financial_dimensional_facts").delete().eq("ticker", tkr).execute()
+        print(f"  cleared dimensional scope: sec_financial_dimensional_facts "
+              f"(ticker={tkr}, {before} rows deleted)")
     n = upsert_batch(client, "sec_financial_dimensional_facts", [row_to_dict(r) for r in batch.dimensional])
     print(f"  upserted: sec_financial_dimensional_facts ({n} rows)")
 
