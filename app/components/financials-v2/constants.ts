@@ -154,6 +154,7 @@ export const RATIO_ROWS: MetricSpec[] = [
   { key: "revenue_yoy", label: "Revenue YoY %", kind: "derived_ratio" },
   { key: "net_income_yoy", label: "Net Income YoY %", kind: "derived_ratio" },
   { key: "eps_diluted_yoy", label: "Diluted EPS YoY %", kind: "derived_ratio" },
+  { key: "bvps", label: "Book Value / Share", kind: "derived_ratio" },
 ];
 
 export const ROWS_BY_STATEMENT: Record<Statement, MetricSpec[]> = {

@@ -105,6 +105,8 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_EBITDA_MARGIN_PCT",
     # Adjusted EBITDA Margin (cross-version: adjusted_ebitda@NON_GAAP / revenue@GAAP).
     "RATIO_ADJUSTED_EBITDA_MARGIN_PCT",
+    # BVPS = total_equity / common_shares_outstanding (USD_per_share, BS instant).
+    "RATIO_BVPS",
     # Phase D EL2 cross-period (TTM) ratios.
     "RATIO_ROE",
     "RATIO_ROA",
