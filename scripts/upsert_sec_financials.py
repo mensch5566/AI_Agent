@@ -286,6 +286,19 @@ def load_sources(ticker: str) -> dict:
     """
     base = skill_output_dir(ticker)
     nlm_dir = base / "nlm-statement-order"
+
+    def _latest_dimensional_analytics(base, ticker):
+        d = base / "derive-dimensional-analytics"
+        if not d.exists():
+            return None
+        runs = sorted([r for r in d.iterdir() if r.is_dir() and r.name[:4].isdigit()],
+                      reverse=True)
+        for run in runs:
+            cand = run / f"{ticker}_dimensional_analytics.json"
+            if cand.exists():
+                return load_json(cand)
+        return None
+
     return {
         "gaap_facts": load_json(base / "parse-10QK-gaap" / f"{ticker}_gaap_facts.json"),
         "gaap_edges_cal": load_json(base / "parse-10QK-gaap" / f"{ticker}_gaap_edges_cal.json"),
@@ -295,6 +308,7 @@ def load_sources(ticker: str) -> dict:
         "nongaap": load_json(base / "parse-8k-nongaap" / f"{ticker}_nongaap.json"),
         "supplement_facts": load_json(base / "parse-SEC-supplement" / f"{ticker}_supplement_facts_v3.json"),
         "supplement_edges": load_json(base / "parse-SEC-supplement" / f"{ticker}_supplement_edges_v3.json"),
+        "dimensional_analytics": _latest_dimensional_analytics(base, ticker),
         "nlm_order": {
             stmt: load_json(nlm_dir / f"{ticker}_{stmt}_nlm_order.json")
             for stmt in ("IS", "BS", "CF")
@@ -478,6 +492,15 @@ def normalize(ticker: str, sources: dict) -> A.NormalizedBatch:
         batch.rejected.extend(sp_rej)
         batch.dedupe_stats = sp_dedupe
         batch.value_conflicts = sp_conflicts
+
+    # Derived dimensional analytics (segment operating margin). Rides the SAME
+    # dimensional batch but carries provenance.derived=true + rule_id; its cell_ids
+    # differ from raw-segment rows (uni_account=operating_margin_pct), so it never
+    # collides with or clears the raw segment values.
+    if sources.get("dimensional_analytics"):
+        da_rows, da_rej = A.adapt_dimensional_analytics_facts(sources["dimensional_analytics"])
+        batch.dimensional.extend(da_rows)
+        batch.rejected.extend(da_rej)
 
     # Edges
     for key, edge_type in [

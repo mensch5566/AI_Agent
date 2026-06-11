@@ -939,6 +939,81 @@ def _adapt_one_nongaap_fact(
     )
 
 
+def adapt_dimensional_analytics_facts(
+    dim_analytics_json: dict,
+) -> tuple[list[DimensionalRow], list[dict]]:
+    """derive-dimensional-analytics output -> DimensionalRow list (+ rejected).
+
+    Input: {"metadata": {"ticker": ...}, "dimensional_metrics": [...]} where each
+    metric is a DERIVED dimensional fact (segment operating margin) carrying
+    provenance.derived=true + rule_id. These ride into sec_financial_dimensional_facts
+    on their OWN delete-scope (by rule_id) — never folded into the raw-segment upsert.
+
+    The margin value is a raw ratio and is stored VERBATIM with unit "Pure". It is
+    deliberately NOT routed through normalize_pct_value: a segment whose loss exceeds
+    its revenue has |margin| > 1, which that heuristic would corrupt (>1 -> /100).
+    """
+    ticker = dim_analytics_json.get("metadata", {}).get("ticker", "").upper()
+    rows: list[DimensionalRow] = []
+    rejected: list[dict] = []
+    for idx, m in enumerate(dim_analytics_json.get("dimensional_metrics", [])):
+        try:
+            pe = m.get("period_end")
+            if not is_iso_date(pe):
+                raise ValueError(f"dimensional-analytics period_end missing/invalid: {pe!r}")
+            period_kind = normalize_supplement_period_kind(m["period_kind"])
+            axis = m["axis"]
+            axis_qname = m.get("axis_qname")
+            member = m.get("source_account") or ""
+            member_qname = m.get("source_account_qname")
+            uni_account = m["uni_account"]
+            value = float(m["value"])  # raw fraction — NOT normalize_pct_value'd
+            axis_key = build_axis_key(axis, axis_qname)
+            member_key = build_member_key(member, member_qname)
+            other_dims = m.get("other_dimensions") or None
+            cid = _id.dimensional_cell_id(
+                ticker=ticker,
+                period=m["period"],
+                period_kind=period_kind,
+                axis_key=axis_key,
+                member_key=member_key,
+                uni_account=uni_account,
+                other_dimensions=other_dims,
+            )
+            provenance = dict(m.get("provenance") or {})
+            provenance["derived"] = True  # belt-and-suspenders
+            rows.append(DimensionalRow(
+                cell_id=cid,
+                ticker=ticker,
+                period=m["period"],
+                period_end=pe,
+                period_kind=period_kind,
+                axis=axis,
+                axis_qname=axis_qname,
+                axis_key=axis_key,
+                member=member,
+                member_qname=member_qname,
+                member_key=member_key,
+                source_account=member,
+                source_account_qname=member_qname,
+                source_doc=m.get("source_doc"),
+                uni_account=uni_account,
+                value=value,
+                unit="Pure",
+                decimals=None,
+                other_dimensions=other_dims,
+                provenance=provenance,
+            ))
+        except (ValueError, KeyError, TypeError) as e:
+            rejected.append({
+                "source": "dimensional_analytics",
+                "idx": idx,
+                "row": m,
+                "reason": str(e),
+            })
+    return rows, rejected
+
+
 def adapt_supplement_facts(
     supplement_json: dict, accession_map: dict[str, str] | None = None
 ) -> tuple[list[DimensionalRow], list[dict], dict, list[dict]]:
