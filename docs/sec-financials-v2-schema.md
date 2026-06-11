@@ -281,6 +281,7 @@ unit 一律 `Pure`，分三種 display category：pct-style（margins / ETR，�
 | `revenue_yoy` | GAAP | `(revenue − revenue_year_ago) / revenue_year_ago`（EL2 YoY，pct；prior>0 else skip；quarterly=quarter_duration/derived_q2/q3/q4、annual=fy_annual_duration，**非 ttm**；period_start=None）| ✅ |
 | `net_income_yoy` | GAAP | `(net_income − year_ago) / year_ago`（同上）| ✅ |
 | `eps_diluted_yoy` | GAAP | `(eps_diluted − year_ago) / year_ago`（同上；EPS 無 derived_q4 → Q4 不出）| ✅ |
+| `bvps` | GAAP | `total_equity / common_shares_outstanding`（book value per common share，皆 BS instant、同期）。`total_equity`(=StockholdersEquity，**parent-only，NCI 不扣**) ÷ `common_shares_outstanding`(BS-date 期末股數)。unit=`USD_per_share`，引擎的 per-share 單位代數把 equity($-scale) 與 shares(count-scale) 各轉 base unit 再除（**scale 不一致先轉、unknown→fail-closed**，避免 AAOI thousands÷millions 的 1000× 錯）。skip shares≤0；負 book value emit | ✅ |
 
 #### debt_to_equity / interest_coverage 口徑（EL1 composite，2026-06-01）
 

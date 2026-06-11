@@ -252,6 +252,7 @@ NotebookLM 提供的權威來源指出 v3 砍錯幾項、漏了幾項：
 | 分類       | SA label                                        | 提案 uni_account                   | 確認  |
 | -------- | ----------------------------------------------- | -------------------------------- | --- |
 | metadata | Total Shares Out. on Filing Date（point-in-time） | `shares_outstanding_filing_date` | ✅   |
+| metadata | Common Shares Out. at BS date（period-end，us-gaap:CommonStockSharesOutstanding；unit `millions_shares`；排除 BS footing；BVPS 分母）| `common_shares_outstanding` | ✅   |
 | metadata | Total Debt（subtotal of ST + LT debt）            | `total_debt`                     | ✅   |
 
 **BS 小計：39 候選（含 7 subtotals），預設 ✅ 9 個**
