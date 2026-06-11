@@ -74,3 +74,27 @@ Date: 2026-06-11 / Tier: T3 / Status: **design — 待 Opus 4.8 + GPT 5.5 收斂
 - Q2 `Term.version` 跨-version 解析的污染風險 + Adj EBITDA margin 分母用 GAAP revenue 是否正確。
 - Q3/Q4 segment 衍生的輸入 loader + 輸出表選擇（寫回 dimensional_facts vs 新表）。
 - 有無更該優先 / 更該砍的項目？順序合理嗎？
+
+---
+
+## §7 Segment Operating Margin — BUILD 進度 + 架構決策（2026-06-11）
+
+### ✅ 已完成（commit `886bb39` canonical）
+- 引擎 `rules_dimensional.py::compute_segment_operating_margin`（10 test）：per (period, period_kind, business_segment member, GAAP/Non-GAAP type) 配對 revenue↔operating_income，pairing key 含 `source_account_qname` + `other_dimensions`（list-of-{axis,member}）→ consolidation context 不交叉。fail-closed：缺 op_income 或 revenue≤0 skip。負 margin emit。
+- 真實驗證：INTC 15 / MU 22 / SNDK 1 / LITE 0 margins。值合理（Intel Foundry -57.9% 配 total revenue 含 intersegment 正確、MU SBU FY2023 -73.9% 記憶體寒冬）。
+
+### ⚠️ BUILD 關鍵發現（resume 必讀）
+1. **normalize_pct_value 腐蝕陷阱**：`_adapt_one_supplement_fact` 對 Pure unit 走 `normalize_pct_value`，會把 `abs>1` 的值除以 100（當百分點）。segment margin 可 **<-100%**（小營收大虧損 segment）→ 會被腐蝕成 1/100。目前真實資料 0 筆 |margin|>1（潛在風險），但 T3 必須避開：**segment margin 的 DimensionalRow 要直接建、存原始 fraction、unit="Pure"、不走 normalize_pct_value**（與 flat operating_margin_pct 一致，後者也不走）。需 TDD 一個 >100% case 鎖住。
+2. **flat vs dimensional `operating_margin_pct` 同名**：`RATIO_UNI_ACCOUNTS` 已有 flat `operating_margin_pct`（sec_financial_metrics）。segment 版同名但在 `sec_financial_dimensional_facts`（不同表、不同 cell_id grain：含 axis_key/member_key）→ 不碰撞，但 routing/前端要分清。
+
+### 架構決策（定案）
+- **computation 在 canonical skill**（rules_dimensional.py），**upsert 在 AI_Agent**，兩者不互 import（io_loader 已是 AI_Agent→skill 反向 import 的特例，不再加耦合）。
+- **照設計「獨立 derive_dimensional_analytics 路徑」**：derive 端（新 `derive_dimensional_analytics.py` 或 derive_analytics.py 擴充）讀 `{T}_supplement_facts_v3.json` → 算 segment margins → 寫 `{T}_dimensional_analytics.json`。upsert 新增 discovery + `adapt_dimensional_analytics_facts`（在 sec_json_adapter.py，**直接建 DimensionalRow 不走 normalize_pct_value**）→ batch.dimensional。
+- **cell_id**：`dimensional_cell_id(ticker, period, normalize_supplement_period_kind(kind), axis_key, member_key, uni_account="operating_margin_pct", other_dimensions)` → 與 raw segment rev/oi row 不同 cell_id（uni_account 不同）。
+- **delete-scope（Codex 最大風險）**：dimensional 目前是純 upsert-by-cell_id（無 status 欄、無 clear）。derived margin 也走純 upsert（cell_id 穩定、re-run 覆蓋）。**絕不可**把 derived margin 混進 raw segment 的任何 clear scope。用 `provenance.derived=true` + `provenance.rule_id=DIM_SEGMENT_OPERATING_MARGIN_PCT` 標記，未來若加 dimensional clear-scope 要按 rule_id 分。
+- **schema**：`operating_margin_pct` 需在 dimensional allowed uni_accounts（確認 migration/schema 是否已允許；DB 已有 revenue_pct_of_total 等 pct dimensional key，存 decimal unit="Pure"）。
+- **前端**：SegmentTable 加 operating margin 行/欄（per segment per period），讀 dimensional API（route.ts 已存在）。
+- **SNDK 單一 segment**：「Reportable Segment」margin = 合併營業利益率，與 flat 重複且 69.1% 偏高疑似 supplement op_income 誤標 → 上游 supplement 資料待查（非引擎 bug）。考慮：單一 reportable segment 是否值得 emit（可能該 skip 或前端不顯示重複）。
+
+### 剩餘步驟
+derive_dimensional_analytics.py（讀 v3 + compute + 寫 JSON）→ adapt_dimensional_analytics_facts（TDD，含 >100% no-corruption case）→ wire upsert discovery + batch.dimensional → schema allow key → 前端 SegmentTable → 雙模型 review → production 授權 → 前後端驗證。
