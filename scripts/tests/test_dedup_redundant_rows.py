@@ -206,6 +206,32 @@ def test_keyA_suppresses_prose_when_tag_covers_all_periods_negated_equal():
         assert f.display_eligible is True
 
 
+def test_keyA_value_veto_compares_magnitude_not_signed_display():
+    # Real SNDK: BOTH rows carry display_negated=True and OPPOSITE raw signs
+    # (tag GainLossOnSaleOfBusiness raw +34, prose 'Gain on business
+    # divestiture' raw -34 — prose is pre-negated legacy data). They are the
+    # SAME event (magnitude 34); the value veto must compare |value|, else it
+    # spuriously blocks a real duplicate.
+    tag = [_fact("is_long_tail", "GainLossOnSaleOfBusiness", period=p, value=v,
+                 display_label="(Gain) loss on business divestiture", ordinal=11,
+                 display_negated=True)
+           for p, v in [("FY2025", 34.0), ("Q2_FY2025", 34.0), ("Q3_FY2025", 0.0)]]
+    prose = [_fact("nonoperating_long_tail", "Gain on business divestiture",
+                   period=p, value=v,
+                   display_label="Gain on business divestiture", ordinal=11,
+                   display_negated=True)
+             for p, v in [("FY2025", -34.0), ("Q2_FY2025", -34.0), ("Q3_FY2025", 0.0)]]
+    facts = tag + prose
+
+    dedup_redundant_rows(facts, statement="IS",
+                         edges=_DIVEST_EDGES, labels=_DIVEST_LABELS)
+
+    for f in prose:  # loser — suppressed (same magnitude every period)
+        assert f.display_label is None
+        assert f.display_eligible is False
+        assert f.provenance.get("dedup_key") == "A"
+
+
 def test_keyA_failsafe_prose_kept_when_tag_misses_a_period():
     # Real current SNDK: tag has no Q2 (parse window). Q2 prose is the only
     # source → prose row must survive (fail-safe), else Q2 value vanishes.

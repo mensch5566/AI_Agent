@@ -1324,13 +1324,18 @@ def _is_long_tail_uni(uni: str | None) -> bool:
     return bool(uni) and uni.endswith("_long_tail")
 
 
-def _display_value(f: "FactRow") -> float:
-    """PDF-faithful displayed value: raw value with the matched-arc negation
-    applied. Two rows for the same economic line can store opposite raw signs
-    (tag GainLossOnSaleOfBusiness=+34 vs prose 'Gain on business divestiture'
-    =-34) yet render identically once display_negated is honored — so the
-    value-disagreement veto must compare DISPLAYED values, not raw."""
-    return -f.value if f.display_negated else f.value
+def _magnitude(f: "FactRow") -> float:
+    """|value| — the value-disagreement veto compares MAGNITUDE, not signed
+    value. Two rows for the same economic line can store opposite signs (tag
+    GainLossOnSaleOfBusiness raw +34 vs prose 'Gain on business divestiture'
+    raw -34 — prose is pre-negated legacy data; both also carry
+    display_negated=True). They are the same event (|34|); only the sign
+    convention differs. A genuinely different line (consolidated vs
+    attributable-to-parent differing by the NCI share; a mis-classified prose
+    row) differs in MAGNITUDE and is still vetoed. Sign is never load-bearing
+    for identity — concept equality (Key A label-text / Key B registry) already
+    established that; value is a magnitude sanity VETO only (Blocker 3)."""
+    return abs(f.value)
 
 
 def _suppress_row(cells: list["FactRow"], *, key: str, winner: str) -> None:
@@ -1392,9 +1397,11 @@ def dedup_redundant_rows(
             return False
         for c in displayed:
             w = winner_idx.get((c.period, c.period_kind))
-            if w is None or abs(_display_value(c) - _display_value(w)) > value_tol:
-                return False  # fail-safe: missing / disagreeing competitor
+            if w is None or abs(_magnitude(c) - _magnitude(w)) > value_tol:
+                return False  # fail-safe: missing / magnitude-disagreeing competitor
         return True
+
+    suppressed: list[tuple] = []  # (key, uni, source_account, winner, n_cells)
 
     # Key A — prose long-tail loses to a same-concept tag long-tail row.
     tag_ll_by_concept: dict[str, list[list["FactRow"]]] = defaultdict(list)
@@ -1415,6 +1422,7 @@ def dedup_redundant_rows(
             continue  # 0 → no tag competitor; >1 → multi-occurrence veto
         if _row_redundant_against(cells, _index(winners[0])):
             _suppress_row(cells, key="A", winner=concept)
+            suppressed.append(("A", uni, sa, concept, len(cells)))
 
     # Key B — tag long-tail loses to a same-line core uni row.
     for (uni, _sa), cells in rows.items():
@@ -1431,3 +1439,11 @@ def dedup_redundant_rows(
         core_cells = [f for f in stmt_facts if f.uni_account == winner_uni]
         if _row_redundant_against(cells, _index(core_cells)):
             _suppress_row(cells, key="B", winner=winner_uni)
+            suppressed.append(("B", uni, cells[0].source_account, winner_uni, len(cells)))
+
+    # Loud audit (T3: suppression is never silent — a human can see every row).
+    if suppressed:
+        print(f"  [dedup] {statement}: suppressed {len(suppressed)} redundant "
+              f"row(s) (whole-row, display_label+ordinal nulled):")
+        for key, u, s, w, n in suppressed:
+            print(f"    [Key {key}] {u} / {s!r} → winner {w}  ({n} cells nulled)")

@@ -65,10 +65,12 @@ DEDUP_EQUIVALENT_CONCEPTS = {
 tag_like 行為 `*_long_tail`、其 concept ∈ DEDUP_EQUIVALENT_CONCEPTS[U]、同範圍存在 uni==U 的 core 行 → core 行 winner、tag long-tail 行 loser。
 
 **value-disagreement veto（兩 key 共用 — 一石二鳥）**
-winner 與 loser 同期值不一致（abs 差 > tolerance）→ **不 suppress**（fail-closed）。
-- 解 Codex Q3 反例（prose 被錯分類進錯 core uni → 值不等 → veto 擋）。
-- 解 Opus/Fable NCI-filer 反例（attributable-to-parent ≠ consolidated 差 NCI 份額 → 值不等 → veto 擋；LITE 24 期值全等 → 正常 suppress）。
+winner 與 loser 同期 **magnitude（|value|）** 不一致（abs 差 > tolerance）→ **不 suppress**（fail-closed）。
+- 解 Codex Q3 反例（prose 被錯分類進錯 core uni → magnitude 不等 → veto 擋）。
+- 解 Opus/Fable NCI-filer 反例（attributable-to-parent ≠ consolidated 差 NCI 份額 → magnitude 不等 → veto 擋；LITE 24 期值全等 → 正常 suppress）。
 - **value 當「否決權」非「配對鍵」** —— 不違反 T3「禁止值配對靜默 bind」。
+- **比 magnitude 非 signed display value（build pin，2026-06-11）**：原 v2 設計擬比「PDF-faithful 顯示值（含 negated）」，但真實 SNDK ground truth 推翻它 —— prose `'Gain on business divestiture'` 是 **pre-negated legacy data**（raw −34 且 display_negated=True → 顯示 +34），tag `GainLossOnSaleOfBusiness`（raw +34、display_negated=True → 顯示 −34 = (34)）。兩者代表**同一筆事件 |34|**，符號差異純粹是 negated-convention artifact，比 signed 顯示值會誤擋真重複。改比 |value|：符號從不承擔 identity（identity 已由 Key A label-text / Key B registry 的 concept 相等建立），value 只做 magnitude sanity 否決。NCI/錯分類 magnitude 不同仍擋。
+  - 連帶釐清偏好序對 SNDK 的正確性：tag 顯示 (34)（negatedLabel 慣例，label `(Gain) loss on business divestiture` 帶括號）才是 PDF-faithful；prose 顯示 +34 是 legacy pre-negated bug。`tag > prose` 去掉顯示錯誤的 prose、留下正確的 tag，方向正確。
 
 ### 3.4 偏好序
 `core uni 行 > tag_like long-tail 行 > prose long-tail 行`。理由：core = audited + 期別精確措辭（PDF-faithful 本體）；tag long-tail = XBRL 權威；prose long-tail（AGENT_CLASSIFIED）= legacy 自動分類、無不可替代措辭。**但偏好序只決定方向，suppress 與否仍受 §3.2 整行前提 + §3.3 三個 veto 把關。**
