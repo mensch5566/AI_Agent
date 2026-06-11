@@ -110,6 +110,16 @@ const TTM_RATIO_ROWS = new Set<string>([
   "net_debt_to_ebitda",
 ]);
 
+// Cross-version Non-GAAP ratios: stored version=NON_GAAP (numerator is a
+// management 8-K disclosure, e.g. adjusted_ebitda_margin_pct = adjusted_ebitda
+// @NON_GAAP / revenue@GAAP). The Ratios grid is the only ratios view and is
+// built under the GAAP version, so surface these explicit keys as a NON_GAAP
+// overlay rather than dropping them with the version filter. Fail-closed: only
+// keys in this allowlist cross versions.
+const NONGAAP_RATIO_ROWS = new Set<string>([
+  "adjusted_ebitda_margin_pct",
+]);
+
 // Absolute-value metric-only uni_accounts (derive-analytics) that are NOT
 // disclosed statement lines — they live in the Ratios/Derived subsection, never
 // inline in IS/BS/CF (spec §P2.3). Mirrors scripts/upsert_sec_financials.py
@@ -314,7 +324,12 @@ export function buildMatrix(
   // Filter cells by statement + version + period_kind/period
   const filtered = sourceCells.filter((c) => {
     if (c.statement !== statement) return false;
-    if (c.version !== version) return false;
+    // RATIO non-GAAP overlay: a few ratios are inherently management Non-GAAP
+    // and stored version=NON_GAAP; surface them in the GAAP Ratios grid.
+    const isNonGaapRatioOverlay =
+      statement === "RATIO" && version === "GAAP" &&
+      c.version === "NON_GAAP" && NONGAAP_RATIO_ROWS.has(c.uni_account);
+    if (c.version !== version && !isNonGaapRatioOverlay) return false;
     if (statement === "BS") {
       if (!BS_PKINDS.includes(c.period_kind)) return false;
       return frequency === "quarterly" ? isQuarterPeriod(c.period) : isFyPeriod(c.period);

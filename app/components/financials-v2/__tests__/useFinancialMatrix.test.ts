@@ -305,6 +305,28 @@ describe("buildMatrix — RATIO statement unchanged", () => {
     expect(keys.length).toBeGreaterThan(10);
     expect(m.cells["gross_margin_pct"]["Q1_FY2025"].cell?.value).toBe(0.45);
   });
+
+  it("surfaces a NON_GAAP adjusted_ebitda_margin_pct cell in the GAAP Ratios grid (cross-version overlay)", () => {
+    const cells: Cell[] = [
+      metric({ uni_account: "adjusted_ebitda_margin_pct", period: "Q1_FY2025",
+               statement: "RATIO", period_kind: "quarter_duration",
+               version: "NON_GAAP", value: 0.12 }),
+    ];
+    const m = buildMatrix(cells, "RATIO", GAAP, "quarterly");
+    // version filter would normally drop the NON_GAAP cell; the overlay allowlist lets it through.
+    expect(m.cells["adjusted_ebitda_margin_pct"]["Q1_FY2025"].cell?.value).toBe(0.12);
+  });
+
+  it("does NOT surface a NON_GAAP cell for a non-overlay RATIO key (fail-closed)", () => {
+    const cells: Cell[] = [
+      metric({ uni_account: "gross_margin_pct", period: "Q1_FY2025",
+               statement: "RATIO", period_kind: "quarter_duration",
+               version: "NON_GAAP", value: 0.55 }),
+    ];
+    const m = buildMatrix(cells, "RATIO", GAAP, "quarterly");
+    // gross_margin_pct is NOT in the overlay allowlist → its NON_GAAP cell is dropped.
+    expect(m.cells["gross_margin_pct"]?.["Q1_FY2025"]?.cell?.value).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
