@@ -1281,3 +1281,153 @@ def adapt_edges(edges_json: dict, ticker: str, edge_type: str) -> list[EdgeRow]:
             preferred_label=preferred_label,
         ))
     return rows
+
+
+# =========================================================================== #
+# Dedup pass — whole-row redundancy suppression (spec
+# docs/superpowers/specs/2026-06-10-dedup-display-suppression-design.md v2).
+#
+# As Reported shows a duplicate row when a legacy prose fact and a
+# capture-everything tag fact denote the SAME economic line. The frontend
+# renders per-rowId across ALL periods (a surviving prototype in any period
+# resurrects same-rowId cells in others), so per-cell suppression is unsafe;
+# only WHOLE-ROW suppression works (3-way review Blocker 2). And the only
+# persisted display-hide mechanism is nulling display_label AND ordinal
+# (display_eligible is adapter-only, stripped before upsert — Blocker 1).
+# =========================================================================== #
+
+# Dedup ONLY. Concepts (XBRL local names) that denote the SAME economic line as
+# a core uni_account, for whole-row redundancy suppression. NEVER consulted by
+# resolve_via_uni* (kept separate from presentation_resolver.CANONICAL_CONCEPT
+# so dedup membership cannot perturb the ordinal-borrow path — Blocker 3).
+DEDUP_EQUIVALENT_CONCEPTS: dict[str, set[str]] = {
+    "income_before_taxes": {
+        "IncomeLossAttributableToParent",
+        "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+    },
+}
+
+# period_kind values that are NOT displayed in the frontend statement view
+# (YTD/cumulative durations). Excluded from the whole-row redundancy
+# precondition, but still nulled when a row is suppressed (no display effect).
+_NON_DISPLAYED_PERIOD_KINDS = {"cumulative_ytd", "ytd_duration"}
+
+_DEDUP_VALUE_TOL = 0.5  # |Δ| in reporting units; below this two cells "agree"
+
+
+def _strip_ns(name: str) -> str:
+    """Bare local name from a possibly-namespaced concept ('us-gaap:Foo' → 'Foo')."""
+    return (name or "").rsplit(":", 1)[-1]
+
+
+def _is_long_tail_uni(uni: str | None) -> bool:
+    return bool(uni) and uni.endswith("_long_tail")
+
+
+def _display_value(f: "FactRow") -> float:
+    """PDF-faithful displayed value: raw value with the matched-arc negation
+    applied. Two rows for the same economic line can store opposite raw signs
+    (tag GainLossOnSaleOfBusiness=+34 vs prose 'Gain on business divestiture'
+    =-34) yet render identically once display_negated is honored — so the
+    value-disagreement veto must compare DISPLAYED values, not raw."""
+    return -f.value if f.display_negated else f.value
+
+
+def _suppress_row(cells: list["FactRow"], *, key: str, winner: str) -> None:
+    """Whole-row suppress: null the persisted display fields on EVERY cell of a
+    loser row (all periods, incl. YTD). display_eligible=False is adapter-only
+    (gate); display_label/ordinal=None is what actually hides the row."""
+    for c in cells:
+        c.display_label = None
+        c.ordinal = None
+        c.display_eligible = False
+        prov = dict(c.provenance or {})
+        prov["display_exclusion_reason"] = "dedup_redundant_row"
+        prov["dedup_key"] = key
+        prov["dedup_winner"] = winner
+        c.provenance = prov
+
+
+def dedup_redundant_rows(
+    facts: list["FactRow"],
+    *,
+    statement: str,
+    edges: list[dict],
+    labels: dict,
+    value_tol: float = _DEDUP_VALUE_TOL,
+) -> None:
+    """Suppress whole rows that redundantly duplicate another row's economic
+    line, in place. Call once per statement AFTER attach_display_metadata.
+
+    Preference order: core uni > tag_like long-tail > prose long-tail.
+      Key A — a prose `*_long_tail` row (preserved_pdf_label) whose label text
+        resolves (resolve_via_label_text) to a face concept C, where a tag-like
+        `*_long_tail` row with concept C covers every displayed period → prose
+        loses to tag. multi-occurrence veto: ≠1 tag row for C → skip.
+      Key B — a tag-like `*_long_tail` row whose concept is a
+        DEDUP_EQUIVALENT_CONCEPTS member of some core uni_account U, where a
+        core row with uni==U covers every displayed period → tag loses to core.
+
+    Whole-row precondition (Blocker 2): a row is suppressed ONLY if EVERY
+    displayed (non-YTD) period has a value-agreeing winner competitor; else
+    fail-safe (NOT suppressed) — better a temporary duplicate than a vanished
+    value. Value agreement compares DISPLAYED values (display_negated applied),
+    used as a VETO not a match key (Blocker 3)."""
+    stmt_facts = [
+        f for f in facts if f.statement == statement and f.version == "GAAP"
+    ]
+    rows: dict[tuple, list["FactRow"]] = defaultdict(list)
+    for f in stmt_facts:
+        rows[(f.uni_account, f.source_account)].append(f)
+
+    def _index(cells: list["FactRow"]) -> dict[tuple, "FactRow"]:
+        return {(c.period, c.period_kind): c for c in cells}
+
+    def _row_redundant_against(
+        loser_cells: list["FactRow"], winner_idx: dict[tuple, "FactRow"]
+    ) -> bool:
+        displayed = [c for c in loser_cells
+                     if c.period_kind not in _NON_DISPLAYED_PERIOD_KINDS]
+        if not displayed:
+            return False
+        for c in displayed:
+            w = winner_idx.get((c.period, c.period_kind))
+            if w is None or abs(_display_value(c) - _display_value(w)) > value_tol:
+                return False  # fail-safe: missing / disagreeing competitor
+        return True
+
+    # Key A — prose long-tail loses to a same-concept tag long-tail row.
+    tag_ll_by_concept: dict[str, list[list["FactRow"]]] = defaultdict(list)
+    for (uni, sa), cells in rows.items():
+        if _is_long_tail_uni(uni) and classify_source_account(sa or None) == "tag_like":
+            tag_ll_by_concept[_strip_ns(sa)].append(cells)
+    for (uni, sa), cells in rows.items():
+        if not _is_long_tail_uni(uni):
+            continue
+        if classify_source_account(sa or None) != "preserved_pdf_label":
+            continue
+        full_q, _o, _n, _r = resolve_via_label_text(sa, edges, labels, statement)
+        if not full_q:
+            continue
+        concept = _strip_ns(full_q)
+        winners = tag_ll_by_concept.get(concept, [])
+        if len(winners) != 1:
+            continue  # 0 → no tag competitor; >1 → multi-occurrence veto
+        if _row_redundant_against(cells, _index(winners[0])):
+            _suppress_row(cells, key="A", winner=concept)
+
+    # Key B — tag long-tail loses to a same-line core uni row.
+    for (uni, _sa), cells in rows.items():
+        if not _is_long_tail_uni(uni):
+            continue
+        concept = _strip_ns(cells[0].source_account)
+        winner_uni = next(
+            (u for u, variants in DEDUP_EQUIVALENT_CONCEPTS.items()
+             if concept in variants),
+            None,
+        )
+        if winner_uni is None:
+            continue
+        core_cells = [f for f in stmt_facts if f.uni_account == winner_uni]
+        if _row_redundant_against(cells, _index(core_cells)):
+            _suppress_row(cells, key="B", winner=winner_uni)

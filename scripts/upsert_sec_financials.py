@@ -400,6 +400,12 @@ def attach_display_to_batch(batch: A.NormalizedBatch, sources: dict) -> None:
             accepted_concepts=accepted,
             audited_orders=audited_orders,
         )
+        # Whole-row redundancy suppression (dedup spec v2): null a prose/tag row
+        # that duplicates another row's economic line. Runs AFTER attach (needs
+        # display_negated for the value-agreement veto) and per statement.
+        A.dedup_redundant_rows(
+            stmt_facts, statement=statement, edges=edges, labels=labels,
+        )
 
     _print_note_level_exclusions(batch.ticker, gaap_facts)
 
