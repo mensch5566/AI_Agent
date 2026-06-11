@@ -25,6 +25,17 @@ const AXIS_LABEL: Record<string, string> = {
   business_segment: "Business Segment",
 };
 
+// Friendly labels for the Metric dropdown. Falls back to the raw uni_account.
+const METRIC_LABEL: Record<string, string> = {
+  revenue: "Revenue",
+  operating_income: "Operating Income",
+  operating_margin_pct: "Operating Margin %",
+  revenue_pct_of_total: "% of Total Revenue",
+  identifiable_assets: "Identifiable Assets",
+  long_lived_assets: "Long-Lived Assets",
+  ppe_net: "PP&E, net",
+};
+
 function filterByFrequency(rows: DimCell[], freq: Frequency): DimCell[] {
   return rows.filter((r) => {
     const isQ = /^Q\d_FY\d{4}$/.test(r.period);
@@ -123,7 +134,7 @@ export function SegmentDashboard({ dimensional }: Props) {
           <SelectContent>
             {uniAccountsForAxis.map((u) => (
               <SelectItem key={u} value={u}>
-                {u}
+                {METRIC_LABEL[u] ?? u}
               </SelectItem>
             ))}
           </SelectContent>
