@@ -1,7 +1,9 @@
 # Design — parse-SEC-supplement Stage-B-always（雙源獨立直接抽取互相 cross-check 收斂）
 
-Status: **v4 — MVP（period-anchor 確定性版）BUILDING；full 雙源值比對 = Phase 2**
-Date: 2026-06-12（v4 — user 拍板先做 MVP；v3 full 設計保留於 §3–§4 當 Phase 2 藍圖）
+Status: **v4 — MVP（period-anchor 確定性版）SHIPPED（2 輪雙模型 review 過）；full 雙源值比對 = Phase 2**
+Date: 2026-06-12（v4 — MVP build + 2-round Opus 4.8 + GPT 5.5 review 完成；v3 full 設計保留於 §3–§4 當 Phase 2 藍圖）
+
+> **MVP 完成記錄**：`period_anchor.py`（canonical `c9f8b6c`）+ parse wire + upsert gate（AI_Agent `fc03309`）。13 TDD + 5 ticker 真實 tier1=0 + SNDK bug-catch 證明 + gate fail-closed 端到端驗證。production 資料本就乾淨（tier1=0），無需 re-upsert；artifact 已就地生成供未來 upsert gate 讀取。
 Author: Claude
 Scope: `parse-SEC-supplement` skill（canonical `~/CC_Switch_Config/skills/parse-SEC-supplement/`）
 
