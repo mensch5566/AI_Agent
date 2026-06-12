@@ -454,3 +454,36 @@ describe("CF cash movement analysis", () => {
     expect(m.cells["cash_beginning_of_period"]?.["FY2026"]?.cell).toBeUndefined(); // predecessor FY2025 ambiguous → blank
   });
 });
+
+// ---------------------------------------------------------------------------
+// Non-GAAP spotlight overlay matrix (2026-06-13).
+//
+// The Non-GAAP matrix (buildMatrix version="NON_GAAP") is consumed ONLY by the
+// IS spotlight overlay, which looks up nongaap.cells[uni_account][period]. But
+// 8-K Non-GAAP facts carry NO face-statement presentation metadata (ordinal +
+// display_label are null), so the display-eligible-prototype row builder created
+// ZERO prototypes -> empty matrix -> the spotlight Non-GAAP column rendered "—"
+// for every period (MU bug). Non-GAAP facts must always become prototypes.
+// ---------------------------------------------------------------------------
+describe("Non-GAAP overlay matrix", () => {
+  it("populates cells for NON_GAAP IS facts that lack ordinal/display_label", () => {
+    const cells: Cell[] = [
+      fact({ uni_account: "revenue", period: "Q1_FY2025", statement: "IS",
+             version: "NON_GAAP", value: 5773, source_account: "Net revenue" }),
+      fact({ uni_account: "operating_income", period: "Q1_FY2025", statement: "IS",
+             version: "NON_GAAP", value: 1133, source_account: "Operating income" }),
+    ];
+    const m = buildMatrix(cells, "IS", "NON_GAAP", "quarterly");
+    expect(m.cells["revenue"]?.["Q1_FY2025"]?.cell?.value).toBe(5773);
+    expect(m.cells["operating_income"]?.["Q1_FY2025"]?.cell?.value).toBe(1133);
+  });
+
+  it("GAAP matrix still drops display-ineligible facts (no regression)", () => {
+    const cells: Cell[] = [
+      fact({ uni_account: "revenue", period: "Q1_FY2025", statement: "IS",
+             version: "GAAP", value: 100, ordinal: null, display_label: null }),
+    ];
+    const m = buildMatrix(cells, "IS", "GAAP", "quarterly");
+    expect(m.cells["revenue"]).toBeUndefined();
+  });
+});

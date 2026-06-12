@@ -418,7 +418,16 @@ export function buildMatrix(
   const protos = new Map<string, Proto>();
   let seqCounter = 0;
   for (const c of work) {
-    if (!isDisplayEligiblePrototype(c)) continue;
+    // Non-GAAP 8-K facts carry no face-statement presentation metadata (ordinal
+    // + display_label null), so they are never "display-eligible". But the
+    // Non-GAAP matrix is consumed ONLY by the IS spotlight overlay, which keys on
+    // cells[uni_account][period] — so every Non-GAAP fact must become a prototype
+    // (keyed by uni_account) or the overlay renders "—" for all periods. The GAAP
+    // path keeps the strict display-eligibility gate.
+    const nonGaapOverlayCell =
+      version === "NON_GAAP" && c.source_table === "facts" &&
+      !METRIC_ONLY_UNI.has(c.uni_account);
+    if (!isDisplayEligiblePrototype(c) && !nonGaapOverlayCell) continue;
     const rowId = rowIdOf(c.uni_account, c.source_account);
     const label = c.display_label ?? c.source_account ?? c.uni_account;
     const existing = protos.get(rowId);
