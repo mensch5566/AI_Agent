@@ -1009,22 +1009,38 @@ def main():
     sources = load_sources(ticker)
     batch = normalize(ticker, sources)
 
-    # Period-anchor gate (MVP, parse-SEC-supplement Stage-B). A Tier-1 fiscal-period
+    # Period-anchor gate (MVP, parse-SEC-supplement Stage-B). A fiscal-period
     # mislabel poisons every dimensional row's period label, so withhold the whole
     # dimensional batch (the snapshot-replace is guarded by `if batch.dimensional`,
     # so existing rows are preserved — never wiped). GAAP / Non-GAAP unaffected.
-    pa_tier1 = ((sources.get("period_anchor") or {}).get("validation", {}) or {}).get("tier1", [])
-    if pa_tier1 and not args.allow_period_anomaly:
-        print(f"\n  ⚠ PERIOD-ANCHOR GATE: {len(pa_tier1)} Tier-1 anomaly(ies) for {ticker} "
+    # FAIL-CLOSED: when there ARE dimensional rows to protect, the gate fires not
+    # only on a Tier-1 anomaly but also when the validation artifact is MISSING
+    # (can't confirm labels) or anchored 0 quarters (window excluded every 10-K
+    # FYE anchor) — otherwise the guardrail is trivially bypassed by a deleted /
+    # never-generated artifact or a truncated parse window.
+    pa_artifact = sources.get("period_anchor")
+    pa_val = (pa_artifact or {}).get("validation", {}) or {}
+    pa_tier1 = pa_val.get("tier1", [])
+    pa_summary = pa_val.get("summary", {}) or {}
+    has_dim = bool(batch.dimensional)
+    gate_reason = None
+    if pa_tier1:
+        gate_reason = f"{len(pa_tier1)} Tier-1 period anomaly(ies)"
+    elif has_dim and pa_artifact is None:
+        gate_reason = "period-anchor validation artifact MISSING (re-run parse_instance_xbrl)"
+    elif has_dim and pa_summary.get("anchored_quarters", 0) == 0:
+        gate_reason = ("period-anchor validated 0 quarters — window likely excludes the "
+                       "10-K FYE anchor; cannot confirm period labels")
+    if gate_reason and not args.allow_period_anomaly:
+        print(f"\n  ⚠ PERIOD-ANCHOR GATE: {gate_reason} for {ticker} "
               f"— withholding {len(batch.dimensional)} dimensional rows (existing preserved).")
         for a in pa_tier1:
-            print(f"      ❌ {a.get('accession')} [{a.get('reportDate')}] "
+            print(f"      ❌ {a.get('accession')} [{a.get('reportDate')}] kind={a.get('kind')} "
                   f"resolved={a.get('resolved_label')} expected={a.get('expected_label')}")
-        print("      Resolve period labels (re-parse) or pass --allow-period-anomaly to override.")
+        print("      Resolve labels / re-parse, or pass --allow-period-anomaly to override.")
         batch.dimensional = []
-    elif pa_tier1:
-        print(f"\n  ⚠ PERIOD-ANCHOR: {len(pa_tier1)} Tier-1 anomaly(ies) OVERRIDDEN "
-              f"via --allow-period-anomaly")
+    elif gate_reason:
+        print(f"\n  ⚠ PERIOD-ANCHOR: {gate_reason} OVERRIDDEN via --allow-period-anomaly")
 
     gate_pass = print_report(batch)
 
