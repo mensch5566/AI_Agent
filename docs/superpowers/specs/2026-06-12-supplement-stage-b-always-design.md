@@ -1,8 +1,8 @@
 # Design — parse-SEC-supplement Stage-B-always（雙源直接抽取互相 cross-check 收斂）
 
-Status: **DRAFT（待 user review → 雙模型 review → build）**
-Date: 2026-06-12
-Author: Claude (handoff draft)
+Status: **DESIGN-LOCKED（user 已拍板方向 2026-06-12；待雙模型 review → build）**
+Date: 2026-06-12（v2 — 5 個開放決策已收斂進設計本體）
+Author: Claude
 Scope: `parse-SEC-supplement` skill（canonical `~/CC_Switch_Config/skills/parse-SEC-supplement/`）
 
 ---
@@ -45,7 +45,10 @@ parse-SEC-supplement 目前是 **XBRL-primary + NLM-fallback（gap-triggered）*
 | 只有 XBRL | ⚠ xbrl_only | 採 XBRL；標 `nlm_unconfirmed`（NLM 沒讀到，可能 NLM 漏或 prompt 不到位）|
 | 只有 NLM | ⚠ nlm_only | 採 NLM（XBRL 無此維度，如小公司沒打 segment XBRL tag）；標 `xbrl_missing` |
 
-- **容差**：只吸收 rounding（建議**相對容差 + 絕對下限**，如 `max(abs*0.001, 1)`，呼應「太嚴 vs 太鬆」—— 絕對 0 太嚴會被 rounding 觸發 false-positive）。容差**不是 derive**（只是比較門檻）。
+- **容差（決議 D1）**：`tol = max(abs(xbrl) * REL, FLOOR[unit_class])`，只吸收 rounding。
+  - `REL = 0.005`（0.5%）—— XBRL 是精確值、NLM 讀 PDF 是 filer 印出的同一數字，真實差異只該來自 PDF 顯示位數的進位。
+  - `FLOOR`（per unit-class，半個顯示精度單位）：`USD_millions → 1`、`USD_thousands → 1`、`pct → 0.1`（即 0.1 個百分點）。
+  - 絕對 0 太嚴（rounding false-positive），純相對對小值太鬆 → 取兩者 max。容差**不是 derive**（只是比較門檻）。
 - **period 權威**：用 filer 的 `dei:DocumentFiscalYearFocus` + `DocumentFiscalPeriodFocus` **直接讀**（已實作 `dei_period_label()`，52/53-週安全）—— 兩源都該對齊到 dei 宣告的財季，避免 SNDK 型 shift。
 - **分類本身不可變成 derive**：只做「相等/不相等 + 缺一邊」的歸類，不算任何衍生量。
 
@@ -54,12 +57,16 @@ parse-SEC-supplement 目前是 **XBRL-primary + NLM-fallback（gap-triggered）*
 - 收斂後的 canonical facts（per cell 標 cross-check 狀態於 provenance）。
 - **gate**：有未解 conflict → 收尾報告明確標示（不阻塞抽取，但 ship 前人工要清）。
 
-## §4 待 reviewer 定的開放點
-- **Q1 容差數字 + 形狀**：相對 vs 絕對 vs 混合？不同 unit（thousands/millions/pct）門檻？
-- **Q2 conflict 預設行為**：純報告等人工，還是給「XBRL 預設勝 + 標記」的暫態？（傾向純報告，T3 不靜默選邊）
-- **Q3 cadence/成本**：每次 parse 都跑全 NLM，還是「新 filing 才跑該期」？user 說 NLM 不貴只慢一點 → 傾向每期都跑，但可加 cache（NLM 回應存 run folder，同 accession 不重查）。
-- **Q4 sum-sanity（cross_check C）算不算 derive**：現有 `cross_check_supplement.py` C 做 `Σ(child·weight)=parent`。這是「驗 filer 自己 tag 的 parent vs children」（都直接讀），但涉及加總。**要 reviewer 裁決**：保留為 audit-only（不寫回值、純報告）是否可接受，或移除。
-- **Q5 ticker_config**：Stage-B-always 需每個 ticker 有 NLM notebook + period_sources 設定。缺 config 的 ticker 怎麼 fail（fail-closed 提示補 config）。
+## §4 決議（user 2026-06-12 拍板，原開放點已收斂）
+
+- **D1 容差形狀** → 見 §3.2：`max(abs*0.5%, FLOOR[unit])`，FLOOR=`{millions:1, thousands:1, pct:0.1}`。
+- **D2 conflict 預設行為** → **純報告等人工**。conflict cell **不靜默選邊**（不給「XBRL 暫態勝」），一律進 must-review 報告由人裁決後固化。T3 紀律：silent auto-pick 是 SNDK 型 silent error 的溫床，禁止。
+- **D3 cadence / 成本** → **每期都跑 NLM**（user：NLM 不貴只慢）。加 **run-folder cache，key = accession number**：同一份 filing（同 accession）已查過就讀 cache，不重打 NLM。新 filing 才實際 query。→ 兼顧「全期都驗」與「不浪費」。
+- **D4 sum-sanity（現有 cross_check C `Σ(child·weight)=parent`）** → **降級為 audit-only 加分項**。
+  - 主驗證 = §3.2 的 **XBRL↔NLM 雙源直接抽取 cross-check（零 derive）**，sum-sanity **不是**主驗證手段。
+  - sum-sanity 涉及加總（technically derive），依鐵律「parse 內真要 derive 也只能是加分項，絕不能是主要手段或驗證手段」→ 保留為 **純報告 audit 訊號**：**永不寫回值、永不選邊、永不據以改 canonical**，只在 validation.md 印一行 advisory（「filer 自報 parent vs Σchildren 對不上」），給人看。
+  - 它驗的是 filer **自己 tag 的** parent vs children（兩邊都直接讀），不是我們算出新數字塞回去 → 在「加分項、不寫回」的框內可保留。
+- **D5 ticker_config 缺漏** → **fail-closed**。Stage-B-always 需每 ticker 有 NLM notebook + period_sources。缺 config → **明確報錯停下**（「ticker X 缺 NLM config，無法雙源驗證，請補 ticker_configs/X.json」），**不可靜默退回 XBRL-only**（那正是現在 SNDK 型盲區，退回等於白改）。
 
 ## §5 Scope / Non-goals
 - ✅ in: Stage B 永遠跑、XBRL↔NLM 直接抽取 cross-check 收斂、validation 報告強化、dei period 對齊。
@@ -67,12 +74,13 @@ parse-SEC-supplement 目前是 **XBRL-primary + NLM-fallback（gap-triggered）*
 - ❌ out: 改 XBRL 抽取本身（已是直接抽取）；改 schema（除非 provenance 加 cross-check 欄位）。
 
 ## §6 Build plan（T3 review-before-prod）
-1. design spec（本文）→ user review → **雙模型 review（Opus 4.8 + GPT 5.5）收斂**。
-2. TDD：cross-check 收斂 pass（合成雙源 fixture：agree / conflict / xbrl_only / nlm_only / 容差邊界）。
-3. wire：extract_supplement_v3 always-chain Stage B + 收斂 pass + validation 報告。
-4. 各 ticker 跑（work-profile NotebookLM；先 1 個 ticker 端到端證明，再全量）。
-5. 人工清 conflict（real mismatch 修 raw NLM 或確認 XBRL）。
-6. 收斂後 re-upsert（dimensional 快照替換已就緒）+ 前端驗證。
+1. ~~design spec（本文）→ user review~~（✅ done，方向已拍板）→ **雙模型 review（Opus 4.8 + GPT 5.5）收斂**（下個 session 起手）。
+2. TDD：cross-check 收斂 pass（合成雙源 fixture：agree / conflict / xbrl_only / nlm_only / 容差邊界 D1 / pct vs millions FLOOR）。
+3. wire：extract_supplement_v3 always-chain Stage B + 收斂 pass + accession-keyed cache（D3）+ validation 報告（含 sum-sanity advisory 行 D4）。
+4. fail-closed config gate（D5）：缺 ticker_config → 報錯停。
+5. 各 ticker 跑（work-profile NotebookLM；先 1 個 ticker 端到端證明，再全量）。
+6. 人工清 conflict（real mismatch 修 raw NLM 或確認 XBRL）。
+7. 收斂後 re-upsert（dimensional 快照替換已就緒）+ 前端驗證。
 
 ## §7 風險 / 注意
 - NLM 幻覺：NLM 可能讀錯 → conflict 要人工判，不可自動信 NLM 覆蓋 XBRL。
