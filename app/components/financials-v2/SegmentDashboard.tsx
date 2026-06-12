@@ -38,6 +38,13 @@ const METRIC_LABEL: Record<string, string> = {
 
 function filterByFrequency(rows: DimCell[], freq: Frequency): DimCell[] {
   return rows.filter((r) => {
+    // Cumulative YTD facts (6M/9M) are never a canonical column — the
+    // single-quarter and FY-annual facts are. Some NLM rows carry a 9M
+    // cumulative tagged ytd_duration at a Qx period (e.g. Lumentum Q3_FY2025
+    // Cloud & Networking = 986.7 9M alongside 365.2 single-quarter); without this
+    // guard the pivot collapses both onto the Qx cell and may show the 9M total
+    // in place of the quarter. Exclude ytd_duration from both views.
+    if (r.period_kind === "ytd_duration") return false;
     const isQ = /^Q\d_FY\d{4}$/.test(r.period);
     const isFY = /^FY\d{4}$/.test(r.period);
     if (freq === "quarterly") return isQ;
