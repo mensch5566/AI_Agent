@@ -103,6 +103,14 @@ export function SegmentDashboard({ dimensional }: Props) {
     colTotals[p] = members.reduce((sum, m) => sum + (cells[m][p]?.value ?? 0), 0);
   }
 
+  // Members in an axis share one reporting unit; the Total row must format with
+  // THAT unit, not a hardcoded scale — otherwise a USD_millions ticker (LITE/MU/
+  // INTC) renders its total mis-scaled (e.g. 1,515 → "$1.5M" instead of "$1.5B").
+  const axisUnit =
+    members
+      .map((m) => periods.map((p) => cells[m][p]?.unit).find(Boolean))
+      .find(Boolean) ?? "USD_millions";
+
   if (axes.length === 0) {
     return <div className="p-4 text-sm text-muted-foreground">No dimensional facts available.</div>;
   }
@@ -219,7 +227,7 @@ export function SegmentDashboard({ dimensional }: Props) {
                   </td>
                   {periods.map((p) => (
                     <td key={p} className="text-right px-3 py-1.5 whitespace-nowrap">
-                      {fmtValue(colTotals[p], "USD_thousands")}
+                      {fmtValue(colTotals[p], axisUnit)}
                     </td>
                   ))}
                 </tr>
