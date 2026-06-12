@@ -308,6 +308,7 @@ def load_sources(ticker: str) -> dict:
         "nongaap": load_json(base / "parse-8k-nongaap" / f"{ticker}_nongaap.json"),
         "supplement_facts": load_json(base / "parse-SEC-supplement" / f"{ticker}_supplement_facts_v3.json"),
         "supplement_edges": load_json(base / "parse-SEC-supplement" / f"{ticker}_supplement_edges_v3.json"),
+        "period_anchor": load_json(base / "parse-SEC-supplement" / f"{ticker}_period_anchor_validation.json"),
         "dimensional_analytics": _latest_dimensional_analytics(base, ticker),
         "nlm_order": {
             stmt: load_json(nlm_dir / f"{ticker}_{stmt}_nlm_order.json")
@@ -997,11 +998,34 @@ def main():
                         "AND Supabase already has derive-base-managed metrics "
                         "for this ticker. Default is fail-closed (R7-F2) to "
                         "prevent mixed-vintage state (new facts + stale metrics).")
+    p.add_argument("--allow-period-anomaly", action="store_true",
+                   help="Override the period-anchor gate: upsert dimensional rows even "
+                        "when {ticker}_period_anchor_validation.json reports Tier-1 "
+                        "fiscal-period mislabels. Default fail-closed — dimensional rows "
+                        "are withheld (existing DB rows preserved) until labels resolve.")
     args = p.parse_args()
     ticker = args.ticker.upper()
 
     sources = load_sources(ticker)
     batch = normalize(ticker, sources)
+
+    # Period-anchor gate (MVP, parse-SEC-supplement Stage-B). A Tier-1 fiscal-period
+    # mislabel poisons every dimensional row's period label, so withhold the whole
+    # dimensional batch (the snapshot-replace is guarded by `if batch.dimensional`,
+    # so existing rows are preserved — never wiped). GAAP / Non-GAAP unaffected.
+    pa_tier1 = ((sources.get("period_anchor") or {}).get("validation", {}) or {}).get("tier1", [])
+    if pa_tier1 and not args.allow_period_anomaly:
+        print(f"\n  ⚠ PERIOD-ANCHOR GATE: {len(pa_tier1)} Tier-1 anomaly(ies) for {ticker} "
+              f"— withholding {len(batch.dimensional)} dimensional rows (existing preserved).")
+        for a in pa_tier1:
+            print(f"      ❌ {a.get('accession')} [{a.get('reportDate')}] "
+                  f"resolved={a.get('resolved_label')} expected={a.get('expected_label')}")
+        print("      Resolve period labels (re-parse) or pass --allow-period-anomaly to override.")
+        batch.dimensional = []
+    elif pa_tier1:
+        print(f"\n  ⚠ PERIOD-ANCHOR: {len(pa_tier1)} Tier-1 anomaly(ies) OVERRIDDEN "
+              f"via --allow-period-anomaly")
+
     gate_pass = print_report(batch)
 
     if not gate_pass:
