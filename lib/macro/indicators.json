@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "indicators": [
+    { "indicator_key": "fed_total_assets", "fred_series": "WALCL", "label": "Fed 總資產", "layer": "L1", "polarity": "higher_better", "edge_id": "E1", "unit": "usd_millions", "freq": "weekly", "primary": true },
+    { "indicator_key": "fed_funds_rate", "fred_series": "DFF", "label": "聯邦基金利率", "layer": "L2", "polarity": "lower_better", "edge_id": "ENV", "unit": "pct", "freq": "daily", "primary": false },
+    { "indicator_key": "core_cpi", "fred_series": "CPILFESL", "label": "核心 CPI", "layer": "L2", "polarity": "lower_better", "edge_id": "ENV", "unit": "index", "freq": "monthly", "primary": false },
+    { "indicator_key": "core_pce", "fred_series": "PCEPILFE", "label": "核心 PCE", "layer": "L2", "polarity": "lower_better", "edge_id": "ENV", "unit": "index", "freq": "monthly", "primary": false },
+    { "indicator_key": "yield_curve_10y2y", "fred_series": "T10Y2Y", "label": "10Y-2Y 利差", "layer": "L2", "polarity": "higher_better", "edge_id": "ENV", "unit": "pct", "freq": "daily", "primary": false },
+    { "indicator_key": "hy_oas", "fred_series": "BAMLH0A0HYM2", "label": "HY OAS", "layer": "L3", "polarity": "lower_better", "edge_id": "E2", "unit": "pct", "freq": "daily", "primary": true },
+    { "indicator_key": "ig_oas", "fred_series": "BAMLC0A0CM", "label": "IG OAS", "layer": "L3", "polarity": "lower_better", "edge_id": "E2", "unit": "pct", "freq": "daily", "primary": false },
+    { "indicator_key": "vix", "fred_series": "VIXCLS", "label": "VIX", "layer": "L5", "polarity": "lower_better", "edge_id": "BG", "unit": "index", "freq": "daily", "primary": false },
+    { "indicator_key": "cc_delinquency", "fred_series": "DRCCLACBS", "label": "信用卡違約率", "layer": "L4", "polarity": "lower_better", "edge_id": "BG", "unit": "pct", "freq": "quarterly", "primary": false }
+  ],
+  "graph": {
+    "nodes": [
+      { "id": "FED", "label": "FED", "stage": 1 },
+      { "id": "BANK", "label": "銀行/債市", "stage": 1 },
+      { "id": "CSP", "label": "CSP", "stage": 3 },
+      { "id": "GPU", "label": "GPU (NVDA/AMD)", "stage": 4 },
+      { "id": "CPU", "label": "CPU (AMD/Intel)", "stage": 4 },
+      { "id": "MEM", "label": "Memory/HBM", "stage": 4 },
+      { "id": "SYS", "label": "伺服器系統", "stage": 4 },
+      { "id": "FOUNDRY", "label": "TSMC", "stage": 4 },
+      { "id": "EQUIP", "label": "ASML/設備", "stage": 4 },
+      { "id": "B2B", "label": "AI labs (B2B)", "stage": 5 },
+      { "id": "B2C", "label": "廣告+雲 (B2C)", "stage": 5 }
+    ],
+    "edges": [
+      { "id": "E1", "from": "FED", "to": "BANK", "label": "流動性" },
+      { "id": "E2", "from": "BANK", "to": "CSP", "label": "融資" },
+      { "id": "E3", "from": "CSP", "to": "GPU", "label": "GPU capex" },
+      { "id": "E4", "from": "CSP", "to": "CPU", "label": "CPU" },
+      { "id": "E5", "from": "CSP", "to": "MEM", "label": "Memory" },
+      { "id": "E6", "from": "CSP", "to": "SYS", "label": "系統" },
+      { "id": "E7", "from": "GPU", "to": "FOUNDRY", "label": "代工" },
+      { "id": "E8", "from": "FOUNDRY", "to": "EQUIP", "label": "設備" },
+      { "id": "E9", "from": "B2B", "to": "CSP", "label": "B2B 變現" },
+      { "id": "E10", "from": "B2C", "to": "CSP", "label": "B2C 變現" }
+    ]
+  }
+}
