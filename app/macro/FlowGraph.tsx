@@ -1,7 +1,7 @@
 "use client";
 import type { GraphEdge, GraphNode, LampColor } from "@/lib/macro/types";
 
-const STAGE_X: Record<number, number> = { 1: 60, 3: 300, 4: 560, 5: 300 };
+const STAGE_X: Record<number, number> = { 1: 60, 3: 300, 4: 560, 5: 140 };
 const LAMP_STROKE: Record<LampColor, string> = { green: "#1a7f37", red: "#c02734", grey: "#b09898" };
 
 // 每個 stage 內節點縱向排列

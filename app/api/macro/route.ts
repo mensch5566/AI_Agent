@@ -20,8 +20,10 @@ export async function GET() {
         .order("period_end", { ascending: false })
         .limit(2);
       if (error) console.error("macro_facts query error:", ind.indicator_key, error.message);
-      const curr = data?.[0]?.value ?? null;
-      const prev = data?.[1]?.value ?? null;
+      // Postgres numeric 經 supabase-js 會回字串(保精度) → 強制轉數字,否則 lamp 的大小比較會變字典序
+      const toNum = (v: unknown) => (v == null ? null : Number(v));
+      const curr = toNum(data?.[0]?.value);
+      const prev = toNum(data?.[1]?.value);
       return {
         indicator_key: ind.indicator_key,
         label: ind.label,
