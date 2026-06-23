@@ -473,7 +473,8 @@ def normalize(ticker: str, sources: dict) -> A.NormalizedBatch:
     sign_flip = (sources["sign_flip"] or {}).get("concepts", [])
     batch.company = A.adapt_company(gaap_meta, sign_flip_concepts=sign_flip)
 
-    pe_map = A.build_period_end_map(gaap_meta)
+    pe_map = A.build_period_end_map(
+        gaap_meta, (sources["gaap_facts"] or {}).get("facts"))
 
     # GAAP facts
     gaap_rows, gaap_rej = A.adapt_gaap_facts(sources["gaap_facts"], pe_map)

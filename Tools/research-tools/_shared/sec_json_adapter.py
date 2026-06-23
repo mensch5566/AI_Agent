@@ -94,14 +94,21 @@ def route_statement_nongaap(array_name: str, uni_account: str, raw_unit: str) ->
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-def build_period_end_map(metadata: dict) -> dict[str, str]:
-    """Build period -> period_end (ISO date) map from GAAP metadata.filings.
+def build_period_end_map(metadata: dict, facts: list | None = None) -> dict[str, str]:
+    """Build period -> period_end (ISO date) map from GAAP metadata.filings
+    (+ optionally harvested from fact rows).
 
     Tolerant of two shapes:
       - metadata["filings"]  (parse-10QK-gaap top-level)
       - metadata["metadata"]["filings"]  (if wrapped)
-    Adds synthetic FYxxxx entry whose period_end := Q4_FYxxxx.period_end when
-    only Q4 entry is present (10-K filing is Q4 entry).
+    `metadata.filings` is often SPARSE — it only carries the filings the parse
+    actually fetched (recent accessions), while fact rows span the full
+    companyfacts period range. So when `facts` is given we harvest period_end
+    from the rows too (never overwriting a filings entry), which covers early
+    years and Q4-only 8-K periods that downstream Non-GAAP rows reference.
+    Synthesizes Q4_FYxxxx <-> FYxxxx in BOTH directions — a fiscal year always
+    ends on its Q4 quarter-end (true for any fy_end_month), so they share a
+    period_end (10-K filing is the Q4/FY entry).
     """
     filings = metadata.get("filings") or metadata.get("metadata", {}).get("filings", {})
     pe: dict[str, str] = {}
@@ -111,10 +118,16 @@ def build_period_end_map(metadata: dict) -> dict[str, str]:
         end = info.get("period_end")
         if end and _ISO_DATE_RE.match(end):
             pe[period] = end
-    # Synthesize FYxxxx from Q4_FYxxxx
-    for q4 in [k for k in pe if k.startswith("Q4_FY")]:
-        fy = q4.replace("Q4_", "")
-        pe.setdefault(fy, pe[q4])
+    # Harvest from fact rows for periods the sparse filings metadata omits.
+    for r in (facts or []):
+        p, end = r.get("period"), r.get("period_end")
+        if p and end and _ISO_DATE_RE.match(str(end)):
+            pe.setdefault(p, end)
+    # Synthesize FYxxxx from Q4_FYxxxx and vice-versa (shared fiscal year-end).
+    for q4 in [k for k in list(pe) if k.startswith("Q4_FY")]:
+        pe.setdefault(q4.replace("Q4_", ""), pe[q4])
+    for fy in [k for k in list(pe) if re.match(r"^FY\d{4}$", k)]:
+        pe.setdefault("Q4_" + fy, pe[fy])
     return pe
 
 
@@ -573,6 +586,222 @@ def _try_audited_nlm_ordinal(row: "FactRow", audited_for_stmt: dict | None) -> N
         row.provenance["ordinal_artifact_hash"] = audited_for_stmt["artifact_hash"]
 
 
+# --------------------------------------------------------------------------- #
+# Canonical-order ORDINAL FALLBACK (filing-INDEPENDENT, purely additive).
+#
+# WHY: some filers never face-present a core line that a peer DOES (e.g. Corning/
+# GLW discloses weighted-average shares ONLY in note networks, never on the face
+# IS presentation). resolve_via_uni then raises NeedsNlmOrder and the row keeps
+# ordinal=None, failing the display coverage gate (spec G4) even though the row
+# IS a legitimate face line whose statement-order is universally known. This is a
+# FINAL pass, after every xbrl + audited-NLM route, that places such a STILL-
+# unresolved display-eligible row by a fixed GAAP statement-line sequence keyed
+# on its `uni_account` — never on this filing's presentation tree.
+#
+# SCHEME: integer ordinals only (the DB `ordinal` column is smallint; fractional
+# values are rejected at upsert by _coerce_ordinal). Each canonical uni_account
+# gets ordinal = _CANONICAL_BASE + (index+1) * _CANONICAL_STRIDE. A large base
+# (10000) sorts every fallback row AFTER any real xbrl/NLM ordinal within the
+# statement (those are 1..~hundreds), and the stride leaves room for long_tail
+# children to slot directly under their parent as parent_ordinal + sub_index
+# (a deterministic 1-based count over the children sharing that parent, ordered
+# by source_account then period). Monotonic-by-canonical-sequence, stable, and
+# integer throughout — the only invariant the gate needs.
+#
+# A long_tail row (is_/bs_/cf_long_tail) uses its `long_tail_metadata.rolls_up_to`
+# parent's canonical ordinal as its base. NO rolls_up_to → NOT guessed (fail-loud,
+# stays None → gate blocks). A null/synthetic CORE row whose uni_account is not in
+# the canonical sequence → also left None (fail-loud).
+# --------------------------------------------------------------------------- #
+
+_CANONICAL_BASE = 10000
+_CANONICAL_STRIDE = 100
+
+# Standard GAAP income-statement line sequence (top → bottom). shares_basic /
+# shares_diluted sit at the very bottom (after eps_basic/eps_diluted), matching
+# the face IS layout where weighted-average share counts close the statement.
+_CANONICAL_ORDER_IS = [
+    "revenue",
+    "other_revenues",
+    "cost_of_goods_sold",
+    "gross_profit",
+    "research_and_development",
+    "selling_general_administrative",
+    "amortization_of_acquired_intangibles",
+    "amortization_of_intangibles_is",
+    "restructuring_charges",
+    "other_operating_expenses",
+    "total_operating_expenses",
+    "operating_income",
+    "interest_income",
+    "interest_expense",
+    "net_interest_expense",
+    "other_nonoperating_income_expense",
+    "other_nonoperating_income_loss",
+    "equity_method_investments",
+    "income_before_taxes",
+    "income_tax_expense",
+    "net_income_total_pre_nci",
+    "net_income_nci",
+    "net_income",
+    "net_income_available_to_common",
+    "eps_basic",
+    "eps_diluted",
+    "shares_basic_millions",
+    "shares_diluted_millions",
+]
+
+# Standard GAAP balance-sheet line sequence (assets → liabilities → equity).
+_CANONICAL_ORDER_BS = [
+    "cash_and_cash_equivalents",
+    "long_term_investments",
+    "accounts_receivable",
+    "inventories",
+    "deferred_tax_assets",
+    "other_current_assets",
+    "total_current_assets",
+    "ppe_gross",
+    "accumulated_depreciation",
+    "property_plant_equipment_net",
+    "operating_lease_rou_asset",
+    "goodwill",
+    "intangible_assets",
+    "other_noncurrent_assets",
+    "total_assets",
+    "accounts_payable",
+    "accrued_liabilities",
+    "current_debt",
+    "deferred_revenue_current",
+    "income_taxes_payable_current",
+    "operating_lease_current",
+    "total_current_liabilities",
+    "long_term_debt",
+    "deferred_revenue_noncurrent",
+    "deferred_tax_liabilities_noncurrent",
+    "operating_lease_noncurrent",
+    "other_noncurrent_liabilities",
+    "total_liabilities",
+    "common_stock",
+    "additional_paid_in_capital",
+    "retained_earnings",
+    "treasury_stock",
+    "aoci",
+    "minority_interest_bs",
+    "total_equity",
+    "total_liabilities_and_equity",
+]
+
+# Standard GAAP cash-flow line sequence (operating → investing → financing).
+_CANONICAL_ORDER_CF = [
+    "net_income",
+    "depreciation_and_amortization",
+    "share_based_compensation",
+    "deferred_income_tax",
+    "gain_loss_on_sale_cf",
+    "other_asset_impairment",
+    "equity_in_net_income_of_affiliates_cf",
+    "change_in_receivables",
+    "change_in_inventories",
+    "change_in_accounts_payable",
+    "change_in_other_operating_assets",
+    "net_cash_from_operating",
+    "cash_acquisitions",
+    "divestitures",
+    "other_investing_activities",
+    "net_cash_from_investing",
+    "short_term_debt_issued",
+    "short_term_debt_repaid",
+    "long_term_debt_issued",
+    "long_term_debt_repaid",
+    "repurchase_of_common_stock",
+    "other_financing_activities",
+    "net_cash_from_financing",
+    "fx_effect",
+    "net_change_in_cash",
+    "ending_cash",
+    "cash_interest_paid",
+    "cash_income_tax_paid",
+]
+
+_CANONICAL_ORDER = {
+    "IS": {u: i for i, u in enumerate(_CANONICAL_ORDER_IS)},
+    "BS": {u: i for i, u in enumerate(_CANONICAL_ORDER_BS)},
+    "CF": {u: i for i, u in enumerate(_CANONICAL_ORDER_CF)},
+}
+
+_LONG_TAIL_UNIS = {"is_long_tail", "bs_long_tail", "cf_long_tail",
+                   "operating_cf_long_tail", "misc_long_tail"}
+
+
+def _canonical_base_ordinal(uni_account: str, statement: str):
+    """Filing-independent integer ordinal for ``uni_account`` in ``statement`` by
+    the fixed canonical line sequence, or ``None`` if it is not a known core line."""
+    idx = _CANONICAL_ORDER.get(statement, {}).get(uni_account)
+    if idx is None:
+        return None
+    return _CANONICAL_BASE + (idx + 1) * _CANONICAL_STRIDE
+
+
+def _stamp_canonical_fallback(row: "FactRow", ordinal: int) -> None:
+    """Stamp a canonical-fallback ordinal + auditable provenance (additive only)."""
+    row.ordinal = ordinal
+    if row.provenance is None:
+        row.provenance = {}
+    row.provenance["ordinal_source"] = "canonical_fallback"
+    row.provenance["ordinal_match_method"] = "canonical_order"
+    row.provenance["ordinal_source_period"] = row.period
+
+
+def _apply_canonical_fallback(facts: list["FactRow"], statement: str) -> None:
+    """FINAL, PURELY-ADDITIVE pass. For every row in ``statement`` that is STILL
+    ``display_eligible`` AND ``ordinal is None`` after all xbrl + audited-NLM
+    routing, assign a filing-independent canonical ordinal:
+
+      - CORE row (null/synthetic core, e.g. GLW WASO shares): its uni_account's
+        canonical ordinal. uni_account not in the canonical sequence → left None.
+      - long_tail row: its ``long_tail_metadata.rolls_up_to`` parent's canonical
+        ordinal + a deterministic 1-based sub-index over the children sharing that
+        parent (ordered by source_account then period). No rolls_up_to → left
+        None (fail-loud; never guessed).
+
+    NEVER touches a row that already has an ordinal (additive only) and NEVER
+    re-eligibles a display_eligible=False row (note-level exclusions stay excluded).
+    """
+    # Group unresolved long_tail children by their canonical parent ordinal so we
+    # can assign stable, collision-free integer sub-indices.
+    longtail_by_parent: dict[int, list["FactRow"]] = {}
+
+    for row in facts:
+        if row.statement != statement:
+            continue
+        if not row.display_eligible:
+            continue
+        if row.ordinal is not None:
+            continue
+
+        if row.uni_account in _LONG_TAIL_UNIS:
+            rolls_up_to = (row.long_tail_metadata or {}).get("rolls_up_to")
+            if not rolls_up_to:
+                continue  # fail-loud: never guess a long_tail position
+            parent_ord = _canonical_base_ordinal(rolls_up_to, statement)
+            if parent_ord is None:
+                continue  # parent itself unknown → fail-loud
+            longtail_by_parent.setdefault(parent_ord, []).append(row)
+            continue
+
+        base = _canonical_base_ordinal(row.uni_account, statement)
+        if base is None:
+            continue  # unknown core line → fail-loud
+        _stamp_canonical_fallback(row, base)
+
+    # Place long_tail children right after their parent's canonical slot, with a
+    # deterministic order so the sub-indices are stable across runs.
+    for parent_ord, children in longtail_by_parent.items():
+        children.sort(key=lambda r: (r.source_account or "", r.period or ""))
+        for sub_index, child in enumerate(children, start=1):
+            _stamp_canonical_fallback(child, parent_ord + sub_index)
+
+
 def attach_display_metadata(
     facts: list["FactRow"],
     *,
@@ -750,6 +979,12 @@ def attach_display_metadata(
             # Canonical concept absent from this filing's network/labels → fall
             # to the audited NLM order. Never render SUM(...) / invent a label.
             _try_audited_nlm_ordinal(row, audited_for_stmt)
+
+    # FINAL, PURELY-ADDITIVE pass: any row STILL display_eligible with ordinal
+    # None (e.g. a core line this filer presents only in notes, or a long_tail
+    # audit cell) gets a filing-independent canonical-order ordinal. Touches only
+    # ordinal-None rows; never re-eligibles an excluded row. See helper docstring.
+    _apply_canonical_fallback(facts, statement)
 
 
 def _maybe_exclude_note_level(

@@ -220,7 +220,12 @@ def test_null_source_canonical_miss_falls_to_nlm_then_none():
 
 
 def test_null_source_canonical_miss_no_nlm_leaves_ordinal_none():
-    f = _fact("net_income", None, statement="CF", cell_id="cid::ni2")
+    # uni→canonical miss + no NLM + uni_account NOT in the canonical-order
+    # sequence → stays None (fail-loud). NOTE: a uni_account that IS a known
+    # canonical line (e.g. net_income) would instead receive a canonical_fallback
+    # ordinal (covered by test_canonical_fallback_*); this test deliberately uses
+    # a non-canonical key so the residual-None behaviour is still exercised.
+    f = _fact("some_noncanonical_core_line", None, statement="CF", cell_id="cid::ni2")
     attach_display_metadata(
         [f], statement="CF", edges=[], labels={}, network_role=None,
         audited_orders={},
@@ -460,3 +465,113 @@ def test_preserved_pdf_label_core_falls_to_nlm_when_concept_absent():
     assert f.ordinal == 9
     assert f.provenance["ordinal_source"] == "nlm"
     assert f.display_label == "Income before income taxes"
+
+
+# --------------------------------------------------------------------------- #
+# Canonical-order ORDINAL FALLBACK (GLW): a FINAL, purely-additive pass that
+# gives a filing-INDEPENDENT canonical ordinal (by uni_account) to any row STILL
+# display_eligible AND ordinal is None after all xbrl + audited-NLM routing.
+#   - null/synthetic core rows (e.g. GLW WASO shares not on the face network)
+#   - is_/bs_/cf_long_tail rows positioned right after their rolls_up_to parent
+# Provenance stamped ordinal_source="canonical_fallback". Integer ordinals only
+# (smallint column). MUST NOT touch any already-resolved row.
+# --------------------------------------------------------------------------- #
+
+# An IS network WITHOUT WeightedAverageNumberOfShares... on the face presentation
+# (Corning/GLW: WASO lives only in note networks). The shares null-rows can't
+# resolve via uni→canonical → must get a canonical_fallback ordinal at the bottom.
+_GLW_IS_NETWORK = "http://glw/role/statement-consolidated-statements-of-income"
+_GLW_IS_EDGES = [
+    {"role_uri": _GLW_IS_NETWORK, "child_qname": "us-gaap:Revenues",
+     "order": 1.0, "preferred_label": _STD, "period": "FY2025"},
+    {"role_uri": _GLW_IS_NETWORK, "child_qname": "us-gaap:GrossProfit",
+     "order": 2.0, "preferred_label": _TERSE, "period": "FY2025"},
+    {"role_uri": _GLW_IS_NETWORK, "child_qname": "us-gaap:NetIncomeLoss",
+     "order": 3.0, "preferred_label": _STD, "period": "FY2025"},
+]
+_GLW_IS_LABELS = {
+    "us-gaap:Revenues": [{"role": _STD, "text": "Net sales"}],
+    "us-gaap:GrossProfit": [{"role": _TERSE, "text": "Gross margin"}],
+    "us-gaap:NetIncomeLoss": [{"role": _STD, "text": "Net income"}],
+}
+
+
+def _run_glw(facts, accepted=None, audited_orders=None):
+    attach_display_metadata(
+        facts,
+        statement="IS",
+        edges=_GLW_IS_EDGES,
+        labels=_GLW_IS_LABELS,
+        network_role=_GLW_IS_NETWORK,
+        accepted_concepts=accepted if accepted is not None else
+            {"Revenues", "GrossProfit", "NetIncomeLoss"},
+        audited_orders=audited_orders or {},
+    )
+
+
+def test_canonical_fallback_shares_when_waso_not_on_face_network():
+    # GLW: shares_basic/diluted are null-class; canonical concept (WASO) is NOT on
+    # the face network → resolve_via_uni raises → ordinal None → canonical fallback.
+    b = _fact("shares_basic_millions", None, cell_id="cid::sb")
+    d = _fact("shares_diluted_millions", None, cell_id="cid::sd")
+    _run_glw([b, d])
+    assert b.ordinal is not None and d.ordinal is not None
+    assert b.provenance["ordinal_source"] == "canonical_fallback"
+    assert d.provenance["ordinal_source"] == "canonical_fallback"
+    assert b.display_eligible is True and d.display_eligible is True
+    # shares sit at the IS bottom: basic before diluted, both after eps.
+    assert b.ordinal < d.ordinal
+
+
+def test_canonical_fallback_does_not_touch_already_resolved_row():
+    # A row that already resolved via xbrl MUST be byte-identical (additive only).
+    f = _fact("gross_profit", "GrossProfit")
+    _run_glw([f])
+    assert f.provenance["ordinal_source"] == "xbrl"   # NOT canonical_fallback
+    assert f.ordinal == 2  # GLOBAL position (Revenues=1, GrossProfit=2)
+
+
+def test_canonical_fallback_longtail_positioned_after_rolls_up_to_parent():
+    # is_long_tail row with rolls_up_to=net_income_available_to_common → its
+    # canonical ordinal is right after that parent's canonical ordinal.
+    lt = _fact("is_long_tail", "glw:PreferredStockDividend", cell_id="cid::ltp")
+    lt.long_tail_metadata = {"rolls_up_to": "net_income_available_to_common"}
+    parent = _fact("net_income_available_to_common", None, cell_id="cid::niac")
+    _run_glw([parent, lt])
+    # parent had no xbrl/NLM order here → it ALSO takes a canonical ordinal.
+    assert parent.provenance["ordinal_source"] == "canonical_fallback"
+    assert lt.provenance["ordinal_source"] == "canonical_fallback"
+    assert lt.ordinal > parent.ordinal          # child sits AFTER its parent
+    # both integers (smallint-safe), no fractional ordinals.
+    assert float(lt.ordinal) == int(lt.ordinal)
+    assert float(parent.ordinal) == int(parent.ordinal)
+
+
+def test_canonical_fallback_longtail_without_rolls_up_to_stays_none():
+    # Fail-loud: a long_tail row with NO rolls_up_to is NOT guessed → ordinal None.
+    lt = _fact("is_long_tail", "glw:TransactionRelatedGainNet", cell_id="cid::lt2")
+    lt.long_tail_metadata = None
+    _run_glw([lt])
+    assert lt.ordinal is None
+    assert lt.provenance.get("ordinal_source") != "canonical_fallback"
+    assert lt.display_eligible is True   # still eligible → gate still blocks (loud)
+
+
+def test_canonical_fallback_tag_like_note_concept_stays_excluded():
+    # A tag_like concept NOT on the face network is note-level excluded → the
+    # fallback must NOT resurrect it (display_eligible False is skipped).
+    f = _fact("interest_expense", "InterestExpenseNonoperating")
+    _run_glw([f], accepted={"Revenues", "GrossProfit", "NetIncomeLoss"})
+    assert f.display_eligible is False
+    assert f.ordinal is None
+    assert f.provenance["display_exclusion_reason"] == "note_level_not_in_face_network"
+    assert f.provenance.get("ordinal_source") != "canonical_fallback"
+
+
+def test_canonical_fallback_unknown_uni_account_stays_none():
+    # A null/synthetic core row whose uni_account is NOT in the canonical order
+    # (and not a long_tail) is not guessed → ordinal stays None (fail-loud).
+    f = _fact("some_unknown_core_line", None, cell_id="cid::unk")
+    _run_glw([f])
+    assert f.ordinal is None
+    assert f.provenance.get("ordinal_source") != "canonical_fallback"

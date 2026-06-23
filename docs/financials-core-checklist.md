@@ -214,8 +214,8 @@ NotebookLM 提供的權威來源指出 v3 砍錯幾項、漏了幾項：
 | item         | Accounts Payable                     | `accounts_payable`                     | ✅   |
 | item         | Accrued Liabilities                  | `accrued_liabilities`                  | ✅（rename 對齊 us-gaap XBRL）|
 | item         | Short-Term Borrowings                | `short_term_borrowings`                | ✅   |
-| item         | Current Portion of LT Debt           | `current_portion_of_long_term_debt`    | ✅   |
-| item         | Current Portion of Lease Obligations | `current_portion_of_lease_obligations` | ✅   |
+| item         | Current Debt (face)                  | `current_debt`                         | ✅（2026-06-14 rename from current_portion_of_long_term_debt；face aggregate DebtCurrent/LongTermDebtCurrent）|
+| item         | Current Portion of Lease Obligations | `operating_lease_current`              | ✅（2026-06-14 rename from current_portion_of_lease_obligations；OperatingLeaseLiabilityCurrent，非 debt，對稱 operating_lease_noncurrent）|
 | item         | Current Income Taxes Payable         | `income_taxes_payable_current`         | ✅   |
 | item         | Unearned Revenue, Current            | `deferred_revenue_current`             | ✅   |
 | item         | Other Current Liabilities            | `other_current_liabilities`            | ✅   |

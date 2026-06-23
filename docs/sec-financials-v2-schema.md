@@ -153,8 +153,8 @@ adapter 必須 canonicalize 到上述七種之一；其他 raw value 寫 validat
 | 1 | `accounts_payable` | `us-gaap:AccountsPayableCurrent` | ✅ |
 | 2 | `accrued_liabilities` | `us-gaap:AccruedLiabilitiesCurrent` | ✅ |
 | 3 | `income_taxes_payable_current` | `us-gaap:TaxesPayableCurrent` | ✅ |
-| 4 | `current_portion_of_long_term_debt` | `us-gaap:LongTermDebtCurrent` | ✅ |
-| 5 | `current_portion_of_lease_obligations` | `us-gaap:OperatingLeaseLiabilityCurrent` | ✅ |
+| 4 | `current_debt` | `us-gaap:DebtCurrent` / `us-gaap:LongTermDebtCurrent` (face aggregate, first-match) | ✅ |
+| 5 | `operating_lease_current` | `us-gaap:OperatingLeaseLiabilityCurrent` (NOT debt; symmetric w/ operating_lease_noncurrent) | ✅ |
 | 6 | `deferred_revenue_current` | `us-gaap:ContractWithCustomerLiabilityCurrent` | ✅ |
 | 7 | `total_current_liabilities` | `us-gaap:LiabilitiesCurrent` | ✅ |
 | 8 | `long_term_debt` | `us-gaap:LongTermDebtNoncurrent` | ✅ |
