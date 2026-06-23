@@ -1,20 +1,24 @@
 "use client";
 import type { GraphEdge, GraphNode, LampColor } from "@/lib/macro/types";
 
-// Hand-placed mind-map layout (viewBox 1000×600). Money flows L→R:
-// sources → CSP hub → chip fan-out → foundry/equip; monetization loops back up into CSP.
+// Bilateral layout (viewBox 1040×560). CSP is the plate in the middle:
+//   LEFT  = inflows  → financing (FED→BANK) on top, monetization (B2B/B2C) on bottom
+//   RIGHT = outflows → capex fan to chips, then foundry/equipment chain
 const NODE: Record<string, { x: number; y: number; w: number; h: number; hub?: boolean }> = {
-  FED:     { x: 60,  y: 100, w: 124, h: 46 },
-  BANK:    { x: 60,  y: 250, w: 124, h: 46 },
-  CSP:     { x: 352, y: 178, w: 152, h: 60, hub: true },
-  GPU:     { x: 648, y: 64,  w: 138, h: 46 },
-  CPU:     { x: 648, y: 158, w: 138, h: 46 },
-  MEM:     { x: 648, y: 252, w: 138, h: 46 },
-  SYS:     { x: 648, y: 346, w: 138, h: 46 },
-  FOUNDRY: { x: 840, y: 64,  w: 130, h: 46 },
-  EQUIP:   { x: 840, y: 168, w: 130, h: 46 },
-  B2B:     { x: 232, y: 486, w: 146, h: 46 },
-  B2C:     { x: 476, y: 486, w: 150, h: 46 },
+  // left · inflows
+  FED:     { x: 30,  y: 95,  w: 120, h: 46 },
+  BANK:    { x: 215, y: 95,  w: 120, h: 46 },
+  B2B:     { x: 30,  y: 360, w: 140, h: 46 },
+  B2C:     { x: 30,  y: 452, w: 140, h: 46 },
+  // center · hub
+  CSP:     { x: 445, y: 222, w: 150, h: 58, hub: true },
+  // right · outflows
+  GPU:     { x: 660, y: 70,  w: 140, h: 46 },
+  CPU:     { x: 660, y: 165, w: 140, h: 46 },
+  MEM:     { x: 660, y: 260, w: 140, h: 46 },
+  SYS:     { x: 660, y: 355, w: 140, h: 46 },
+  FOUNDRY: { x: 862, y: 70,  w: 128, h: 46 },
+  EQUIP:   { x: 862, y: 165, w: 128, h: 46 },
 };
 
 const LAMP_STROKE: Record<LampColor, string> = { green: "#1a7f37", red: "#c02734", grey: "#d2c6c6" };
@@ -61,7 +65,7 @@ export default function FlowGraph({
   const dimmed = (id: string) => selected !== null && !activeNodes.has(id);
 
   return (
-    <svg viewBox="0 0 1000 600" className="w-full h-auto select-none" onClick={() => onSelect(null)}>
+    <svg viewBox="0 0 1040 560" className="w-full h-auto select-none" onClick={() => onSelect(null)}>
       <defs>
         {(["green", "red", "grey"] as LampColor[]).map((c) => (
           <marker key={c} id={`mk-${c}`} markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto">
@@ -82,6 +86,12 @@ export default function FlowGraph({
         </linearGradient>
       </defs>
 
+      {/* group eyebrows — make the inflow/outflow structure legible at a glance */}
+      <g style={{ pointerEvents: "none" }} fontWeight={700} letterSpacing="0.08em">
+        <text x={182} y={40} fontSize="17" textAnchor="middle" fill="var(--text)">資金流入</text>
+        <text x={820} y={40} fontSize="17" textAnchor="middle" fill="var(--text)">資金流出</text>
+      </g>
+
       {/* EDGES */}
       {edges.map((e) => {
         const s = NODE[e.from], t = NODE[e.to];
@@ -95,7 +105,10 @@ export default function FlowGraph({
         const stroke = isSel ? SELECTED : LAMP_STROKE[lamp];
         const dotCol = isSel ? SELECTED : DOT_COLOR[lamp];
         const fs = 11;
-        const chipW = labelWidth(e.label, fs) + 16;
+        const lineH = 12.5;
+        const lines = e.label.split("／"); // wrap "A／B" labels onto stacked lines so short arrows aren't covered
+        const chipW = Math.max(...lines.map((l) => labelWidth(l, fs))) + 16;
+        const chipH = lines.length * lineH + 5;
         const lit = isSel || isHov;
         return (
           <g key={e.id} className="edge-group" opacity={dim ? 0.26 : 1}
@@ -116,12 +129,14 @@ export default function FlowGraph({
                 </animateMotion>
               </circle>
             ))}
-            {/* centered label chip */}
+            {/* centered label chip (wraps "A／B" onto stacked lines) */}
             <g style={{ pointerEvents: "none" }}>
-              <rect x={m.x - chipW / 2} y={m.y - 9.5} rx={9} width={chipW} height={19}
+              <rect x={m.x - chipW / 2} y={m.y - chipH / 2} rx={9} width={chipW} height={chipH}
                 fill={lit ? SELECTED : "var(--bg-card)"} stroke={lit ? SELECTED : "var(--border)"} strokeWidth={1} />
-              <text x={m.x} y={m.y + 3.8} fontSize={fs} textAnchor="middle" fontWeight={600}
-                fill={lit ? "#fff" : "var(--text-muted)"}>{e.label}</text>
+              {lines.map((ln, li) => (
+                <text key={li} x={m.x} y={m.y - (lines.length - 1) / 2 * lineH + li * lineH + fs * 0.35}
+                  fontSize={fs} textAnchor="middle" fontWeight={600} fill={lit ? "#fff" : "var(--text-muted)"}>{ln}</text>
+              ))}
             </g>
           </g>
         );

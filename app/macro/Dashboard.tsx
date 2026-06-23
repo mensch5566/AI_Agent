@@ -24,7 +24,7 @@ const EDGE_HINT: Record<string, string> = {
 };
 
 interface IndCard {
-  indicator_key: string; label: string; layer: string; edge_id: string; primary: boolean;
+  indicator_key: string; label: string; source_label?: string; fred_series?: string; layer: string; edge_id: string; primary: boolean;
   unit: string; freq?: string; as_of: string | null;
   lamp: { color: LampColor; curr: number | null; prev: number | null; basis: string };
 }
@@ -51,8 +51,21 @@ function IndicatorCard({ i, idx }: { i: IndCard; idx: number }) {
         <div className="flex items-center gap-2 min-w-0">
           <span className={`lamp ${LAMP_CLASS[i.lamp.color]}`} />
           <div className="min-w-0">
-            <div className="text-[13.5px] font-semibold truncate">{i.label}</div>
-            <div className="num text-[10.5px] truncate" style={{ color: "var(--text-faint)" }}>{i.freq ?? i.unit}</div>
+            {i.fred_series ? (
+              <a href={`https://fred.stlouisfed.org/series/${i.fred_series}`} target="_blank" rel="noopener noreferrer"
+                className="group block min-w-0" title={`FRED: ${i.fred_series}`}>
+                <div className="text-[13.5px] font-semibold truncate group-hover:underline"
+                  style={{ textDecorationColor: "var(--primary)" }}>{i.source_label ?? i.label}</div>
+                <div className="num text-[10.5px] truncate" style={{ color: "var(--text-faint)" }}>
+                  {i.fred_series} <span style={{ color: "var(--primary)" }}>↗</span> · {i.freq ?? i.unit}
+                </div>
+              </a>
+            ) : (
+              <>
+                <div className="text-[13.5px] font-semibold truncate">{i.source_label ?? i.label}</div>
+                <div className="num text-[10.5px] truncate" style={{ color: "var(--text-faint)" }}>{i.freq ?? i.unit}</div>
+              </>
+            )}
           </div>
         </div>
         <span className="text-[9.5px] px-1.5 py-0.5 rounded shrink-0"
@@ -114,9 +127,6 @@ export default function Dashboard() {
               <h1 className="text-[21px] font-bold tracking-tight">AI 資金流儀表板</h1>
               <span className="num text-[11px] px-2 py-0.5 rounded" style={{ color: "var(--text-faint)", border: "1px solid var(--border)" }}>v1</span>
             </div>
-            <p className="text-[12.5px] mt-1" style={{ color: "var(--text-muted)" }}>
-              順著錢走:Fed → 銀行/債市 → CSP → 晶片/設備 → 變現。<b style={{ color: "var(--text)" }}>點任一箭頭</b>,看那段資金流的指標。
-            </p>
           </div>
           <div className="text-right">
             <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>盤子裡還有沒有錢</div>
@@ -164,27 +174,24 @@ export default function Dashboard() {
                 </div>
               )}
             </>
-          ) : (
+          ) : envInds.length > 0 ? (
             <>
               <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
                 <h2 className="text-[15px] font-semibold">總體環境 · 背景</h2>
                 <span className="num text-[11px]" style={{ color: "var(--text-faint)" }}>非單一箭頭 · 整個系統的水位與天氣</span>
               </div>
               <p className="text-[12px] mb-4" style={{ color: "var(--text-muted)" }}>👆 點上面任一箭頭可切到該段資金流的指標。</p>
-              {envInds.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {envInds.map((i, idx) => <IndicatorCard key={i.indicator_key} i={i} idx={idx} />)}
-                </div>
-              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {envInds.map((i, idx) => <IndicatorCard key={i.indicator_key} i={i} idx={idx} />)}
+              </div>
             </>
+          ) : (
+            <div className="rounded-lg p-8 text-center" style={{ border: "1px dashed var(--border)", background: "var(--bg-subtle)" }}>
+              <div className="text-[14px] font-semibold" style={{ color: "var(--text-muted)" }}>👆 點上方任一箭頭，看那段資金流的指標</div>
+            </div>
           )}
         </section>
 
-        {/* coaching note */}
-        <p className="text-[12px] flex items-start gap-2 leading-relaxed" style={{ color: "var(--text-faint)" }}>
-          <span style={{ color: "#b45309" }}>⚠</span>
-          <span><b style={{ color: "var(--text-muted)" }}>v1 簡化版。</b>燈號 = 本期 vs 上一期 + polarity(綠 = 偏多 / 紅 = 偏空),門檻尚未校準;頂層燈為誠實佔位,尚未合成。</span>
-        </p>
       </main>
     </div>
   );

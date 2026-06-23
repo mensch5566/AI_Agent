@@ -6,6 +6,7 @@ export interface Indicator {
   indicator_key: string;
   fred_series: string;
   label: string;
+  source_label?: string;
   layer: Layer;
   polarity: Polarity;
   edge_id: string;

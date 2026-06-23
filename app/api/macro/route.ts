@@ -27,10 +27,13 @@ export async function GET() {
       return {
         indicator_key: ind.indicator_key,
         label: ind.label,
+        source_label: ind.source_label,
+        fred_series: ind.fred_series,
         layer: ind.layer,
         edge_id: ind.edge_id,
         primary: ind.primary,
         unit: ind.unit,
+        freq: ind.freq,
         as_of: data?.[0]?.period_end ?? null,
         lamp: computeLamp(curr, prev, ind.polarity),
       };
