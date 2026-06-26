@@ -12,14 +12,6 @@ const research = [
     tags: ["Market", "News", "Flow"],
   },
   {
-    href: "/macro",
-    icon: "💸",
-    nameEn: "Capital Flow",
-    name: "AI 資金流儀表",
-    desc: "以資金鏈路為主體的互動心智圖，點箭頭看該段資金流的指標，判讀「盤子裡還有沒有錢」。",
-    tags: ["Macro", "Flow", "L1–L5"],
-  },
-  {
     href: "/financials",
     icon: "🗂️",
     nameEn: "Financials Viewer",
