@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ApiResponse, Cell, MatrixCell, PeriodKind, Statement, Version } from "./types";
+import type { ApiResponse, Cell, CellStatus, MatrixCell, PeriodKind, Statement, Version } from "./types";
 import {
   DERIVED_NONGAAP_ABSOLUTE_ROWS,
   IS_ROWS,
@@ -134,6 +134,20 @@ const DERIVED_SINGLE_QUARTER_PKINDS = new Set<PeriodKind>([
   "derived_q3",
   "derived_q4",
 ]);
+
+// Backend marks approximate values (e.g. derived Q4 GAAP EPS = FY−Q1−Q2−Q3,
+// where the weighted-share count is not additive) with
+// provenance.is_approximate === true. Thread that onto the MatrixCell so the
+// render layer can append a `†` superscript + tooltip. Mirrors `status`.
+function isApproximateCell(c: Cell): boolean {
+  return (c.provenance as Record<string, unknown> | null)?.is_approximate === true;
+}
+
+// Build a populated MatrixCell, carrying the approximate flag derived from the
+// cell's provenance. Single point of truth for every `{ cell, status }` write.
+function matrixCell(c: Cell, status: CellStatus): MatrixCell {
+  return { cell: c, status, isApproximate: isApproximateCell(c) };
+}
 
 // A long-tail bucket uni_account holds many source_accounts under one key, so a
 // bucket member's rowId must include source_account to stay distinct.
@@ -492,7 +506,7 @@ export function buildMatrix(
       const rowId = uniToCoreRowId.get(c.uni_account);
       if (rowId == null) continue;
       if (cellMap[rowId]?.[c.period] === undefined) continue;
-      cellMap[rowId][c.period] = { cell: c, status: c.status };
+      cellMap[rowId][c.period] = matrixCell(c, c.status);
       continue;
     }
 
@@ -500,7 +514,7 @@ export function buildMatrix(
     // row. Only display-eligible facts have a row; everything else is dropped.
     const rowId = rowIdOf(c.uni_account, c.source_account);
     if (cellMap[rowId]?.[c.period] === undefined) continue;
-    cellMap[rowId][c.period] = { cell: c, status: c.status };
+    cellMap[rowId][c.period] = matrixCell(c, c.status);
   }
 
   const pdfMatrix: Matrix = {
@@ -548,7 +562,7 @@ export function buildDictionaryMatrix(
       (longTailBuf[c.uni_account] ??= {})[c.period] ??= [];
       longTailBuf[c.uni_account][c.period].push(c);
     } else {
-      cellMap[c.uni_account][c.period] = { cell: c, status: c.status };
+      cellMap[c.uni_account][c.period] = matrixCell(c, c.status);
     }
   }
   for (const k of longTailKeys) {
@@ -671,7 +685,7 @@ export function buildDerivedNonGaapRows(
   }
   for (const c of filtered) {
     if (cellMap[c.uni_account]?.[c.period] === undefined) continue;
-    cellMap[c.uni_account][c.period] = { cell: c, status: c.status };
+    cellMap[c.uni_account][c.period] = matrixCell(c, c.status);
   }
 
   return {

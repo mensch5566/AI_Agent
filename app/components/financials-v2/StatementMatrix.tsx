@@ -162,6 +162,23 @@ function auditTooltipSuffix(c?: Cell): string {
   return parts.length ? "\n" + parts.join("\n") : "";
 }
 
+// Static fallback when an approximate cell's provenance lacks reason/formula.
+export const APPROX_TOOLTIP_FALLBACK =
+  "近似值：Q4 = 全年 − 前三季；加權股數非加性，僅供參考";
+
+// Tooltip for a `†`-flagged (provenance.is_approximate) cell: prefer the
+// provenance-supplied reason + formula, fall back to the static string.
+// Pure (no DOM) so it is unit-testable in the node test environment.
+export function approximationTooltip(c?: Cell): string {
+  const prov = c?.provenance as Record<string, unknown> | null | undefined;
+  const reason = typeof prov?.approximation_reason === "string" ? prov.approximation_reason.trim() : "";
+  const formula = typeof prov?.formula === "string" ? prov.formula.trim() : "";
+  if (reason && formula) return `${reason} (${formula})`;
+  if (reason) return reason;
+  if (formula) return formula;
+  return APPROX_TOOLTIP_FALLBACK;
+}
+
 function statusTooltip(status: CellStatus, c?: Cell): string {
   if (!c) return "pending — not derived yet";
   // Aggregated long-tail bucket — list children with their values.
@@ -350,6 +367,15 @@ export function StatementMatrix({
                         </span>
                       )}
                       {displayValue(c, flipSet, statement)}
+                      {m?.isApproximate && (
+                        <sup
+                          className="ml-0.5 text-muted-foreground cursor-help select-none"
+                          title={approximationTooltip(c)}
+                          aria-label="approximate value"
+                        >
+                          †
+                        </sup>
+                      )}
                     </td>,
                   ];
                   // Whenever the table-wide Non-GAAP column is on, we MUST
@@ -379,6 +405,15 @@ export function StatementMatrix({
                             </span>
                           )}
                           {displayValue(ng, flipSet, statement)}
+                          {ngCellWrap?.isApproximate && (
+                            <sup
+                              className="ml-0.5 text-muted-foreground cursor-help select-none"
+                              title={approximationTooltip(ng)}
+                              aria-label="approximate value"
+                            >
+                              †
+                            </sup>
+                          )}
                         </td>,
                       );
                     } else {

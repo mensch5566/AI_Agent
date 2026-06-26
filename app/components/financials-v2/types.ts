@@ -80,4 +80,9 @@ export type ApiResponse = {
 export type MatrixCell = {
   cell?: Cell;
   status: CellStatus;
+  // True when the underlying cell's provenance flags an approximate value
+  // (e.g. derived Q4 GAAP EPS = FY − Q1 − Q2 − Q3; weighted-share count is not
+  // additive so the result is approximate). The render layer appends a `†`
+  // superscript + tooltip. Mirrors how `status` is carried through the pivot.
+  isApproximate?: boolean;
 };
