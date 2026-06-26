@@ -151,8 +151,18 @@ export const RATIO_ROWS: MetricSpec[] = [
   { key: "dio", label: "Days Inventory Outstanding (DIO)", kind: "derived_ratio" },
   { key: "dpo", label: "Days Payable Outstanding (DPO)", kind: "derived_ratio" },
   { key: "ccc", label: "Cash Conversion Cycle (CCC)", kind: "derived_ratio" },
+  // Growth (derive-analytics extensible registry): each major flow gets QoQ (sequential
+  // single-quarter) + YoY (year-ago). QoQ has no FY row; eps_diluted_qoq is sparse
+  // (skips Q1/Q4 where the non-additive Q4-approx EPS would seed it).
+  { key: "revenue_qoq", label: "Revenue QoQ %", kind: "derived_ratio" },
   { key: "revenue_yoy", label: "Revenue YoY %", kind: "derived_ratio" },
+  { key: "gross_profit_qoq", label: "Gross Profit QoQ %", kind: "derived_ratio" },
+  { key: "gross_profit_yoy", label: "Gross Profit YoY %", kind: "derived_ratio" },
+  { key: "operating_income_qoq", label: "Operating Income QoQ %", kind: "derived_ratio" },
+  { key: "operating_income_yoy", label: "Operating Income YoY %", kind: "derived_ratio" },
+  { key: "net_income_qoq", label: "Net Income QoQ %", kind: "derived_ratio" },
   { key: "net_income_yoy", label: "Net Income YoY %", kind: "derived_ratio" },
+  { key: "eps_diluted_qoq", label: "Diluted EPS QoQ %", kind: "derived_ratio" },
   { key: "eps_diluted_yoy", label: "Diluted EPS YoY %", kind: "derived_ratio" },
   { key: "bvps", label: "Book Value / Share", kind: "derived_ratio" },
 ];

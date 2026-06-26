@@ -278,9 +278,12 @@ unit 一律 `Pure`，分三種 display category：pct-style（margins / ETR，�
 | `dio` | GAAP | `365 × avg_inventories / cost_of_goods_sold_TTM`（EL2，days）| ✅ |
 | `dpo` | GAAP | `365 × avg_accounts_payable / cost_of_goods_sold_TTM`（EL2，days，COGS 為採購代理）| ✅ |
 | `ccc` | GAAP | `dio + dso − dpo`（EL2，days，可為負；缺任一 component → skip）| ✅ |
-| `revenue_yoy` | GAAP | `(revenue − revenue_year_ago) / revenue_year_ago`（EL2 YoY，pct；prior>0 else skip；quarterly=quarter_duration/derived_q2/q3/q4、annual=fy_annual_duration，**非 ttm**；period_start=None）| ✅ |
-| `net_income_yoy` | GAAP | `(net_income − year_ago) / year_ago`（同上）| ✅ |
-| `eps_diluted_yoy` | GAAP | `(eps_diluted − year_ago) / year_ago`（同上；EPS 無 derived_q4 → Q4 不出）| ✅ |
+| **growth registry**（extensible）| GAAP | `GROWTH_METRICS × GROWTH_BASES` → `{metric}_{basis}` / `RATIO_{METRIC}_{BASIS}`。METRICS=`revenue/gross_profit/operating_income/net_income/eps_diluted`；BASES=`qoq/yoy`。`growth=(cur−prior)/prior`，prior>0 else skip，unit `Pure`。**YoY** prior=去年同季(季)/前一FY(年);**QoQ** prior=前一單季(`prior_quarter`:q>1→q−1、q==1→去年Q4),**FY 無 QoQ**。`eps_diluted` 兩基準都跳過任一端為 `derived_q4`(Q4-approx EPS 不種成長)。新增科目只 append `GROWTH_METRICS`;未來 margin% 用第三 basis(pp 差,待設計)。| ✅ |
+| `revenue_qoq` / `revenue_yoy` | GAAP | 上述 registry 產出（revenue_yoy 與舊版 byte-identical）| ✅ |
+| `gross_profit_qoq` / `gross_profit_yoy` | GAAP | 同 | ✅ |
+| `operating_income_qoq` / `operating_income_yoy` | GAAP | 同 | ✅ |
+| `net_income_qoq` / `net_income_yoy` | GAAP | 同（net_income_yoy byte-identical）| ✅ |
+| `eps_diluted_qoq` / `eps_diluted_yoy` | GAAP | 同（eps_diluted_yoy byte-identical；qoq 稀疏:Q1/Q4 因 Q4-approx guard 不出）| ✅ |
 | `bvps` | GAAP | `total_equity / common_shares_outstanding`（book value per common share，皆 BS instant、同期）。`total_equity`(=StockholdersEquity，**parent-only，NCI 不扣**) ÷ `common_shares_outstanding`(BS-date 期末股數)。unit=`USD_per_share`，引擎的 per-share 單位代數把 equity($-scale) 與 shares(count-scale) 各轉 base unit 再除（**scale 不一致先轉、unknown→fail-closed**，避免 AAOI thousands÷millions 的 1000× 錯）。skip shares≤0；負 book value emit | ✅ |
 
 #### debt_to_equity / interest_coverage 口徑（EL1 composite，2026-06-01）
