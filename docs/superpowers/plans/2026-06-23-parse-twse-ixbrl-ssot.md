@@ -37,7 +37,7 @@
   derive_twse.py          # 單季還原(CF 相減/Q4=FY−9M) + ratios；Q4 EPS 留空
   tests/test_derive_twse.py
 
-~/CC_Switch_Config/skills/twse-cross-check/        # 新 skill（NLM 雙源）
+~/CC_Switch_Config/skills/parse-tw-crosscheck/        # 新 skill（NLM 雙源）
   cross_check_twse.py     # parse facts vs NLM tolerance=0；mirror parse-sec-cross-check
   ticker_configs/3081.json, 2308.json
   tests/test_cross_check_twse.py
@@ -218,11 +218,11 @@ def test_q4_eps_left_blank():
 
 ---
 
-## Phase D — NLM cross-check（twse-cross-check skill）
+## Phase D — NLM cross-check（parse-tw-crosscheck skill）
 
 ### Task D1: ticker_configs + per-period NLM query producer
 
-**Files:** Create `~/CC_Switch_Config/skills/twse-cross-check/ticker_configs/{3081,2308}.json`, `cross_check_twse.py`; Test `tests/test_cross_check_twse.py`
+**Files:** Create `~/CC_Switch_Config/skills/parse-tw-crosscheck/ticker_configs/{3081,2308}.json`, `cross_check_twse.py`; Test `tests/test_cross_check_twse.py`
 
 - [ ] **Step 1: 失敗測試** — config schema（notebook id + period_sources + label_to_key）+ compare 函式 tolerance=0。
 - [ ] **Step 2: FAIL** **Step 3:** 建 config（聯亞/台達電 NotebookLM notebook + 各期 MOPS PDF source_id；需先確認該 ticker 有 NLM notebook，無則停下反問 user）。`cross_check_twse(ticker, period)`：NLM query 該期 PDF → compare vs `{T}_twse_facts.json`,tolerance=0,sign-flip 容許,unmapped→audit queue。 **Step 4:** PASS（unit 測試用 fixture）**Step 5:** commit + sync
