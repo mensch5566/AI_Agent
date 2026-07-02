@@ -154,3 +154,17 @@ def test_reconcile_flags_mismatch():
                             "revenue__q": _fact(119.0, "income_statement", 4000, "quarter")}}}}
     rev = [r for r in reconcile_disclosed_quarters(fx) if r["uni_account"] == "revenue"][0]
     assert rev["status"] == "MISMATCH" and rev["diff"] == -1.0
+
+
+def test_q1_with_redundant_dq_key_raises():
+    """Defense-in-depth: Q1 period must never carry __q key (Q1 YTD is already the single quarter).
+    Both keys resolve to same cell_id at Q1, causing duplicate FactRows if not guarded."""
+    fx = _fx("Q1_FY2025", {
+        "revenue":    _fact(100.0, "income_statement", 4000, "ytd"),
+        "revenue__q": _fact(100.0, "income_statement", 4000, "quarter"),
+    }, "2025-03-31")
+    try:
+        adapt_twse_facts(fx)
+        assert False, "should raise ValueError on Q1 redundant __q key"
+    except ValueError as e:
+        assert "Q1" in str(e) and "__q" in str(e)

@@ -23,14 +23,14 @@ Use the following Working Memory as the current project handoff state. For older
 
 # [Working] Combined AI Working Memory
 
-Updated: 2026-06-23T12:23:42.990890
+Updated: 2026-07-02T23:33:39.485963
 
 Project scope: `ai_agent`
 
 ## Global Working Memory
 # [Working] Shared AI Working Memory (global)
 
-Updated: 2026-06-23T12:23:42.594937
+Updated: 2026-07-02T23:33:38.995077
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -56,66 +56,66 @@ Use it for current state. Use `search_memory` for older or more detailed history
 ## Python Wrapper 的作用
 
 ## Recent Shared Memory
-### Fund_Research 00981A PCF：step 4 離線 dashboard 完成 + git/GitHub 上線
-# Fund_Research 00981A PCF：step 4 離線 dashboard 完成 + git/GitHub 上線
-# Fund_Research 00981A PCF：step 4 離線 dashboard 完成（2026-06-23）
-承接 step 4 交接那筆。**前端 dashboard 做完、測試綠、git init + push 到 private GitHub。** 整個 00981A PCF 專案（step 1-4）至此完成。
-## 產出（repo `/Users/mensch5566/Fund_Research`，已 push）
-- **GitHub**：https://github.com/mensch5566/Fund_Research（**private**，branch master）。
+### 財報 skill 命名重構 + derive 走A + compose 加台股(2026-07-02 拍板待執行)
+# 財報 skill 命名重構 + derive 走A + compose 加台股(2026-07-02 拍板待執行)
+# 財報 skill 命名重構 + derive 市場無關化 + compose 台股(2026-07-02 使用者拍板,待新 session 執行)
+## 1. 改名(美股+台股)— `parse-{市場}-*` 抽取層;共用層不帶市場 token
+- `parse-10QK-gaap`→`parse-us-gaap`
+- `parse-8k-nongaap`→`parse-us-nongaap`
 
-### Fund_Research 00981A PCF：step 4 前端 dashboard 開發交接（資料層已完成）
-# Fund_Research 00981A PCF：step 4 前端 dashboard 開發交接（資料層已完成）
-# Fund_Research 00981A PCF：step 4 前端 dashboard 開發交接（2026-06-23）
-要轉隔壁 session 繼續**前端**（step 4：離線 HTML viewer）。資料層（step 1-3）已完成且 bulletproof，下面是接手 step 4 需要的一切。
-## 現況：資料層完成
-- 抓取程式 `scripts/fetch_pcf.py`（Python3+requests）+ skill `.claude/skills/update-pcf/SKILL.md`。
+### 台股/美股財報最終輸出必須指標邏輯一致（鐵律）
+# 台股/美股財報最終輸出必須指標邏輯一致（鐵律）
+# 台股/美股財報最終輸出必須指標邏輯一致（鐵律，2026-06-26 使用者強調）
+台股（TWSE iXBRL）與美股（SEC XBRL API）的**最終輸出必須指標邏輯一致**：不論資料怎麼清洗、解析、來源如何不同（SEC companyfacts API vs TWSE iXBRL HTML vs NLM PDF 讀取），**最後出來的三表科目結構（`uni_account` 命名）與 derive 指標（derive-base identities + derive-analytics ratios / QoQ / YoY）都要跟美股一樣**。管道差異只能存在於抽取層，一律收斂到同一套 canonical schema。
+## Why
+前端 Financial Viewer、derive-base、derive-analytics 是台美共用層。台股若自創 uni_account 命名或 derive 口徑，就無法跟美股同框顯示、同套 ratio 計算，破壞跨市場可比性與單一 SSOT 紀律。
 
-### Fund_Research 00981A PCF：GPT-5.5 review 後強化抓取程式（TWSE 日曆驗證層 + 8 項修正）
-# Fund_Research 00981A PCF：GPT-5.5 review 後強化抓取程式（TWSE 日曆驗證層 + 8 項修正）
-# Fund_Research 00981A PCF：GPT-5.5 review 後強化（2026-06-23）
-承接 step 3。user 要求讓 GPT-5.5（codex exec, xhigh）adversarial review 抓取邏輯，目標「絕不能出錯：有交易的日子不能漏、沒交易的日子不能撈」。已採納全部建議並實作完。
-## 採納 GPT 8 項 + 額外，全部已實作（scripts/fetch_pcf.py）
-1. **靜默漏資料/連帶錯位（CRITICAL）**：交易日抓取若重試用盡仍偏移/payload 殘缺/網路失敗 → 記為 failure，**寫檔前若有任何 failure 就中止、不寫、exit 非 0**（FetchError）。不再 return None 靜默跳過。
+### AI_Token_Counter Plan 8 全部上線：discover-other + 個人CSV log + merge-csv + 每人資料夾/Total聚合，pushed origin 819f390，148 test
+# AI_Token_Counter Plan 8 全部上線：discover-other + 個人CSV log + merge-csv + 每人資料夾/Total聚合，pushed origin 819f390，148 test
+# AI_Token_Counter Plan 8 全部完工並 push 上 GitHub（2026-06-29）
+承接同日「Plan 8 merged 未 push」那筆。**全部做完、merge 進 main、push 上 origin。148 test 綠。正式環境就緒，組員可 pull。**
+## GitHub
+- origin/main @ `819f390`（push 完成，`77d81b2..819f390`）。repo `mensch5566/AI_Token_Counter`。
 
-### Fund_Research 00981A PCF：step 3 全歷史回補完成 + update-pcf skill；發現並修掉 TranDate 偏移坑
-# Fund_Research 00981A PCF：step 3 全歷史回補完成 + update-pcf skill；發現並修掉 TranDate 偏移坑
-# Fund_Research 00981A PCF：step 3 完成（全歷史回補 + skill）（2026-06-22）
-承接 step 2 那筆。**step 3 全歷史回補完成、寫成 skill**。下一步只剩 step 4（離線 HTML viewer + 三組分析）。
-## 產出
-- **skill（project-scoped）**：`.claude/skills/update-pcf/SKILL.md`。觸發語：「更新 00981A」「抓最新 PCF」「回補 PCF 歷史」等。
+### AI_Token_Counter Plan 8 完工 merged：--discover-other + 個人CSV純log + merge-csv，145 test，main 242595e 未push
+# AI_Token_Counter Plan 8 完工 merged：--discover-other + 個人CSV純log + merge-csv，145 test，main 242595e 未push
+# AI_Token_Counter Plan 8 完工（2026-06-29）— merged 進 main，未 push
+承接「Plan 7 快速穩定 haiku」。User 痛點：宣告 --project 後不符合的全擠進一個大 Other（6/22-26 真跑 Other 63%），看不出在做什麼；且多人週報要能聚合。**Plan 8 全做完、TDD、code review 過、merge 進 main、145 test 綠。**
+## 兩個功能（都 merged）
+### 1. `tokencount cluster --discover-other`（搭 --project）
 
-### Fund_Research 00981A PCF：抓取程式 step 2 完成（fetch_pcf.py 跑通）
-# Fund_Research 00981A PCF：抓取程式 step 2 完成（fetch_pcf.py 跑通）
-# Fund_Research 00981A PCF：抓取程式 step 2 完成（2026-06-22）
-承接「00981A PCF 本地離線 HTML dashboard 開發交接」那筆的「下一步」第 2 點。**抓取程式已寫好並實測跑通**。
-## 產出
-- `scripts/fetch_pcf.py`（Python3 + requests）。CLI：
+### AI_Token_Counter Plan 8 進行中：--discover-other（宣告任務+Haiku 命名剩餘），TDD，138 test，branch feat/discover-other-tasks 未 merge
+# AI_Token_Counter Plan 8 進行中：--discover-other（宣告任務+Haiku 命名剩餘），TDD，138 test，branch feat/discover-other-tasks 未 merge
+# AI_Token_Counter Plan 8（--discover-other：宣告任務 + Haiku 自動命名剩餘）進行中（2026-06-29）
+承接「Plan 7 快速穩定 haiku 完工」。User 痛點：宣告 --project 後，不符合的全擠進一個大 Other（6/22-26 真跑 Other 佔 63%），看不出在做什麼。要「比照宣告的三個 task 的顆粒度，讓 Haiku 找出類似的新任務」。
+## 使用者宣告的三個 task（6/22-26 週報）
+981A（統一00981A PCF 儀表板）、Stock Weekly（個股週報）、康寧（Corning 個股研究）。來自 6/22-23 Plan 7 實跑記錄。
 
-### Fund_Research 專案：00981A PCF 本地離線 HTML dashboard — 開發交接
-# Fund_Research 專案：00981A PCF 本地離線 HTML dashboard — 開發交接
-# Fund_Research 專案：00981A PCF 本地離線 HTML dashboard（開發交接，2026-06-22）
-承接 Obsidian session。使用者要轉到隔壁 session 接續開發。以下是完整交接，**架構決策已鎖定，下一步是寫抓取程式**。
-## 專案目標
-把 00981A（統一台股增長主動式 ETF，統一投信）每週 PCN 分析做成**本地離線 HTML dashboard**。**呈現型、不做線上部署**、雙擊 HTML 離線可看。
+### AI_Token_Counter Plan 7 完工：haiku 分類快速+不卡，根因是「分類全 corpus」非 claude -p 慢，6/22-23 實跑驗證過
+# AI_Token_Counter Plan 7 完工：haiku 分類快速+不卡，根因是「分類全 corpus」非 claude -p 慢，6/22-23 實跑驗證過
+# AI_Token_Counter Plan 7（快速+穩定 haiku 分類）完工（2026-06-28）
+承接「Plan 6 宣告式分類完工」+ user 模擬正式週報時 haiku **跑一小時卡死**。**Plan 7 修好,已 merge+push。131 test。6/22-23 真實 haiku 實跑 96 秒跑通、Gate C tol=0、0 timeout、項目歸對。**
+## GitHub
+main @ `a67343e`,merge commit。plan=`docs/superpowers/plans/2026-06-28-plan7-fast-robust-haiku.md`。
 
-### GLW production re-upsert 完成 + 4 個 upsert-gate 修正(canonical fallback/period_end/8k coerce/audit-meta preserve)
-# GLW production re-upsert 完成 + 4 個 upsert-gate 修正(canonical fallback/period_end/8k coerce/audit-meta preserve)
-# GLW production re-upsert SHIPPED (2026-06-18)
-承接 GLW 四鏈完成那筆。user 授權 production re-upsert,**已寫入 Supabase**(純 insert、0 deleted、GLW 全新 ticker)。
-## production 寫入結果
-sec_financial_companies 1 / sec_financial_facts 3,083 / sec_financial_dimensional_facts 178 / sec_financial_edges 4,441 / sec_financial_metrics 496(derive-base)+526(analytics)。全部 0 deleted。
+### AI_Token_Counter Plan 6 完工：宣告式項目分類 + agent guide，--project + Haiku 分類，125 test
+# AI_Token_Counter Plan 6 完工：宣告式項目分類 + agent guide，--project + Haiku 分類，125 test
+# AI_Token_Counter Plan 6（宣告式項目分類 + agent guide）完工（2026-06-28）
+承接「Plan 5 filters+CSV 完工」。**Plan 6 加上「宣告式項目分類」+ Claude Code 使用說明書 + CSV 編碼修正，已 merge+push。125 test。真資料 Haiku 分類 demo 過。**
+## GitHub
+main @ `7b8a619`，merge commit。spec=`docs/superpowers/specs/2026-06-28-plan6-declared-project-classification-design.md`，plan=`docs/superpowers/plans/2026-06-28-plan6-declared-project-classification.md`。
 
-### GLW onboard 1-2-3-4 全部完成(parse/8k/supplement/derive);待 production re-upsert
-# GLW onboard 1-2-3-4 全部完成(parse/8k/supplement/derive);待 production re-upsert
-# GLW (Corning) onboard — 四兄弟 + derive 全鏈完成 (2026-06-18)
-承接前一筆 GLW memory(① 完成那筆)。user「1,2,3,4 依序跑」**全部跑完**。所有輸出在本機 JSON,**production Supabase 待 re-upsert(需授權)**。GLW 是**全新 ticker**(production 尚無 GLW)。
-## 四鏈最終狀態(本機 Skill_Output)
-- **① parse-10QK-gaap**:IS 889 / BS 652 / CF 700 rows(含 **63 個 IS audit cell**:R&D 面額 29 + extension long-tail 34)。cal sum sanity 0 ❌。
+### AI_Token_Counter Plan 5 完工：日期/來源篩選 + CSV 匯出,真資料 Haiku CSV demo 過,113 test
+# AI_Token_Counter Plan 5 完工：日期/來源篩選 + CSV 匯出,真資料 Haiku CSV demo 過,113 test
+# AI_Token_Counter Plan 5（filters + CSV）完工（2026-06-28）
+承接「Plan 4 CLI 完工」。**Plan 5 加上日期/來源篩選 + CSV 匯出,已 merge+push。113 test。真資料 Haiku CSV demo 跑過,使用者看到按 date×task 的 token 分佈。**
+## GitHub
+main @ `806e831`,merge commit `806e831`。plan: `docs/superpowers/plans/2026-06-28-plan5-filters-csv.md`。
 
 ## Project Working Memory
 # [Working] Shared AI Working Memory (project:ai_agent)
 
-Updated: 2026-06-23T12:23:42.637355
+Updated: 2026-07-02T23:33:39.046014
 
 This file is the short-term shared handoff context for Claude Code, Codex, and Gemini.
 Use it for current state. Use `search_memory` for older or more detailed history.
@@ -129,59 +129,59 @@ Use it for current state. Use `search_memory` for older or more detailed history
 - After meaningful project changes, assess whether `docs/STATUS.md` should be updated.
 
 ## Recent Project Memory
-### AI Memory Daily Log: 2026-06-23 (ai_agent)
-# AI Memory Daily Log: 2026-06-23 (ai_agent)
-## 12:23:42 [claude] Subagent-Driven
+### AI Memory Daily Log: 2026-07-02 (ai_agent)
+# AI Memory Daily Log: 2026-07-02 (ai_agent)
+## 23:33:38 [claude] <task-notification>
 ### Intent (raw)
-Subagent-Driven
-### Outcome (raw)
+<task-notification>
+<task-id>a5657768a3fac2c02</task-id>
 
-### AI Memory Daily Log: 2026-06-22 (ai_agent)
-# AI Memory Daily Log: 2026-06-22 (ai_agent)
-## 17:42:30 [claude] 聯亞沒有合併報表，因為它沒有子公司，所以它的個體報表就是總表。
-### Intent (raw)
-聯亞沒有合併報表，因為它沒有子公司，所以它的個體報表就是總表。
-iXBRL裡面難道還有分合併和個體？
-
-### AI Memory Daily Log: 2026-06-21 (ai_agent)
-# AI Memory Daily Log: 2026-06-21 (ai_agent)
-## 08:29:46 [claude] <scheduled-task name="financials-synthetic-check" file="/Users/mensch5566/.claud
+### AI Memory Daily Log: 2026-07-01 (ai_agent)
+# AI Memory Daily Log: 2026-07-01 (ai_agent)
+## 08:24:31 [claude] <scheduled-task name="financials-synthetic-check" file="/Users/mensch5566/.claud
 ### Intent (raw)
 <scheduled-task name="financials-synthetic-check" file="/Users/mensch5566/.claude/scheduled-tasks/financials-synthetic-check/SKILL.md">
 This is an automated run of a scheduled task. The user is not present to answer questions. For implementation details, execute autonomously without asking clarifying questions — make reasonable choices and note them in your output. "write" actions (e.g. MCP tools that send, post, create, update, or delete), only take them if the task file asks for that specific action. When in doubt, producing a report of what you found is the correct output.
 
-### AI Memory Daily Log: 2026-06-20 (ai_agent)
-# AI Memory Daily Log: 2026-06-20 (ai_agent)
-## 08:29:34 [claude] <scheduled-task name="financials-synthetic-check" file="/Users/mensch5566/.claud
+### AI Memory Daily Log: 2026-06-30 (ai_agent)
+# AI Memory Daily Log: 2026-06-30 (ai_agent)
+## 08:39:24 [claude] <scheduled-task name="financials-synthetic-check" file="/Users/mensch5566/.claud
 ### Intent (raw)
 <scheduled-task name="financials-synthetic-check" file="/Users/mensch5566/.claude/scheduled-tasks/financials-synthetic-check/SKILL.md">
 This is an automated run of a scheduled task. The user is not present to answer questions. For implementation details, execute autonomously without asking clarifying questions — make reasonable choices and note them in your output. "write" actions (e.g. MCP tools that send, post, create, update, or delete), only take them if the task file asks for that specific action. When in doubt, producing a report of what you found is the correct output.
 
-### AI Memory Daily Log: 2026-06-19 (ai_agent)
-# AI Memory Daily Log: 2026-06-19 (ai_agent)
-## 08:30:07 [claude] <scheduled-task name="financials-synthetic-check" file="/Users/mensch5566/.claud
+### AI Memory Daily Log: 2026-06-29 (ai_agent)
+# AI Memory Daily Log: 2026-06-29 (ai_agent)
+## 08:43:07 [claude] <scheduled-task name="financials-synthetic-check" file="/Users/mensch5566/.claud
 ### Intent (raw)
 <scheduled-task name="financials-synthetic-check" file="/Users/mensch5566/.claude/scheduled-tasks/financials-synthetic-check/SKILL.md">
 This is an automated run of a scheduled task. The user is not present to answer questions. For implementation details, execute autonomously without asking clarifying questions — make reasonable choices and note them in your output. "write" actions (e.g. MCP tools that send, post, create, update, or delete), only take them if the task file asks for that specific action. When in doubt, producing a report of what you found is the correct output.
 
-### AI Memory Daily Log: 2026-06-18 (ai_agent)
-# AI Memory Daily Log: 2026-06-18 (ai_agent)
-## 14:55:19 [claude] In the GLW (Corning) SEC GAAP facts source JSON, 5 `is_long_tail` IS rows are ma
+### AI Memory Daily Log: 2026-06-28 (ai_agent)
+# AI Memory Daily Log: 2026-06-28 (ai_agent)
+## 08:29:56 [claude] <scheduled-task name="financials-synthetic-check" file="/Users/mensch5566/.claud
 ### Intent (raw)
-In the GLW (Corning) SEC GAAP facts source JSON, 5 `is_long_tail` IS rows are manual audit-cells for glw: extension below-line items but have `long_tail_metadata: null` (no `rolls_up_to`). Because of this they cannot receive a canonical-order display ordinal and GLW's IS coverage gate stays at 99.2% (5 rows missing ordinal) in `python3 scripts/upsert_sec_financials.py GLW`.
-The 5 rows are:
+<scheduled-task name="financials-synthetic-check" file="/Users/mensch5566/.claude/scheduled-tasks/financials-synthetic-check/SKILL.md">
+This is an automated run of a scheduled task. The user is not present to answer questions. For implementation details, execute autonomously without asking clarifying questions — make reasonable choices and note them in your output. "write" actions (e.g. MCP tools that send, post, create, update, or delete), only take them if the task file asks for that specific action. When in doubt, producing a report of what you found is the correct output.
 
-### AI Memory Daily Log: 2026-06-17 (ai_agent)
-# AI Memory Daily Log: 2026-06-17 (ai_agent)
-## 13:20:08 [claude] 寫
+### AI Memory Daily Log: 2026-06-27 (ai_agent)
+# AI Memory Daily Log: 2026-06-27 (ai_agent)
+## 08:29:44 [claude] <scheduled-task name="financials-synthetic-check" file="/Users/mensch5566/.claud
 ### Intent (raw)
-寫
+<scheduled-task name="financials-synthetic-check" file="/Users/mensch5566/.claude/scheduled-tasks/financials-synthetic-check/SKILL.md">
+This is an automated run of a scheduled task. The user is not present to answer questions. For implementation details, execute autonomously without asking clarifying questions — make reasonable choices and note them in your output. "write" actions (e.g. MCP tools that send, post, create, update, or delete), only take them if the task file asks for that specific action. When in doubt, producing a report of what you found is the correct output.
+
+### AI Memory Daily Log: 2026-06-26 (ai_agent)
+# AI Memory Daily Log: 2026-06-26 (ai_agent)
+## 17:20:35 [claude] 好
+### Intent (raw)
+好
 ### Summary (Haiku)
 
-### AI Memory Daily Log: 2026-06-16 (ai_agent)
-# AI Memory Daily Log: 2026-06-16 (ai_agent)
-## 23:56:15 [claude] 你可以 search memory 一下，我們稍早有找出來，它沒有放在 .env 裡面。
+### AI Memory Daily Log: 2026-06-25 (ai_agent)
+# AI Memory Daily Log: 2026-06-25 (ai_agent)
+## 17:08:58 [claude] 你看一下LITE的FY26Q3的Non-GAAP EPS 在前端怎麼是2？ 是小數位被砍掉了嗎
 ### Intent (raw)
-你可以 search memory 一下，我們稍早有找出來，它沒有放在 .env 裡面。
-之前 AI agent 已經有放過那個 FRED 的 API key 了，但不是放在 .env，而是放在其他地方。你找一下，你自己放進去就行了
+你看一下LITE的FY26Q3的Non-GAAP EPS 在前端怎麼是2？ 是小數位被砍掉了嗎
+### Summary (Haiku)
 <!-- AI_MEMORY_MANAGED_END -->

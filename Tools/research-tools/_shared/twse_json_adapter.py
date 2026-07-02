@@ -71,6 +71,11 @@ def adapt_twse_facts(facts_json: dict) -> list[FactRow]:
         for key, fact in pdata.get("facts", {}).items():
             is_q = key.endswith("__q")
             base = key[:-3] if is_q else key
+            # Defense-in-depth: Q1 must never carry __q key (Q1 YTD is already the single quarter)
+            if period.split("_FY")[0] == "Q1" and is_q:
+                raise ValueError(
+                    f"Q1 must not carry a __q single-quarter key (Q1 YTD is already the single quarter): {period}/{key}"
+                )
             if base in _CASH_BALANCE_KEYS:
                 continue
             stmt = _STMT_MAP[fact["statement"]]
