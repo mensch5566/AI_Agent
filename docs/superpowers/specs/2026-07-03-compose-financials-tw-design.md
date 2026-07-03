@@ -94,14 +94,25 @@ derive-base / analytics loader 不用改(schema 相同)。statement 詞彙相容
 - **FCF 修正(最小版)**:`("RATIO","fcf")` → `("RATIO","free_cash_flow")`——騎在
   loaders 強制 RATIO 的現行為上,1 個美股預期 diff,gate 安全。native-statement 版
   (`("CF","free_cash_flow")`)defer(§1 Non-goals)。
-- **台股條件列**(`markets` 標記 + `render_if_present`,僅有值才渲染):
-  - `legal_reserve`(法定盈餘公積)→ 錨在 BS 權益區 `retained_earnings` 之前
-  - `total_equity_incl_nci` → 錨在 `total_equity` 之後(cr 才有值;ir 自然不顯)
-  - `net_income_total_pre_nci` **不是新增**——它已是美股無條件 IS 列(contract.py:30),
-    台股 cr 會自然填值、ir 顯 `—`,不動。
+- **台股條件列**(`markets=("tw",)` 標記 + `render_if_present`,僅有值才渲染)。完整
+  NCI 家族 + 台股專有權益,精確錨點(對 contract.py 現有行號):
+  - `legal_reserve`(法定盈餘公積)→ 錨在 BS 權益區 `retained_earnings`(contract.py:68)之前
+  - `net_income_nci`(歸屬非控制權益淨利)→ 錨在 IS `net_income_total_pre_nci`(:30)之後、
+    `net_income`(:32,歸屬母公司)之前 —— 順序 = 稅後淨利(含NCI)→ NCI 分配 → 母公司分配
+  - `minority_interest_bs`(非控制權益, BS)→ 錨在 `total_equity`(:71,母公司口徑)之後、
+    `total_equity_incl_nci` 之前
+  - `total_equity_incl_nci`(權益總計含NCI)→ 錨在 `minority_interest_bs` 之後(即權益區最末)
+  - **既有無條件列不動**:`net_income_total_pre_nci`(:30)、`net_income`(:32)已是美股
+    無條件 IS 列;台股 cr 自然填值、ir 顯 `—`,不新增、不改。
   - oci 分項:**deferred**(等 2308/3081 顯示需求確認再加,避免臆測列)
+  - **為何 NCI 家族設 `markets=("tw",)` 而非兩市場條件列**:美股也有 NCI 發行商(如 INTC
+    有 `net_income_nci`),若設兩市場條件列,INTC 頁會**新增一列** → 破壞美股「僅 3 個預期
+    diff」gate。本輪守 gate,故 NCI 條件列**限台股**;美股 NCI 列的補齊登記 backlog(§6)。
   - 「條件列隱藏」vs「⏳ placeholder」的紀律區分:**⏳ = 管道應產而未產**(催 derive 的
     to-do 契約);**條件列 = 該市場制度性不存在的科目**(非 to-do)→ 隱藏合理,spec 明文。
+  - **frontend-parity delta**(§3.5 追蹤):此 4 條台股條件列(`legal_reserve`、
+    `net_income_nci`、`minority_interest_bs`、`total_equity_incl_nci`)是 compose 先行、
+    前端 constants.ts 尚未有 → 明確 tracked delta,§4 有 snapshot 測試鎖住。
 - **區塊過濾**:`requires_source` 只掛 `margins-nongaap`(requires nongaap)。
   **bs-structure 不掛**(Argue 證據:cli.py:72-86 只讀 BS facts,台股填得滿——v2 誤設)。
   來源不存在 → 整段不渲染(不產 AUTO marker)。
@@ -130,6 +141,7 @@ compose 先行、constants.ts 未同步——記為 tracked temporary delta,網�
 | 台股 smoke | 聯亞端到端:三表數字對 twse_facts.json(**capex 負**)、**無任何 derive_base 值滲入**(Q2-Q4 CF 留白)、無 Non-GAAP 區塊、bs-structure **有**渲染、NT$ 仟元標籤、IFRS token;台達電(cr)驗 total_equity_incl_nci 條件列 |
 | 幕等 | 手寫 Observations 重跑保留;**被過濾區塊的舊 AUTO block 會被 prune**(先渲染全區塊再切 tw 模擬) |
 | 單元測試 | tw loader(source=gaap_facts、排除 derive_base、負 capex)、稀疏單季欄如預期、unit formatter 6 種 + **EPS 不觸發 money fail-loud**、contract key↔emitter 對照 sweep(鎖住 §1 backlog 死 key 清單,防新增)、known_keys=rendered set prune、glob multi-hit fail-loud、title templating、美股 contract 缺省不變 |
+| **conditional-row / frontend-parity snapshot** | (1)**條件列渲染**:餵 cr fixture(含 net_income_nci / minority_interest_bs / total_equity_incl_nci / legal_reserve 有值)→ 4 列都出現且錨點順序正確;餵 ir fixture(無這些值)→ 4 列都**不出現**(不留 `—`、不留空 marker)。(2)**parity delta 鎖**:斷言 `{compose TW 條件列 uni_account}` − `{constants.ts IS_ROWS∪BS_ROWS keys}` == 固定集合 `{legal_reserve, net_income_nci, minority_interest_bs, total_equity_incl_nci}`。任一方漂移(前端補了、或 compose 新增條件列未登記)→ 測試紅,強制同步/更新 delta。 |
 
 ## 5. 風險
 
@@ -148,8 +160,11 @@ compose 先行、constants.ts 未同步——記為 tracked temporary delta,網�
    contract 改名;每項都是美股 diff,需自己的 gate 預算)
 2. analytics native-statement 化(`("CF","free_cash_flow")` + 解除強制 RATIO)
 3. 台股三表重建值顯示(帶 derived 標記的設計;現版留白)
-4. 前端 constants.ts 台股條件列同步(網頁 viewer 輪)
+4. 前端 constants.ts 台股條件列同步(網頁 viewer 輪)——含把 NCI 家族條件列從
+   `markets=("tw",)` 升級為兩市場(屆時 INTC 等美股 NCI 發行商會新增列,需自己的 gate)
 5. oci 分項條件列(待顯示需求)
+6. 美股 NCI 列補齊(`net_income_nci` / `minority_interest_bs` 兩市場化)——本輪限台股以守
+   3-diff gate,美股 NCI 發行商(INTC)的這兩列延後(與 backlog 4 同輪)
 
 ## 7. 實作順序(給 writing-plans)
 
