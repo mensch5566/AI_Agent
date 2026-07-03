@@ -1,137 +1,163 @@
 # compose-financials 台股支援(v2)— 設計 spec
 
 日期:2026-07-03
-狀態:v1 草稿(設計已口頭過;Fable 5 self-review 後定稿)
-上游:derive-A 已完成(台股 derive 輸出與美股同 schema);`_shared/twse_canonical_facts.py`
-已落地(commit `ccbde9d`)——台股三表 facts 可忠實攤成美股 long-format。
-架構前提(使用者拍板):台美 **共用** Financials Viewer / 儲存層;compose 的 layout
-(CONTRACT)須與前端 `financials-v2/constants.ts` 保持同一套 canonical 列。
+狀態:**v3 — Argue 共識版**(architect=Opus 4.8 vs skeptic=GPT-5.5,5 輪 early-stop,
+16 claims 全數接受,verdict=GO-with-amendments;此前 v2 為 Fable 5 self-review 版)
+Argue 紀錄:`~/.config/argue/compose-tw-summary.md`(request-id `compose-tw`)
+上游:derive-A 已完成;`_shared/twse_canonical_facts.py` 已落地(`ccbde9d`)。
+架構前提(使用者拍板):台美**共用** viewer/儲存層;幣別/scale 依申報單位顯示。
 
 ## 1. 背景與目標
 
 `compose-financials` 是**純渲染層**:讀本地 Skill_Output JSON → 產
-`{TICKER}/03_Working/Topics/Trackers/Financials.md`(三表 + margins/growth/liquidity/
-wc-cycle/returns 圖表區塊),AUTO-marker 幕等、不計算任何指標。v1 只支援美股。
+`{TICKER}/03_Working/Topics/Trackers/Financials.md`,AUTO-marker 幕等、不計算任何指標。
+v1 只支援美股。
 
-### 目標(這一輪)
-1. `--market tw`:台股 ticker(聯亞 3081、台達電 2308)能產出同結構 Financials.md
-2. 幣別/scale **資料驅動**(使用者拍板:依 raw data 的 unit 顯示,仟元就仟元、百萬就百萬)
-3. 三表 layout 台美共用 + 台股條件列;台股無來源的區塊整段省略
-4. 美股輸出零回歸(唯一例外:§3.2 的 thousands-ticker 標籤修正,屬修 bug)
+### 目標
+1. `--market tw`:台股 ticker 產出同結構 Financials.md
+2. 幣別/scale 資料驅動(依 raw data unit;仟元就仟元、百萬就百萬)
+3. 三表 layout 台美共用 + 台股條件列;台股無來源區塊整段省略
+4. 美股回歸 gate:**預期 diff 僅 3 項**(frontmatter 日期、FCF 列 ⏳→值、AAOI $M→$K)
 
-### Non-goals(下一輪)
-- Supabase Phase E(共用表 + market/currency 欄 migration + upsert)
-- 網頁 Financial Viewer 的台股渲染
-- 台股 Non-GAAP / segment 來源(管道不存在,非 compose 職責)
+### Non-goals
+- Supabase Phase E、網頁 viewer 台股渲染、台股 Non-GAAP/segment 管道
+- **本輪不修的既有死 key**(Argue 掃出,列 backlog 不動,避免炸 3-diff 預算):
+  `fcf_margin`(應為 fcf_margin_pct)、`nonoperating_income_expense_net`、
+  `net_working_capital`、`capex_ratio`、`cfo_to_net_income` —— 台美兩邊本來就恆 ⏳,
+  留待獨立輪(見 §6 backlog)
+- **analytics native-statement 化**(loaders.py:66 強制 RATIO 的解除)——會遷移 32 列/ticker,
+  未預算的美股回歸風險,defer
 
-## 2. 現況斷點(探索結論,file:line 見探索報告)
+## 2. 現況斷點(探索+Argue 證據,file:line 見 argue summary)
 
 | # | 斷點 | 位置 |
 |---|---|---|
-| a | 來源路徑寫死 `01_Source/SEC Filings/Skill_Output` + `parse-10QK-gaap/{T}_gaap_facts.json` | `loaders.py:6,37` |
-| b | 原始 facts reader 只吃 long-format `facts: [...]`;台股是 keyed-dict | `loaders.py:39` |
-| c | 幣別/scale 寫死:`$M` 標題、`$` EPS 前綴、`m` fmt 不讀 unit、圖表 ylabel `$M` | `contract.py:18/36/75/114/149`、`sections.py:20,31`、`charts.py:56,64` |
-| d | CONTRACT 是寫死美股列清單:台股獨有科目被靜默丟、Non-GAAP/segment 對台股全空 | `contract.py:14-156` |
+| a | 來源路徑寫死 `SEC Filings` + `parse-10QK-gaap/{T}_gaap_facts.json` | `loaders.py:6,37` |
+| b | 原始 facts reader 只吃 long-format;台股是 keyed-dict | `loaders.py:39` |
+| c | 幣別/scale 寫死(`$M` 標題、`$` EPS、ylabel) | `contract.py:18/36/75/114/149`、`sections.py:31`、`charts.py:56,64` |
+| d | CONTRACT 寫死美股列;台股獨有科目被丟、無來源區塊全空 | `contract.py:14-156` |
+| e | **既有 bug**:FCF 列 key `("RATIO","fcf")` 但 analytics emit `free_cash_flow` → 美股頁 FCF 恆 ⏳ | `contract.py:90`、`loaders.py:65-68` |
+| f | **幕等破洞**:`known_keys` 傳全 CONTRACT,被過濾區塊的舊 AUTO block 永不 prune;圖表在過濾前就畫 | `cli.py:101-117`、`markers.py:32-37` |
 
-derive-base / analytics loader **不用改**(derive-A 後 schema 相同)。
+derive-base / analytics loader 不用改(schema 相同)。statement 詞彙相容已驗
+(美股 facts 就是 IS/BS/CF;`emit_canonical_facts` 同)。quarter 窗已驗不會被 6M/9M 污染
+(`periods.py` 過濾非 Q label)。
 
 ## 3. 設計
 
-### 3.1 market-aware 來源探索(解 a+b)
+### 3.1 market-aware 來源(解 a+b;Argue 修訂:precedence + 排除 derive_base)
 
-- CLI 加 `--market {us,tw}`,default `us`(與 derive CLI 一致,fail-closed by choices)。
-- `us`:現行路徑,一字不動。
-- `tw`:base = glob `Khouse/Semiconductors/*/01_Source/MOPS Filings/Skill_Output/parse-twse-ixbrl/{ticker}_twse_facts.json`
-  (`*` 對中文公司名資料夾;與 derive 的 `discover_sources_tw` 同 pattern)。
-- **台股原始 facts 讀法:in-memory 攤平,不依賴持久化檔**。tw loader 讀
-  `{T}_twse_facts.json` → 呼叫 `_shared.twse_canonical_facts.emit_canonical_facts()` →
-  得到與美股同 shape 的 `facts: [...]` → 走既有 `_rec` 路徑。
-  - Why in-memory:單一資料源(twse_facts.json),無「持久化 canonical 檔過期」問題。
-  - 已持久化的 `{T}_twse_facts_canonical.json` 保留為**其他 ad-hoc consumer 的便利產物**
-    (由 `twse_canonical_facts.py` CLI 產),compose 不讀它、也不負責更新它。
-- as-reported 紀律:emit_canonical_facts 不翻 capex 符號、保留 beginning/ending_cash——
-  顯示層忠實對 PDF(與 derive 的 adapter 刻意不同,該檔案 docstring 已載明)。
-- tw 的 nongaap / supplement 來源:**不探索**(管道不存在),對應區塊整段省略(§3.3)。
-- 輸出路徑:tw 寫 `Khouse/Semiconductors/{中文名}/03_Working/Topics/Trackers/Financials.md`
-  (中文名資料夾 = glob 命中的那個 ticker 資料夾;相對結構與美股相同)。
+- CLI `--market {us,tw}`,default us(choices fail-closed)。us 路徑一字不動。
+- tw base:glob `Khouse/Semiconductors/*/01_Source/MOPS Filings/Skill_Output/parse-twse-ixbrl/{ticker}_twse_facts.json`。
+  **multi-hit → fail-loud**(列出所有命中,exit 非 0;不學 derive 的 silent hits[0])。
+- **in-memory 攤平**:tw loader 讀 `{T}_twse_facts.json` → `emit_canonical_facts()` →
+  long-format rows 走既有 `_rec` 路徑。持久化的 `_canonical.json` 是他用產物,compose 不讀。
+- **⚠️ source tag = `gaap_facts`(precedence 0)**:resolve 的 source 優先序
+  gaap_facts=0 < derive_base=1;台股 as-reported 列必須佔 precedence 0,否則同 cell 會輸給
+  derive 列(其 capex 翻正)→ 污染 as-reported。
+- **⚠️ 台股三表排除 derive_base 來源**(整個不載入):台股 CF 無 `__q` 揭露單季、Q4 IS 無
+  揭露單季 → 若拿 derive_base 補,會滲入翻號 capex 與重建值,違反顯示層 as-reported 鐵律。
+  **接受留白**:Q2/Q3/Q4 的 CF 單季欄與 Q4 的 IS 單季欄顯示 `—`(這是忠實揭露的代價;
+  之後若要顯示重建值,另開輪帶「derived」標記設計)。analytics(RATIO)照常載入
+  (margins/growth 等本來就以 derive 口徑呈現,與三表 as-reported 分區)。
+- tw 的 nongaap/supplement:不探索。輸出路徑:glob 命中的中文名資料夾
+  `03_Working/Topics/Trackers/Financials.md`,**mkdir parents**(目錄可能不存在)。
 
-### 3.2 幣別/scale 資料驅動(解 c)
+### 3.2 幣別/scale 資料驅動(解 c;Argue 修訂:限 money 列 + templating)
 
-原則(使用者拍板):**顯示單位 = 申報單位**,不轉換、不 hardcode。
+顯示單位 = 申報單位,formatter 由 record `unit` 查表:
 
-- 每筆 record 已帶 `unit`(`USD_millions` / `USD_thousands` / `TWD_thousands` /
-  `USD_per_share` / `TWD_per_share` / `Pure`)。formatter 由 unit 查表:
-
-| unit | 數值 | 幣別符號 | 區塊標題 / 圖表 ylabel 尾綴 |
+| unit | 數值 | 符號 | 標題/ylabel 尾綴 |
 |---|---|---|---|
 | USD_millions | `{v:,.0f}` | $ | `$M` |
 | USD_thousands | `{v:,.0f}` | $ | `$K` |
 | TWD_thousands | `{v:,.0f}` | NT$ | `NT$ 仟元` |
 | USD_per_share | `${v:.2f}` | $ | — |
 | TWD_per_share | `NT${v:.2f}` | NT$ | — |
-| Pure | 既有 pct/x 邏輯不動 | — | — |
+| Pure | 既有 pct/x 不動 | — | — |
 
-- 區塊標題的單位尾綴(如 `（GAAP，$M）`)改為 render 時由該區塊實際 resolve 到的
-  money-unit 決定。**multi-unit fail-loud 只限三表區塊**(單一 filer 單一申報 scale 有保證);
-  derived 區塊(margins/returns 等)混 pct 與 money 屬正常,其 money 尾綴取該區塊第一個
-  resolve 到的 money row 的 unit(EBITDA/FCF 繼承 ticker scale,天然單一)。
-- **標題的制度 token 也 market 驅動**:美股 `GAAP`、台股 `IFRS`(台股用 TIFRS,標 GAAP
-  是錯的)。注意:record 的 `version` 欄位仍沿用 pipeline 內部 enum `GAAP`(意為
-  「官方申報主值」vs `NON_GAAP`),與顯示制度 label 解耦——台股 loader 產 record 時
-  `version="GAAP"`(ValueIndex 需要),顯示層才轉 IFRS 字樣。
-- **附帶修正(美股)**:AAOI 等 thousands-ticker 現被硬標 `$M` → 修正為 `$K`。
-  這是修 bug:數值本來就沒縮放,只有標籤錯。millions-ticker(INTC/MU/LITE/SNDK)輸出
-  **byte 不變**(回歸驗證)。
-- 圖表:`charts.py` 的 ylabel 由呼叫端傳入 unit 尾綴,拿掉寫死 `$M`。
+- **multi-unit fail-loud 只掃 `fmt=='m'` 金額列、只限三表區塊**(IS 區塊內 EPS 列是
+  per-share unit,屬正常混合,不得觸發;已驗 AAOI derive_base IS/CF unit 與 gaap 一致,
+  真實 money-scale 混合不存在,guard 是保險)。derived 區塊尾綴取第一個 resolve 到的
+  money row unit。
+- **標題/ylabel 是寫死字串,需 templating**:CONTRACT title 改模板(如
+  `季度損益表 Income Statement（{regime}，{unit_suffix}）`)由 renderer 代入;
+  `charts.py` ylabel 改參數(拿掉寫死 `$M`)。
+- 制度 token:美股 `GAAP`、台股 `IFRS`;record `version` 仍為內部 enum `GAAP`
+  (gaap loader 本就 hardcode,`emit_canonical_facts` 不帶 version 亦可——由 tw loader
+  `_rec` 時statement source 補),與顯示 label 解耦。
+- 附帶修正:AAOI(USD_thousands filer)標題 `$M→$K`(修 bug,數值不變)。
 
-### 3.3 CONTRACT:共用三表 + 台股條件列(解 d)
+### 3.3 CONTRACT(解 d+e;Argue 修訂)
 
-- IS/BS/CF 沿用**同一套** canonical 列(與前端 constants.ts 對齊,不 fork 台股變體)。
-- **台股條件列**(僅 `market=tw` 且該 uni_account 有值時渲染;插在權益區既有列之後):
-  `legal_reserve`(法定盈餘公積)、`total_equity_incl_nci` + `net_income_total_pre_nci`
-  (cr 合併報表家族鍵;ir 無值自然不顯)、`oci_fx_translation` 等 oci 分項(OCI 小節)。
-  實作:CONTRACT line 加可選 `markets` 標記(缺省 = 兩市場)+ `render_if_present` 旗標;
-  renderer 據此過濾。美股行為不變(新增旗標對既有列缺省不生效)。
-- **區塊級過濾**:CONTRACT section 加可選 `requires_source` 標記——`margins-nongaap`
-  requires `nongaap`、`bs-structure`(segment)requires `supplement`。來源不存在 →
-  **整段不渲染**(含 AUTO marker 都不產生),而非渲染一堆 `⏳`。美股不受影響(來源都在)。
-- 台股拿到的區塊:三表 + margins-gaap + netsales-total + growth + liquidity + wc-cycle +
-  returns(analytics 874 rows 全部填得滿,除 bvps 缺股數維持 `⏳`)。
-- **附帶修正(美股既有 bug)**:CF 區塊的 Free Cash Flow 列 contract key 是
-  `("RATIO","fcf")`,但 analytics 實際 emit 的 uni_account 是 `free_cash_flow` →
-  此列在美股頁**一直渲染 `⏳`**(從未 resolve 過)。本輪改為 `("RATIO","free_cash_flow")`
-  (analytics loader 把所有 analytics rows 強制標 statement=RATIO,故 RATIO 對)。
-  此修正會讓美股 byte-diff gate 多一個**預期 diff**(FCF 列 ⏳→數值),與 AAOI `$K` 同列
-  「修 bug 型預期 diff」。
+- IS/BS/CF 沿用同一套 canonical 列(對齊前端 constants.ts)。
+- **FCF 修正(最小版)**:`("RATIO","fcf")` → `("RATIO","free_cash_flow")`——騎在
+  loaders 強制 RATIO 的現行為上,1 個美股預期 diff,gate 安全。native-statement 版
+  (`("CF","free_cash_flow")`)defer(§1 Non-goals)。
+- **台股條件列**(`markets` 標記 + `render_if_present`,僅有值才渲染):
+  - `legal_reserve`(法定盈餘公積)→ 錨在 BS 權益區 `retained_earnings` 之前
+  - `total_equity_incl_nci` → 錨在 `total_equity` 之後(cr 才有值;ir 自然不顯)
+  - `net_income_total_pre_nci` **不是新增**——它已是美股無條件 IS 列(contract.py:30),
+    台股 cr 會自然填值、ir 顯 `—`,不動。
+  - oci 分項:**deferred**(等 2308/3081 顯示需求確認再加,避免臆測列)
+  - 「條件列隱藏」vs「⏳ placeholder」的紀律區分:**⏳ = 管道應產而未產**(催 derive 的
+    to-do 契約);**條件列 = 該市場制度性不存在的科目**(非 to-do)→ 隱藏合理,spec 明文。
+- **區塊過濾**:`requires_source` 只掛 `margins-nongaap`(requires nongaap)。
+  **bs-structure 不掛**(Argue 證據:cli.py:72-86 只讀 BS facts,台股填得滿——v2 誤設)。
+  來源不存在 → 整段不渲染(不產 AUTO marker)。
+- **正確的台股覆蓋陳述**(修 v2 錯誤宣稱):台股 analytics 缺 `bvps`(無股數)與
+  `debt_to_equity`(聯亞無借款;台達電待驗)→ 該列 ⏳;backlog 死 key 列(§1)台美同樣 ⏳。
 
-### 3.4 SSOT / sync
+### 3.4 渲染管線(解 f;Argue 修訂)
 
-- canonical = `~/CC_Switch_Config/skills/compose-financials/`,改完
-  `bash scripts/sync-to-local.sh` → 4 mirror 同步;兩 repo commit(若涉 AI_Agent 端測試)。
-- SKILL.md:v2 條目(台股支援、`--market`、unit 驅動、區塊過濾)、scope 表台股改 in-scope。
+- **過濾 pre-pass 先行**:markets / render_if_present / requires_source 過濾在
+  `_maybe_chart` 之前、`order`/`known_keys` 構建之前完成——否則被過濾區塊仍會畫圖
+  (stale assets)且 marker 永不清。
+- **`known_keys` = 本次實際渲染的區塊集合**(不是全 CONTRACT)→ 被過濾區塊的舊
+  AUTO block 會被 prune,幕等成立。
+
+### 3.5 SSOT / sync
+
+canonical = `~/CC_Switch_Config/skills/compose-financials/`,sync 4 mirrors;SKILL.md v2
+條目(台股、`--market`、unit 驅動、區塊過濾、**frontend parity delta**:台股條件列為
+compose 先行、constants.ts 未同步——記為 tracked temporary delta,網頁 viewer 輪補齊)。
 
 ## 4. 驗證
 
 | Gate | 內容 |
 |---|---|
-| 美股零回歸 | millions-ticker(INTC/MU/LITE/SNDK)改動前後 **Financials.md** byte-diff 相同,允許的預期 diff 僅:frontmatter `updated:` 日期、FCF 列 ⏳→數值(§3.3 bug 修);AAOI 另有 `$M→$K` 標籤 diff。**PNG 圖檔不入 byte gate**(matplotlib 輸出非 byte-stable),改驗 md 中的圖檔引用路徑不變 + 圖檔存在 |
-| 台股 smoke | 聯亞 3081 端到端產出 Financials.md:三表數字抽查對 `twse_facts.json`(as-reported,capex 負)、無 Non-GAAP/segment 區塊、單位標籤 NT$ 仟元、EPS NT$;台達電 2308(cr)驗家族列顯示 |
-| 幕等 | 聯亞頁手寫一段 Observations → 重跑 → 手寫內容原樣保留 |
-| 單元測試 | tw loader(in-memory 攤平)、unit formatter 查表(6 種 unit)、multi-unit fail-loud、markets/render_if_present/requires_source 過濾、美股 contract 缺省不變 |
+| 美股回歸 | INTC/MU/LITE/SNDK Financials.md byte-diff,允許 diff 僅:frontmatter 日期、FCF 列 ⏳→值;AAOI 另 +`$M→$K`。PNG 不入 byte gate(驗 md 引用路徑 + 檔案存在) |
+| 台股 smoke | 聯亞端到端:三表數字對 twse_facts.json(**capex 負**)、**無任何 derive_base 值滲入**(Q2-Q4 CF 留白)、無 Non-GAAP 區塊、bs-structure **有**渲染、NT$ 仟元標籤、IFRS token;台達電(cr)驗 total_equity_incl_nci 條件列 |
+| 幕等 | 手寫 Observations 重跑保留;**被過濾區塊的舊 AUTO block 會被 prune**(先渲染全區塊再切 tw 模擬) |
+| 單元測試 | tw loader(source=gaap_facts、排除 derive_base、負 capex)、稀疏單季欄如預期、unit formatter 6 種 + **EPS 不觸發 money fail-loud**、contract key↔emitter 對照 sweep(鎖住 §1 backlog 死 key 清單,防新增)、known_keys=rendered set prune、glob multi-hit fail-loud、title templating、美股 contract 缺省不變 |
 
 ## 5. 風險
 
 | 風險 | 緩解 |
 |---|---|
-| 改 formatter 動到美股數字 | 美股 byte-diff 零回歸 gate;fmt 數值路徑(`{v:,.0f}`)不動,只動符號/標籤 |
-| CONTRACT 加旗標破壞既有渲染 | 旗標全部 opt-in、缺省行為 = 現行;單元測試鎖 |
-| 台股中文資料夾 glob 撞多檔 | 同 derive:sorted 取第一 + 命中數 >1 時警告 |
-| 4 mirror 漂移 | 只改 canonical + sync 腳本,commit 驗 byte-identical |
+| formatter 動到美股數字 | 數值路徑不動只動標籤;byte gate 3-diff 預算 |
+| derive_base 滲入台股三表 | tw loader 結構性不載入 + 單元測試 + smoke 斷言 |
+| CONTRACT 旗標破壞既有 | opt-in 缺省=現行;單元測試鎖 |
+| 過濾/prune 改動影響美股頁 | 美股來源齊全 → 過濾 no-op;byte gate 兜底 |
+| 4 mirror 漂移 | 只改 canonical + sync,commit 驗 byte-identical |
 
-## 6. 實作順序(給 writing-plans)
+## 6. Backlog(本輪明確不做,Argue 登記)
 
-1. unit formatter 查表 + 標題/ylabel 資料驅動(TDD;含 AAOI $K 修正)→ 美股回歸 gate
-2. CONTRACT 旗標(markets / render_if_present / requires_source)+ renderer 過濾(TDD)
-3. tw 來源探索 + in-memory 攤平 loader + `--market` CLI(TDD)
-4. 聯亞 + 台達電 端到端 smoke + 幕等驗證
-5. SKILL.md v2 + sync mirrors + commit 兩 repo
+1. 死 key 修復輪:`fcf_margin→fcf_margin_pct`、`nonoperating_income_expense_net`、
+   `net_working_capital`、`capex_ratio`、`cfo_to_net_income`(需逐一決定 emitter 補 or
+   contract 改名;每項都是美股 diff,需自己的 gate 預算)
+2. analytics native-statement 化(`("CF","free_cash_flow")` + 解除強制 RATIO)
+3. 台股三表重建值顯示(帶 derived 標記的設計;現版留白)
+4. 前端 constants.ts 台股條件列同步(網頁 viewer 輪)
+5. oci 分項條件列(待顯示需求)
+
+## 7. 實作順序(給 writing-plans)
+
+1. unit formatter + title/ylabel templating(TDD;含 AAOI $K、IFRS token)→ 美股回歸 gate
+2. FCF key 最小修 + contract key↔emitter sweep 測試(鎖 backlog 清單)
+3. CONTRACT 旗標(markets/render_if_present/requires_source)+ **過濾 pre-pass +
+   known_keys=rendered**(TDD)
+4. tw 來源探索(multi-hit fail-loud)+ in-memory 攤平 loader(source=gaap_facts、
+   排除 derive_base)+ `--market` CLI + mkdir parents(TDD)
+5. 聯亞 + 台達電 端到端 smoke + 幕等(含 prune)驗證
+6. SKILL.md v2(含 frontend parity delta 註記)+ sync mirrors + commit
