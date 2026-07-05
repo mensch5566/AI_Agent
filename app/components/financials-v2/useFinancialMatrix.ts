@@ -177,6 +177,19 @@ function isDisplayEligiblePrototype(c: Cell): boolean {
   return c.display_label != null || c.ordinal != null;
 }
 
+// True iff the dataset carries filing-faithful ("As Reported") presentation
+// metadata for at least one fact. US (SEC) parse resolves display_label/ordinal
+// from the presentation linkbase; TW (TWSE iXBRL) has none, so its "As Reported"
+// matrix is empty. The Viewer uses this to hide the As-Reported toggle and force
+// the Standardized (uni_account) layout — data-driven, not hardcoded by market.
+export function hasAsReportedLayout(cells: Cell[]): boolean {
+  return cells.some(
+    (c) =>
+      c.source_table === "facts" &&
+      (c.display_label != null || c.ordinal != null),
+  );
+}
+
 function isFyPeriod(p: string): boolean {
   return /^FY\d{4}$/.test(p);
 }

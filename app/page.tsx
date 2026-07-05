@@ -16,8 +16,8 @@ const research = [
     icon: "🗂️",
     nameEn: "Financials Viewer",
     name: "財務報表瀏覽器",
-    desc: "三表（損益、資產負債、現金流）及財務比率的時序瀏覽，支援多標的切換。",
-    tags: ["SNDK", "2454"],
+    desc: "三表（損益、資產負債、現金流）及財務比率的時序瀏覽，支援多標的切換（US / 台股）。",
+    tags: ["SNDK", "3081"],
   },
   {
     href: "/equity-research",

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildMatrix, buildDictionaryMatrix } from "../useFinancialMatrix";
+import { buildMatrix, buildDictionaryMatrix, hasAsReportedLayout } from "../useFinancialMatrix";
 import type { Cell, CellStatus, PeriodKind, Statement, Version } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -485,5 +485,33 @@ describe("Non-GAAP overlay matrix", () => {
     ];
     const m = buildMatrix(cells, "IS", "GAAP", "quarterly");
     expect(m.cells["revenue"]).toBeUndefined();
+  });
+});
+
+describe("hasAsReportedLayout — As-Reported availability (US vs TW)", () => {
+  it("true when a fact carries display_label or ordinal (US/SEC data)", () => {
+    const cells: Cell[] = [
+      fact({ uni_account: "revenue", display_label: "Net revenue", ordinal: 1, statement: "IS", period: "Q1_FY2025" }),
+    ];
+    expect(hasAsReportedLayout(cells)).toBe(true);
+  });
+
+  it("true from ordinal alone (no display_label)", () => {
+    const cells: Cell[] = [
+      fact({ uni_account: "revenue", ordinal: 2, statement: "IS", period: "Q1_FY2025" }),
+    ];
+    expect(hasAsReportedLayout(cells)).toBe(true);
+  });
+
+  it("false when no fact has display metadata (TW/TWSE data)", () => {
+    const cells: Cell[] = [
+      fact({ uni_account: "revenue", statement: "IS", period: "Q1_FY2025", unit: "TWD_thousands" }),
+      fact({ uni_account: "net_income", statement: "IS", period: "Q1_FY2025", unit: "TWD_thousands" }),
+    ];
+    expect(hasAsReportedLayout(cells)).toBe(false);
+  });
+
+  it("false on empty cells", () => {
+    expect(hasAsReportedLayout([])).toBe(false);
   });
 });

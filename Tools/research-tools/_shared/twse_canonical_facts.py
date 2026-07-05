@@ -15,6 +15,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from . import cell_id as _id
+from .period_kind import infer_period_kind
+from .sec_json_adapter import FactRow
 from .twse_json_adapter import _EPS_UNIS, _STMT_MAP, _period_label
 
 
@@ -63,6 +66,57 @@ def emit_canonical_facts(facts_json: dict) -> dict:
         },
         "facts": out_facts,
     }
+
+
+def adapt_twse_canonical_facts(facts_json: dict) -> list[FactRow]:
+    """As-reported TWSE facts → FactRow list for the DB `sec_financial_facts` layer.
+
+    Storage sibling of emit_canonical_facts: same as-reported semantics (capex kept
+    negative, cash balances preserved, no __q dedup) but emits FactRow with the DB
+    contract (cell_id / inferred period_kind / status=SOURCE_OF_TRUTH / version=GAAP
+    / provenance market=TW). Distinct from twse_json_adapter.adapt_twse_facts, which
+    applies derive-only transforms (capex→positive, cash-balance exclusion) and must
+    NOT feed the display/SSOT facts table.
+    """
+    ticker = str(facts_json["ticker"])
+    top_unit = facts_json.get("unit")
+    if top_unit != "TWD_thousands":
+        raise ValueError(f"unexpected TWSE facts unit: {top_unit!r} (fail-closed)")
+
+    rows: list[FactRow] = []
+    for period, pdata in facts_json.get("facts_by_period", {}).items():
+        period_end = pdata.get("period_end")
+        cat = pdata.get("report_category")
+        for key, fact in pdata.get("facts", {}).items():
+            is_q = key.endswith("__q")
+            base = key[:-3] if is_q else key
+            stmt = _STMT_MAP[fact["statement"]]
+            label = _period_label(period, stmt, is_q)
+            unit = "TWD_per_share" if base in _EPS_UNIS else "TWD_thousands"
+            value = float(fact["value"])            # as-reported — no capex sign flip
+            period_kind = infer_period_kind(stmt, label)
+            concept = fact.get("xbrl_concept") or ""
+            provenance = {
+                "source_filing": "TWSE_iXBRL",
+                "market": "TW",
+                "as_reported": True,
+                "report_category": cat,
+                "substatement": fact["statement"],
+                "disclosed_single_quarter": is_q,
+            }
+            cid = _id.facts_cell_id(
+                ticker=ticker, period=label, period_kind=period_kind,
+                version="GAAP", statement=stmt, uni_account=base,
+                source_account=concept, xbrl_tag=concept or None,
+            )
+            rows.append(FactRow(
+                cell_id=cid, ticker=ticker, period=label, period_end=period_end,
+                period_kind=period_kind, statement=stmt, version="GAAP",
+                uni_account=base, source_account=concept, xbrl_tag=concept or None,
+                value=value, weight=1, unit=unit, status="SOURCE_OF_TRUTH",
+                ordinal=None, long_tail_metadata=None, provenance=provenance,
+            ))
+    return rows
 
 
 def _default_out_path(twse_facts_path: Path) -> Path:

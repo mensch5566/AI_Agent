@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useFinancialData, buildMatrix, buildDerivedNonGaapRows, type Frequency } from "@/app/components/financials-v2/useFinancialMatrix";
+import { useFinancialData, buildMatrix, buildDerivedNonGaapRows, hasAsReportedLayout, type Frequency } from "@/app/components/financials-v2/useFinancialMatrix";
 import { StatementMatrix } from "@/app/components/financials-v2/StatementMatrix";
 import { DerivedNonGaapMatrix } from "@/app/components/financials-v2/DerivedNonGaapMatrix";
 import { MatrixChart } from "@/app/components/financials-v2/MatrixChart";
@@ -42,9 +42,15 @@ export default function Viewer({ ticker }: { ticker: string }) {
 
   const statement: Statement = view === "SEGMENT" ? "IS" : view;
 
+  // TW (TWSE) data has no presentation-linkbase display metadata, so the
+  // "As Reported" (pdf) layout renders no rows. Detect this data-driven and
+  // force the Standardized (uni) layout + hide the toggle for such tickers.
+  const hasAsReported = useMemo(() => hasAsReportedLayout(cells), [cells]);
+  const effectiveViewMode = hasAsReported ? viewMode : "uni";
+
   const gaapMatrix = useMemo(
-    () => buildMatrix(cells, statement, "GAAP", frequency, viewMode),
-    [cells, statement, frequency, viewMode],
+    () => buildMatrix(cells, statement, "GAAP", frequency, effectiveViewMode),
+    [cells, statement, frequency, effectiveViewMode],
   );
   const nongaapMatrix = useMemo(
     () => buildMatrix(cells, statement, "NON_GAAP", frequency),
@@ -230,7 +236,7 @@ export default function Viewer({ ticker }: { ticker: string }) {
               </div>
             )}
 
-            {(view === "IS" || view === "BS" || view === "CF") && (
+            {hasAsReported && (view === "IS" || view === "BS" || view === "CF") && (
               <div
                 className="inline-flex rounded-md border border-border overflow-hidden ml-2"
                 role="group"

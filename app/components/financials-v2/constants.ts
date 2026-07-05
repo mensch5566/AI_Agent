@@ -93,9 +93,16 @@ export const BS_ROWS: MetricSpec[] = [
   { key: "common_stock", label: "Common Stock", kind: "core" },
   { key: "additional_paid_in_capital", label: "Additional Paid-In Capital", kind: "core" },
   { key: "retained_earnings", label: "Retained Earnings", kind: "core" },
+  // TW/IFRS: legal reserve is a distinct appropriation of retained earnings.
+  // US filers have no data for this key → the row renders empty/hidden.
+  { key: "legal_reserve", label: "法定盈餘公積", kind: "core" },
   { key: "aoci", label: "AOCI", kind: "core" },
   { key: "equity_long_tail", label: "Other Equity (long-tail)", kind: "long_tail_bucket" },
   { key: "total_equity", label: "Total Equity", kind: "subtotal" },
+  // TW/IFRS NCI family: parent-only equity (total_equity) → + minority interest
+  // → total equity incl. NCI. US filers have no data for these keys → rows hidden.
+  { key: "minority_interest_bs", label: "非控制權益 / Minority Interest", kind: "core" },
+  { key: "total_equity_incl_nci", label: "權益總額（含非控制）/ Total Equity incl. NCI", kind: "subtotal" },
   { key: "total_liabilities_and_equity", label: "Total Liabilities & Equity", kind: "subtotal" },
 ];
 
@@ -329,8 +336,10 @@ export function fmtValue(
   uniAccount?: string,
 ): string {
   if (value === null || value === undefined) return "—";
-  // EPS: 2 decimals (matches PDF disclosure)
+  // EPS: 2 decimals (matches PDF disclosure). Currency symbol is data-driven off
+  // the unit prefix — USD → "$", TWD → "NT$".
   if (unit === "USD_per_share") return `$${value.toFixed(2)}`;
+  if (unit === "TWD_per_share") return `NT$${value.toFixed(2)}`;
   // All other numeric metrics: 1 decimal (matches PDF disclosure for millions/thousands tables)
   if (unit === "Pure") {
     if (uniAccount && RATIO_AS_MULTIPLE.has(uniAccount)) {
@@ -341,11 +350,13 @@ export function fmtValue(
     }
     return `${(value * 100).toFixed(1)}%`;
   }
-  if (unit === "USD_thousands") {
+  // Money: identical numeric formatting across currencies (the currency is
+  // conveyed at the column/header level, matching how US shows bare numbers).
+  if (unit === "USD_thousands" || unit === "TWD_thousands") {
     if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(1)}M`;
     return `${value.toFixed(1)}K`;
   }
-  if (unit === "USD_millions") return `${value.toFixed(1)}M`;
+  if (unit === "USD_millions" || unit === "TWD_millions") return `${value.toFixed(1)}M`;
   if (unit === "millions_shares") return `${value.toFixed(1)}M`;
   if (unit === "thousands_shares") return `${(value / 1000).toFixed(1)}M`;
   return String(value);
