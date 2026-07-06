@@ -15,6 +15,20 @@ def _import_upsert():
     return mod
 
 
+class _EmptyBatch:
+    """Minimal NormalizedBatch stand-in for tests that stub the parse path to a
+    no-op and focus on the derive-status / analytics gates. Mirrors the fields
+    main() reads before those gates — notably `dimensional` (the period-anchor
+    gate does `bool(batch.dimensional)`). Empty lists = no parse-side rows, so the
+    period-anchor gate is a no-op and control reaches the derive-status branch."""
+    dimensional: list = []
+    facts: list = []
+    edges: list = []
+    rejected: list = []
+    value_conflicts: list = []
+    company = None
+
+
 def test_analytics_fallback_includes_fcf_rule_id():
     """Phase B: the owned-scope delete fallback must include the new absolute-value
     FCF rule_id, else re-running with a rule swap could orphan FCF rows."""
@@ -125,10 +139,8 @@ def test_main_apply_fails_closed_on_incomplete_run(tmp_path, monkeypatch, capsys
 
     # Gate-pass stubs — make the parse-side path a no-op so the test
     # focuses on the derive-status branch.
-    class _StubBatch:
-        pass
     monkeypatch.setattr(upsert, "load_sources", lambda ticker: {})
-    monkeypatch.setattr(upsert, "normalize", lambda ticker, sources: _StubBatch())
+    monkeypatch.setattr(upsert, "normalize", lambda ticker, sources: _EmptyBatch())
     monkeypatch.setattr(upsert, "print_report", lambda batch: True)
 
     apply_called = {"n": 0}
@@ -244,7 +256,7 @@ def test_main_apply_fails_closed_on_stale_derived(tmp_path, monkeypatch):
 
     monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
     monkeypatch.setattr(upsert, "load_sources", lambda t: {})
-    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: _EmptyBatch())
     monkeypatch.setattr(upsert, "print_report", lambda b: True)
     apply_called = {"n": 0}
     def _no_apply(b):
@@ -344,7 +356,7 @@ def test_main_apply_fails_closed_on_missing_input_files_contract(tmp_path, monke
     }))
     monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
     monkeypatch.setattr(upsert, "load_sources", lambda t: {})
-    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: _EmptyBatch())
     monkeypatch.setattr(upsert, "print_report", lambda b: True)
     apply_called = {"n": 0}
     monkeypatch.setattr(upsert, "apply", lambda b: apply_called.__setitem__("n", apply_called["n"] + 1))
@@ -364,7 +376,7 @@ def test_main_apply_fails_closed_on_missing_run_with_db_metrics(tmp_path, monkey
 
     monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
     monkeypatch.setattr(upsert, "load_sources", lambda t: {})
-    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: _EmptyBatch())
     monkeypatch.setattr(upsert, "print_report", lambda b: True)
     apply_called = {"n": 0}
     monkeypatch.setattr(upsert, "apply", lambda b: apply_called.__setitem__("n", apply_called["n"] + 1))
@@ -404,7 +416,7 @@ def test_missing_run_db_lookup_filters_by_rule_id(tmp_path, monkeypatch):
 
     monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
     monkeypatch.setattr(upsert, "load_sources", lambda t: {})
-    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: _EmptyBatch())
     monkeypatch.setattr(upsert, "print_report", lambda b: True)
     apply_called = {"n": 0}
     monkeypatch.setattr(upsert, "apply", lambda b: apply_called.__setitem__("n", apply_called["n"] + 1))
@@ -448,7 +460,7 @@ def test_main_apply_allows_missing_run_when_flag_passed(tmp_path, monkeypatch):
 
     monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
     monkeypatch.setattr(upsert, "load_sources", lambda t: {})
-    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: _EmptyBatch())
     monkeypatch.setattr(upsert, "print_report", lambda b: True)
     apply_called = {"n": 0}
     monkeypatch.setattr(upsert, "apply", lambda b: apply_called.__setitem__("n", apply_called["n"] + 1))
@@ -579,7 +591,7 @@ def test_main_allow_missing_derived_with_analytics_loaded_does_not_crash(tmp_pat
     _make_fresh_analytics_run(vault, "ALCK", tmp_path)
     monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
     monkeypatch.setattr(upsert, "load_sources", lambda t: {})
-    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: _EmptyBatch())
     monkeypatch.setattr(upsert, "print_report", lambda b: True)
     apply_called = {"n": 0}
     monkeypatch.setattr(upsert, "apply", lambda b: apply_called.__setitem__("n", apply_called["n"] + 1))
@@ -601,7 +613,7 @@ def test_analytics_fetch_failure_does_not_delete_before_reinsert(tmp_path, monke
     _make_fresh_analytics_run(vault, "FAILT", tmp_path)
     monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
     monkeypatch.setattr(upsert, "load_sources", lambda t: {})
-    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: _EmptyBatch())
     monkeypatch.setattr(upsert, "print_report", lambda b: True)
     monkeypatch.setattr(upsert, "apply", lambda b: None)
     ops = {"delete": 0, "upsert": 0}
@@ -628,7 +640,7 @@ def test_main_apply_fails_closed_on_analytics_incomplete(tmp_path, monkeypatch):
     run.mkdir(parents=True)  # folder but no JSON → incomplete_run
     monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
     monkeypatch.setattr(upsert, "load_sources", lambda t: {})
-    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: _EmptyBatch())
     monkeypatch.setattr(upsert, "print_report", lambda b: True)
     apply_called = {"n": 0}
     monkeypatch.setattr(upsert, "apply", lambda b: apply_called.__setitem__("n", apply_called["n"] + 1))
@@ -815,7 +827,7 @@ def test_main_apply_fails_closed_when_analytics_missing_derive_base_lineage(tmp_
     _make_fresh_analytics_run(vault, "LIN", tmp_path)  # input_files = gaap_facts only
     monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
     monkeypatch.setattr(upsert, "load_sources", lambda t: {})
-    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: _EmptyBatch())
     monkeypatch.setattr(upsert, "print_report", lambda b: True)
     apply_called = {"n": 0}
     monkeypatch.setattr(upsert, "apply", lambda b: apply_called.__setitem__("n", apply_called["n"] + 1))
@@ -886,7 +898,7 @@ def test_main_apply_fails_closed_when_analytics_points_to_older_derive_base(tmp_
                            "provenance": {"rule_id": "RATIO_GROSS_MARGIN_PCT"}}]}))
     monkeypatch.setattr(upsert, "OBSIDIAN_BASE", vault)
     monkeypatch.setattr(upsert, "load_sources", lambda t: {})
-    monkeypatch.setattr(upsert, "normalize", lambda t, s: object())
+    monkeypatch.setattr(upsert, "normalize", lambda t, s: _EmptyBatch())
     monkeypatch.setattr(upsert, "print_report", lambda b: True)
     apply_called = {"n": 0}
     monkeypatch.setattr(upsert, "apply", lambda b: apply_called.__setitem__("n", apply_called["n"] + 1))

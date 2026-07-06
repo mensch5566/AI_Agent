@@ -118,8 +118,16 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_CCC",
     # EL2 expansion Phase 2 — YoY growth.
     "RATIO_REVENUE_YOY",
+    "RATIO_GROSS_PROFIT_YOY",
+    "RATIO_OPERATING_INCOME_YOY",
     "RATIO_NET_INCOME_YOY",
     "RATIO_EPS_DILUTED_YOY",
+    # EL2 expansion Phase 2 — QoQ growth.
+    "RATIO_REVENUE_QOQ",
+    "RATIO_GROSS_PROFIT_QOQ",
+    "RATIO_OPERATING_INCOME_QOQ",
+    "RATIO_NET_INCOME_QOQ",
+    "RATIO_EPS_DILUTED_QOQ",
     # EL2 expansion Phase 3 — ROIC.
     "RATIO_ROIC",
     # EL2 leverage — Net Debt / EBITDA.

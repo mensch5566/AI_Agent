@@ -102,4 +102,10 @@ M2 台達電 2308（M1 過才做）
 - **upsert**：2308 上 production（2021 as-reported facts + 301 + 670 metrics）。user 授權。dry-run clean、NCI 對帳完美。
 - **frontend 驗收**：/financials/2308 渲染 IS 30 / BS 38，**NCI 條件列有值**（Net Income pre-NCI 23,834,549 / NCI 3,278,958 / Net Income 20,555,591，相加對；BS 非控制權益 57,716,461 / 權益總額含NCI 357,259,207 / legal_reserve 42,601,564），值全對 NLM。市場條件列設計在真資料端到端驗證：cr 顯示、ir 隱藏。
 
-**Phase E 兩 ticker 全線完成。** 共同 deferred：`total_liabilities_and_equity` parse gap（兩 ticker BS 該列空白，值=total_assets）；2308 Q3_FY2023 + 3081 pre-FY2022 缺 NLM source。
+**Phase E 兩 ticker 全線完成。**
+
+## 6. Deferred 三項處置定案（2026-07-05）
+
+- **#1 total_liabilities_and_equity — ✅ 修好**：parse-twse-ixbrl `XBRL_MAP` 加 `ifrs-full:EquityAndLiabilities → total_liabilities_and_equity`（BS, sort 3990；TDD）。re-parse 3081+2308（純加一列/期，其餘零變動，值=total_assets，footing 不受影響、crosscheck 906/915 不變）→ re-derive → re-upsert（3081 2101→2130 facts、2308 2021→2042）。前端兩檔 BS「Total Liabilities & Equity」列現在有值。
+- **#2 2308 Q3_FY2023 — ✅ 補齊**：原 NLM source `04454d89` 伺服器端損壞；本地 PDF 重新上傳成新 source `d8e71f16`（config 已更新），該期補驗 44 MATCH → **2308 21/21 全綠（915 MATCH）**。
+- **#3 3081 pre-FY2022 — ✅ 定案為 parse-only（user 拍板）**：聯亞 notebook 只有 FY22Q1+ PDF，pre-FY2022（FY2019–2021）無 NLM 來源檔;`fetch_ixbrl.py` 只抓 iXBRL XML 抓不到財報 PDF，補驗需另寫 MOPS PDF 下載器抓 12 季老 PDF，對舊資料投入不成比例。**維持 footing-validated parse-only**（內部恆等式已驗，僅缺第二來源），記為 inherent limitation。
