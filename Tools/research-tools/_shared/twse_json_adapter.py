@@ -39,6 +39,11 @@ _CASH_BALANCE_KEYS = {"beginning_cash", "ending_cash"}
 # 台股 CF 帶號加總慣例 → 共用引擎期望「正的支出」的科目(spec §4 規則 7)。
 _SIGN_FLIP_TO_POSITIVE_OUTFLOW = {"capital_expenditures"}
 
+# Public contract for display-layer consumers (compose-financials loaders):
+# the exact set of CF keys this adapter flips to positive-outflow on derive ingest.
+# Display layers use it to flip derived values BACK to as-reported sign convention.
+SIGN_FLIP_TO_POSITIVE_OUTFLOW = _SIGN_FLIP_TO_POSITIVE_OUTFLOW
+
 
 def adapt_company_twse(facts_json: dict) -> CompanyRow:
     t = str(facts_json["ticker"])
