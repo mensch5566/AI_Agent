@@ -1,7 +1,7 @@
 # compose-financials 台股 Q4 單季（IS/CF）支援 — Design Spec
 
 - Date: 2026-07-08
-- Status: argued-converged（v2；GPT-5.5 skeptic × Opus architect 對抗審查收斂，run `argue_1783441057889_1668e6`；待 user 核可）
+- Status: implemented（2026-07-08，branch feat/compose-tw-q4）
 - Tier: T1（單一 skill 的 loader 擴充；但輸出屬 financials 資料展示鏈，正確性紀律按 P6 執行）
 - 前版 spec：`2026-07-03-compose-financials-tw-design.md`（compose 台股 v2，本 spec 反轉其中「TW 刻意排除 derive」一條）
 
@@ -86,7 +86,7 @@ derive-base 走 `twse_json_adapter.adapt_twse_facts`，把 `_SIGN_FLIP_TO_POSITI
 
 台股頁 IS section 的來源註尾端加一句（僅 `market=="tw"`）：「Q4 單季 IS/CF 由 derive-base 自年報−9M 還原；Q4 EPS 不還原（加權股數非加性），留空為預期。」
 
-**實作落點（argue 收斂修正原描述）**：`SOURCE_NOTE` 是 `contract.py:163` 的單一全域常數，`sections.py:127` **無條件**接到每個 section 尾端、完全不看 market。原 spec「加一行條件字串即可」低估了——正確做法是在 `render_section` 內組 local source_note，守衛條件為 `market=="tw"` **且僅 IS section**（`spec["key"]=="is-quarterly"`），否則該句會重複出現在 BS/CF/RATIO 各表。文字放 sections.py local，不動 contract。
+**實作落點（argue 收斂修正原描述）**：`SOURCE_NOTE` 是 `contract.py:163` 的單一全域常數，`sections.py:127` **無條件**接到每個 section 尾端、完全不看 market。原 spec「加一行條件字串即可」低估了——正確做法是在 `render_section` 內組 local source_note，守衛條件為 `market=="tw"` **且僅 IS section**（`spec["key"]=="is"`），否則該句會重複出現在 BS/CF/RATIO 各表。文字放 sections.py local，不動 contract。
 
 ## 5. 文件同批更新（否則 SOP 自打臉）
 
