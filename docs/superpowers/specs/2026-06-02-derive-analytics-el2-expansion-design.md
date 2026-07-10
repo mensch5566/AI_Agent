@@ -65,6 +65,8 @@ annual 版：flow 用 FY 值、餘額用 `Q4_FY{y-1}`/`Q4_FY{y}` 2 點平均（�
 
 ## 階段 2 — YoY 成長率
 
+> **SUPERSEDED (2026-07-10):** growth-rate `(cur−prior)/prior` prior>0 replaced by rate-of-change `(cur−prior)/abs(prior)` skip-only-prior==0, family expanded 5→22 metrics. See docs/superpowers/specs/2026-07-10-derive-analytics-rate-of-change-design.md.
+
 ### 2.1 指標與口徑
 
 | 指標 | uni_account | 公式 | 單位 |

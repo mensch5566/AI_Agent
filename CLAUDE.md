@@ -121,7 +121,7 @@
 - **台股 Q4 EPS 要重建單季值**：XBRL 年報常只給全年 EPS，quarterly view 要用 `FY - Q1 - Q2 - Q3` 還原 `Q4` 單季 EPS，不能直接用全年值
 - **Quarterly 不得顯示 annual-only 值**：若台股 `Q4` 單季值無法可靠重建，quarterly view 寧可留空，也不能直接顯示全年值
 - **financial_metrics 格式**：存小數（0.4814），前端 fmtVal 會乘 100，不要改成百分比
-- **isEps() 判斷**：台股 key 是 `basic_eps`/`diluted_eps`，不是 `eps_basic`/`eps_diluted`
+- **isEps() 判斷**：台股 key 是 `eps_basic`/`eps_diluted`，不是 `basic_eps`/`diluted_eps`
 - **toAnnual() metric 名稱**：台股用 `operating_revenue`，美股舊格式用 `revenue`
 - **每筆 cell 必須帶 unit 欄位**：不同公司會用不同 reporting scale（INTC=`USD_millions`、AAOI=`USD_thousands`），display layer 直接讀 row 的 `unit` 欄位決定顯示，不要 hardcode 預設 millions
 - **美股 USD scale auto-detect**：`parse-10QK-gaap` 用 max revenue 量級判斷（>=$1B → `USD_millions`，否則 `USD_thousands`）。小公司硬轉 millions 會顯示成 0.05 / 53.030 失去直觀，跟 PDF 對不上
