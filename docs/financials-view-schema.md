@@ -73,14 +73,14 @@ v2 完整 uni_account 清單見 [`sec-financials-v2-schema.md`](./sec-financials
 
 | 代碼 | IS/BS | 指標 | 說明 | XBRL 標籤 | 狀態 | 確認 |
 |---|---|---|---|---|---|---|
-| 4000 | IS | `operating_revenue` | 營業收入 | `ifrs-full:Revenue` | ✅ | ✅ |
-| 5000 | IS | `cost_of_revenue` | 營業成本 | `tifrs-bsci-ci:OperatingCosts` | ⬜ | ✅ |
+| 4000 | IS | `revenue` | 營業收入 | `ifrs-full:Revenue` | ✅ | ✅ |
+| 5000 | IS | `cost_of_goods_sold` | 營業成本 | `tifrs-bsci-ci:OperatingCosts` | ⬜ | ✅ |
 | 5900 | IS | `gross_profit` | 營業毛利 | `tifrs-bsci-ci:GrossProfitLossFromOperations` | ⬜ | ✅ |
 | 6100 | IS | `selling_expenses` | 推銷費用 | `ifrs-full:SellingExpense` | ⬜ | ✅ |
 | 6200 | IS | `general_admin_expenses` | 管理費用 | `ifrs-full:AdministrativeExpense` | ⬜ | ✅ |
-| 6300 | IS | `r_and_d_expenses` | 研究發展費用 | `ifrs-full:ResearchAndDevelopmentExpense` | ⬜ | ✅ |
+| 6300 | IS | `research_and_development` | 研究發展費用 | `ifrs-full:ResearchAndDevelopmentExpense` | ⬜ | ✅ |
 | 6450 | IS | `expected_credit_loss` | 預期信用減損利益（損失） | ⬜ 待確認標籤 | ⬜ | |
-| — | IS | `operating_expenses` | 營業費用合計 | `ifrs-full:OperatingExpense` | ⬜ | ✅ |
+| — | IS | `total_operating_expenses` | 營業費用合計 | `ifrs-full:OperatingExpense` | ⬜ | ✅ |
 | 6900 | IS | `operating_income` | 營業利益 | `ifrs-full:ProfitLossFromOperatingActivities` | ⬜ | ✅ |
 | 7100 | IS | `interest_income` | 利息收入 | `ifrs-full:RevenueFromInterest` | ⬜ | |
 | 7010 | IS | `other_income` | 其他收入 | `ifrs-full:OtherRevenue` | ⬜ | |
@@ -101,8 +101,11 @@ v2 完整 uni_account 清單見 [`sec-financials-v2-schema.md`](./sec-financials
 | 8620 | IS | `net_income_nci` | 淨利歸屬－非控制權益 | `ifrs-full:ProfitLossAttributableToNoncontrollingInterests` | ⬜ | |
 | 8710 | IS | `comprehensive_income_parent` | 綜合損益歸屬－母公司業主 | `ifrs-full:ComprehensiveIncomeAttributableToOwnersOfParent` | ⬜ | |
 | 8720 | IS | `comprehensive_income_nci` | 綜合損益歸屬－非控制權益 | `ifrs-full:ComprehensiveIncomeAttributableToNoncontrollingInterests` | ⬜ | |
-| 9710 | IS | `basic_eps` | 基本每股盈餘（本期淨利） | `ifrs-full:BasicEarningsLossPerShare` | ⬜ | |
-| 9810 | IS | `diluted_eps` | 稀釋每股盈餘（本期淨利） | `ifrs-full:DilutedEarningsLossPerShare` | ⬜ | |
+| 9710 | IS | `eps_basic` | 基本每股盈餘（本期淨利） | `ifrs-full:BasicEarningsLossPerShare` | ⬜ | |
+| 9810 | IS | `eps_diluted` | 稀釋每股盈餘（本期淨利） | `ifrs-full:DilutedEarningsLossPerShare` | ⬜ | |
+
+<!-- 2026-07-10: aligned to parse-output spelling for growth registry（revenue / cost_of_goods_sold / research_and_development / total_operating_expenses / eps_basic / eps_diluted）-->
+
 
 ### 資產負債表（BS）— 資產
 
@@ -240,11 +243,11 @@ v2 完整 uni_account 清單見 [`sec-financials-v2-schema.md`](./sec-financials
 
 | IS/BS | 指標                               | 說明                      | US GAAP 標籤（參考）                                                | 狀態  | 確認  |
 | ----- | -------------------------------- | ----------------------- | ------------------------------------------------------------- | --- | --- |
-| IS    | `operating_revenue`              | Net Revenue / Net Sales | `us-gaap:Revenues`                                            | ⬜   |     |
-| IS    | `cost_of_revenue`                | Cost of Revenue         | `us-gaap:CostOfRevenue`                                       | ⬜   |     |
+| IS    | `revenue`                        | Net Revenue / Net Sales | `us-gaap:Revenues`                                            | ⬜   |     |
+| IS    | `cost_of_goods_sold`             | Cost of Revenue         | `us-gaap:CostOfRevenue`                                       | ⬜   |     |
 | IS    | `gross_profit`                   | Gross Profit            | `us-gaap:GrossProfit`                                         | ⬜   |     |
-| IS    | `r_and_d_expenses`               | R&D Expenses            | `us-gaap:ResearchAndDevelopmentExpense`                       | ⬜   |     |
-| IS    | `selling_general_admin_expenses` | SG&A                    | `us-gaap:SellingGeneralAndAdministrativeExpense`              | ⬜   |     |
+| IS    | `research_and_development`       | R&D Expenses            | `us-gaap:ResearchAndDevelopmentExpense`                       | ⬜   |     |
+| IS    | `selling_general_administrative` | SG&A                    | `us-gaap:SellingGeneralAndAdministrativeExpense`              | ⬜   |     |
 | IS    | `operating_income`               | Operating Income        | `us-gaap:OperatingIncomeLoss`                                 | ⬜   |     |
 | IS    | `restructuring_charges`          | Restructuring Charges   | `us-gaap:RestructuringCharges`                                | ⬜   |     |
 | IS    | `amortization_of_intangible_assets` | Amortization of Intangibles | `us-gaap:AmortizationOfIntangibleAssets`                  | ⬜   |     |
@@ -256,10 +259,12 @@ v2 完整 uni_account 清單見 [`sec-financials-v2-schema.md`](./sec-financials
 | IS    | `income_tax_expense`             | Income Tax Expense      | `us-gaap:IncomeTaxExpenseBenefit`                             | ⬜   |     |
 | IS    | `net_income`                     | Net Income              | `us-gaap:NetIncomeLoss`                                       | ⬜   |     |
 | IS    | `net_income_nci`                 | Net Income Attributable to Non-controlling Interests | `us-gaap:NetIncomeLossAttributableToNoncontrollingInterest` | ⬜   |     |
-| IS    | `basic_eps`                      | Basic EPS               | `us-gaap:EarningsPerShareBasic`                               | ⬜   |     |
-| IS    | `diluted_eps`                    | Diluted EPS             | `us-gaap:EarningsPerShareDiluted`                             | ⬜   |     |
+| IS    | `eps_basic`                      | Basic EPS               | `us-gaap:EarningsPerShareBasic`                               | ⬜   |     |
+| IS    | `eps_diluted`                    | Diluted EPS             | `us-gaap:EarningsPerShareDiluted`                             | ⬜   |     |
 | IS    | `shares_basic_millions`          | Weighted Average Basic Shares (Millions) | `us-gaap:WeightedAverageNumberOfSharesOutstandingBasic` | ⬜   |     |
 | IS    | `shares_diluted_millions`        | Weighted Average Diluted Shares (Millions) | `us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding` | ⬜   |     |
+
+<!-- 2026-07-10: aligned to parse-output spelling for growth registry（revenue / cost_of_goods_sold / research_and_development / selling_general_administrative / eps_basic / eps_diluted）-->
 
 ### 資產負債表（BS）— 資產
 
