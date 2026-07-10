@@ -85,10 +85,10 @@ DERIVE_BASE_RULE_IDS_FALLBACK = (
 )
 
 # Owned rule registry for derive-analytics (shared market-agnostic engine). Mirrors
-# the derive-analytics skill registry (34 rules) so the analytics snapshot delete
-# scope covers every rule the skill can emit — including the QoQ/YoY rules the TW
-# pipeline emits. Keep in sync with rules_ratios.ALL_RULE_IDS ∪
-# rules_crossperiod.ALL_CROSSPERIOD_RULE_IDS.
+# the derive-analytics skill registry (68 rules = 24 non-growth + 44 growth) so the
+# analytics snapshot delete scope covers every rule the skill can emit — including
+# the QoQ/YoY rules the TW pipeline emits. Keep in sync with rules_ratios.ALL_RULE_IDS
+# ∪ rules_crossperiod.ALL_CROSSPERIOD_RULE_IDS.
 DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_GROSS_MARGIN_PCT",
     "RATIO_OPERATING_MARGIN_PCT",
@@ -114,17 +114,52 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_CCC",
     "RATIO_ROIC",
     "RATIO_NET_DEBT_TO_EBITDA",
-    # QoQ / YoY growth (EL2). TW pipeline emits the full set.
+    # Rate-of-change growth family: 22 IS metrics × {qoq,yoy} = 44. TW pipeline
+    # emits the full set. Keep in sync with rules_crossperiod.GROWTH_RULES.
     "RATIO_REVENUE_QOQ",
-    "RATIO_GROSS_PROFIT_QOQ",
-    "RATIO_OPERATING_INCOME_QOQ",
-    "RATIO_NET_INCOME_QOQ",
-    "RATIO_EPS_DILUTED_QOQ",
     "RATIO_REVENUE_YOY",
+    "RATIO_GROSS_PROFIT_QOQ",
     "RATIO_GROSS_PROFIT_YOY",
+    "RATIO_OPERATING_INCOME_QOQ",
     "RATIO_OPERATING_INCOME_YOY",
+    "RATIO_NET_INCOME_QOQ",
     "RATIO_NET_INCOME_YOY",
+    "RATIO_EPS_DILUTED_QOQ",
     "RATIO_EPS_DILUTED_YOY",
+    "RATIO_COST_OF_GOODS_SOLD_QOQ",
+    "RATIO_COST_OF_GOODS_SOLD_YOY",
+    "RATIO_INCOME_BEFORE_TAXES_QOQ",
+    "RATIO_INCOME_BEFORE_TAXES_YOY",
+    "RATIO_INCOME_TAX_EXPENSE_QOQ",
+    "RATIO_INCOME_TAX_EXPENSE_YOY",
+    "RATIO_EPS_BASIC_QOQ",
+    "RATIO_EPS_BASIC_YOY",
+    "RATIO_SELLING_EXPENSES_QOQ",
+    "RATIO_SELLING_EXPENSES_YOY",
+    "RATIO_GENERAL_ADMIN_EXPENSES_QOQ",
+    "RATIO_GENERAL_ADMIN_EXPENSES_YOY",
+    "RATIO_RESEARCH_AND_DEVELOPMENT_QOQ",
+    "RATIO_RESEARCH_AND_DEVELOPMENT_YOY",
+    "RATIO_EXPECTED_CREDIT_LOSS_QOQ",
+    "RATIO_EXPECTED_CREDIT_LOSS_YOY",
+    "RATIO_TOTAL_OPERATING_EXPENSES_QOQ",
+    "RATIO_TOTAL_OPERATING_EXPENSES_YOY",
+    "RATIO_SELLING_GENERAL_ADMINISTRATIVE_QOQ",
+    "RATIO_SELLING_GENERAL_ADMINISTRATIVE_YOY",
+    "RATIO_INTEREST_INCOME_QOQ",
+    "RATIO_INTEREST_INCOME_YOY",
+    "RATIO_INTEREST_EXPENSE_QOQ",
+    "RATIO_INTEREST_EXPENSE_YOY",
+    "RATIO_OTHER_GAINS_LOSSES_QOQ",
+    "RATIO_OTHER_GAINS_LOSSES_YOY",
+    "RATIO_NON_OPERATING_INCOME_EXPENSE_QOQ",
+    "RATIO_NON_OPERATING_INCOME_EXPENSE_YOY",
+    "RATIO_OTHER_NONOPERATING_INCOME_EXPENSE_QOQ",
+    "RATIO_OTHER_NONOPERATING_INCOME_EXPENSE_YOY",
+    "RATIO_NET_INCOME_TOTAL_PRE_NCI_QOQ",
+    "RATIO_NET_INCOME_TOTAL_PRE_NCI_YOY",
+    "RATIO_NET_INCOME_NCI_QOQ",
+    "RATIO_NET_INCOME_NCI_YOY",
 )
 
 

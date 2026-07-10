@@ -335,6 +335,21 @@ def test_analytics_delete_scope_covers_tw_registry():
         assert rid in fb
 
 
+def test_analytics_fallback_includes_new_growth_rule_ids():
+    """Task 4 (rate-of-change): the growth registry expanded 10 → 44 rule_ids
+    (22 IS metrics × {qoq,yoy}). The TW snapshot-delete fallback must list the
+    new growth ids too, else a rule that stops firing for a period would strand
+    its stale RATIO rows in Supabase. Same representative new ids the SEC test
+    asserts, so both fallbacks stay in lockstep."""
+    upsert = _import_upsert()
+    fb = set(upsert.DERIVE_ANALYTICS_RULE_IDS_FALLBACK)
+    for rid in ("RATIO_COST_OF_GOODS_SOLD_YOY", "RATIO_EPS_BASIC_QOQ",
+                "RATIO_INCOME_TAX_EXPENSE_YOY",
+                "RATIO_SELLING_GENERAL_ADMINISTRATIVE_YOY",
+                "RATIO_NET_INCOME_NCI_QOQ"):
+        assert rid in fb
+
+
 def test_derive_base_delete_scope_covers_tw_identity_rule():
     upsert = _import_upsert()
     fb = set(upsert.DERIVE_BASE_RULE_IDS_FALLBACK)
