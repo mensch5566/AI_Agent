@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# DEPRECATED (2026-07-11): superseded by the parse-twse-ixbrl SKILL
+# (~/.claude/skills/parse-twse-ixbrl/, run.sh → parse_ixbrl.py; canonical in
+# ~/CC_Switch_Config/skills/parse-twse-ixbrl/). This legacy copy's XBRL_MAP still
+# maps 2300→other_current_liabilities and 3100→common_stock (pre-grouping-fix),
+# and is intentionally NOT half-patched — a map-only change here without the
+# _reconcile_grouping pass would DROP other_current_liabilities. Do NOT run this
+# for production facts; use the skill.
 """
 台股 XBRL 批量解析 - 統一數據管道（全量版）
 流程：本地 XBRL HTML → 解析所有三表 ix:nonFraction 標籤 → 寫入 financial_facts → 計算 financial_metrics
