@@ -136,7 +136,8 @@ v2 完整 uni_account 清單見 [`sec-financials-v2-schema.md`](./sec-financials
 | BS    | `contract_liabilities_current` | 合約負債－流動      | `ifrs-full:CurrentContractLiabilities`                   | ⬜   |     |
 | BS    | `current_tax_liabilities`      | 本期所得稅負債      | `ifrs-full:CurrentTaxLiabilities`                        | ⬜   |     |
 | BS    | `lease_liabilities_current`    | 租賃負債－流動      | `tifrs-bsci-ci:CurrentLeaseLiabilities`                  | ⬜   |     |
-| BS    | `other_current_liabilities`    | 其他流動負債       | `ifrs-full:OtherCurrentLiabilities`                      | ⬜   |     |
+| BS    | `other_current_liabilities`    | 其他流動負債（代碼 2399 殘差）       | `ifrs-full:OtherCurrentLiabilitiesOthers`                      | ⬜   |     |
+| BS    | `other_current_liabilities_subtotal` | 其他流動負債（代碼 2300，含一年內到期公司債等 grouping 小計，揭露用）       | `ifrs-full:OtherCurrentLiabilities`                      | ⬜   |     |
 | BS    | `total_current_liabilities`    | 流動負債合計       | `ifrs-full:CurrentLiabilities`                           | ✅   |     |
 | BS    | `long_term_debt`               | 長期借款（含一年內到期） | `tifrs-bsci-ci:LongtermLiabilitiesCurrentPortion`        | ⬜   |     |
 | BS    | `lease_liabilities_noncurrent` | 租賃負債－非流動     | `ifrs-full:NoncurrentFinanceLeaseLiabilities`            | ⬜   |     |
@@ -149,7 +150,9 @@ v2 完整 uni_account 清單見 [`sec-financials-v2-schema.md`](./sec-financials
 
 | IS/BS | 指標                              | 說明           | XBRL 標籤                                                           | 狀態  | 確認  |
 | ----- | ------------------------------- | ------------ | ----------------------------------------------------------------- | --- | --- |
-| BS    | `common_stock`                  | 股本           | `ifrs-full:IssuedCapital`                                         | ⬜   |     |
+| BS    | `common_stock`                  | 股本（代碼 3110 普通股 par）           | `ifrs-full:OrdinaryShare`                                         | ⬜   |     |
+| BS    | `advance_stock_receipts`        | 預收股本（代碼 3140）           | `tifrs-bsci-ci:AdvanceReceiptsForShareCapital`                   | ⬜   |     |
+| BS    | `issued_capital_total`          | 股本合計（代碼 3100，含預收股本，揭露用）           | `ifrs-full:IssuedCapital`                                         | ⬜   |     |
 | BS    | `capital_surplus`               | 資本公積         | `ifrs-full:CapitalReserve`                                        | ⬜   |     |
 | BS    | `legal_reserve`                 | 法定盈餘公積       | `ifrs-full:StatutoryReserve`                                      | ⬜   |     |
 | BS    | `retained_earnings`             | 未分配盈餘        | `tifrs-bsci-ci:UnappropriatedRetainedEarningsAaccumulatedDeficit` | ⬜   |     |
@@ -157,6 +160,8 @@ v2 完整 uni_account 清單見 [`sec-financials-v2-schema.md`](./sec-financials
 | BS    | `equity_attributable_to_parent` | 歸屬母公司業主之權益合計 | `ifrs-full:EquityAttributableToOwnersOfParent`                    | ⬜   |     |
 | BS    | `non_controlling_interests`     | 非控制權益        | `ifrs-full:NoncontrollingInterests`                               | ⬜   |     |
 | BS    | `total_equity`                  | 權益總計         | `ifrs-full:Equity`                                                | ✅   |     |
+
+<!-- 2026-07-11: BS grouping split — `common_stock` 台=純普通股(par, 3110)、預收另計於 `advance_stock_receipts`(3140)；美=par。`issued_capital_total`(3100)=股本合計(含預收，揭露用，3100=3110+3140 每期由 cross-check 驗)。`other_current_liabilities`=代碼 2399 殘差(narrow)、`other_current_liabilities_subtotal`=代碼 2300 grouping 小計(揭露用，2300=2320+2399)。parse 只搬值不自算；narrow 缺 tag 且無另抽 guard component 才 promote subtotal，否則留空 + stderr audit。 -->
 
 ### 現金流量表（CF）
 
