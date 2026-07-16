@@ -350,6 +350,22 @@ def test_analytics_fallback_includes_new_growth_rule_ids():
         assert rid in fb
 
 
+def test_analytics_fallback_includes_share_structure_adj_rule_ids():
+    """Task 10: derive-analytics now emits Class-A-rebased share-structure ADJ
+    rows (4 level ids from adjustment.py, not an AnalyticsRule) plus their
+    qoq/yoy growth rows. The TW snapshot-delete fallback must list all 8, same
+    as the SEC fallback, else a run emitting zero ADJ rows for a period would
+    strand stale adjustment_factor_cum / *_adj level and growth rows in
+    Supabase."""
+    upsert = _import_upsert()
+    fb = set(upsert.DERIVE_ANALYTICS_RULE_IDS_FALLBACK)
+    for rid in ("ADJ_EPS_BASIC", "ADJ_EPS_DILUTED",
+                "ADJ_COMMON_SHARES_OUTSTANDING", "ADJ_FACTOR_CUM",
+                "RATIO_EPS_BASIC_ADJ_YOY", "RATIO_EPS_BASIC_ADJ_QOQ",
+                "RATIO_EPS_DILUTED_ADJ_YOY", "RATIO_EPS_DILUTED_ADJ_QOQ"):
+        assert rid in fb
+
+
 def test_derive_base_delete_scope_covers_tw_identity_rule():
     upsert = _import_upsert()
     fb = set(upsert.DERIVE_BASE_RULE_IDS_FALLBACK)

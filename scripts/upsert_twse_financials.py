@@ -160,6 +160,16 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_NET_INCOME_TOTAL_PRE_NCI_YOY",
     "RATIO_NET_INCOME_NCI_QOQ",
     "RATIO_NET_INCOME_NCI_YOY",
+    # Share-structure adjustment (ADJ) ids — Class-A-rebased EPS/shares level rows
+    # (emitted by adjustment.py, not an AnalyticsRule) + their qoq/yoy growth rows.
+    "ADJ_EPS_BASIC",
+    "ADJ_EPS_DILUTED",
+    "ADJ_COMMON_SHARES_OUTSTANDING",
+    "ADJ_FACTOR_CUM",
+    "RATIO_EPS_BASIC_ADJ_YOY",
+    "RATIO_EPS_BASIC_ADJ_QOQ",
+    "RATIO_EPS_DILUTED_ADJ_YOY",
+    "RATIO_EPS_DILUTED_ADJ_QOQ",
 )
 
 
