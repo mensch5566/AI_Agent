@@ -100,6 +100,8 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_FCF_MARGIN_PCT",
     # Phase B absolute-value (numerator-only) derivations.
     "FCF_CFO_MINUS_CAPEX",
+    # Capex ratio = capital_expenditures / revenue (EL1 cross-statement CF/IS).
+    "RATIO_CAPEX_RATIO",
     # EBITDA (SEC C&DI 103.01 bottom-up) — absolute value + margin.
     "EBITDA_NI_INT_TAX_DA",
     "RATIO_EBITDA_MARGIN_PCT",
@@ -116,6 +118,8 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_DSO",
     "RATIO_DPO",
     "RATIO_CCC",
+    # DuPont composite: equity multiplier = ROE ÷ ROA (second-pass, lineage-gated).
+    "RATIO_EQUITY_MULTIPLIER",
     # Rate-of-change growth family: 22 IS metrics × {qoq,yoy} = 44. Keep in sync
     # with rules_crossperiod.GROWTH_RULES.
     "RATIO_REVENUE_QOQ",

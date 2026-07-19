@@ -85,7 +85,7 @@ DERIVE_BASE_RULE_IDS_FALLBACK = (
 )
 
 # Owned rule registry for derive-analytics (shared market-agnostic engine). Mirrors
-# the derive-analytics skill registry (68 rules = 24 non-growth + 44 growth) so the
+# the derive-analytics skill registry (78 rules = 30 non-growth + 48 growth) so the
 # analytics snapshot delete scope covers every rule the skill can emit — including
 # the QoQ/YoY rules the TW pipeline emits. Keep in sync with rules_ratios.ALL_RULE_IDS
 # ∪ rules_crossperiod.ALL_CROSSPERIOD_RULE_IDS.
@@ -101,6 +101,7 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_INTEREST_COVERAGE",
     "RATIO_FCF_MARGIN_PCT",
     "FCF_CFO_MINUS_CAPEX",
+    "RATIO_CAPEX_RATIO",
     "EBITDA_NI_INT_TAX_DA",
     "RATIO_EBITDA_MARGIN_PCT",
     "RATIO_ADJUSTED_EBITDA_MARGIN_PCT",
@@ -112,6 +113,7 @@ DERIVE_ANALYTICS_RULE_IDS_FALLBACK = (
     "RATIO_DSO",
     "RATIO_DPO",
     "RATIO_CCC",
+    "RATIO_EQUITY_MULTIPLIER",
     "RATIO_ROIC",
     "RATIO_NET_DEBT_TO_EBITDA",
     # Rate-of-change growth family: 22 IS metrics × {qoq,yoy} = 44. TW pipeline
