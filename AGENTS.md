@@ -185,3 +185,11 @@ This is an automated run of a scheduled task. The user is not present to answer 
 你看一下LITE的FY26Q3的Non-GAAP EPS 在前端怎麼是2？ 是小數位被砍掉了嗎
 ### Summary (Haiku)
 <!-- AI_MEMORY_MANAGED_END -->
+
+## 本 repo 的功能文檔在 Obsidian vault
+
+本 repo 自己的功能 → `~/Obsidian/docs/Repo/AI_Agent/<feature-name>/`
+
+六份開發文檔（`STATUS` / `LOG` / `PITFALLS` / `ADR` / `CONTRACT` / `RULES`）一律**在 vault 更新與維護**，不放回本 repo。
+開發或修改功能前先讀對應目錄；新增功能時在該處建六檔。
+規則權威：`~/Obsidian/CLAUDE.md`「Feature Development Documentation（六檔）」章的**存放位置**。

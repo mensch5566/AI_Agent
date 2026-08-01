@@ -315,3 +315,11 @@ Subagent-Driven
 <task-notification>
 <task-id>a1c50bf32a54d7a68</task-id>
 <!-- AI_MEMORY_MANAGED_END -->
+
+## 本 repo 的功能文檔在 Obsidian vault
+
+本 repo 自己的功能 → `~/Obsidian/docs/Repo/AI_Agent/<feature-name>/`
+
+六份開發文檔（`STATUS` / `LOG` / `PITFALLS` / `ADR` / `CONTRACT` / `RULES`）一律**在 vault 更新與維護**，不放回本 repo。
+開發或修改功能前先讀對應目錄；新增功能時在該處建六檔。
+規則權威：`~/Obsidian/CLAUDE.md`「Feature Development Documentation（六檔）」章的**存放位置**。
